@@ -161,7 +161,8 @@ function renderDraftBoard(slots,fpId,dblId,fpName,dblName,match){
     const isBan=slot.type==='ban';
     const ex=isBan?(banMap[slot.n]||{}):(pickMap[slot.n]||{});
 
-    const charSel=`<select class="draft-char" data-slot="${slot.n}" data-type="${slot.type}" data-pid="${slot.pid}"
+    const onChange=isBan?'':' onchange="draftCharChanged(this)"';
+    const charSel=`<select class="draft-char" data-slot="${slot.n}" data-type="${slot.type}" data-pid="${slot.pid}"${onChange}
       style="flex:1;min-width:110px;font-size:12px;padding:4px 6px">
       <option value="">—</option>${setSel(charOpts,ex.character_id)}
     </select>`;
@@ -232,6 +233,13 @@ function renderPickMeta(slots,fpId,dblId,fpName,dblName,match){
       <tbody>${rows}</tbody>
     </table>
   </div>`;
+}
+
+function draftCharChanged(el){
+  const slot=el.dataset.slot;
+  const char=D.chars.find(c=>c.id===el.value);
+  const msEl=document.querySelector(`.draft-ms[data-slot="${slot}"]`);
+  if(msEl&&char?.rarity==='A')msEl.value='6';
 }
 
 function parseSec(s){if(!s)return null;const p=s.split(':').map(Number);if(p.length!==2||isNaN(p[0])||isNaN(p[1]))return null;return p[0]*60+p[1];}
