@@ -1,5 +1,26 @@
 // matches.js — встречи (Bo2) и матчи
 
+// Форматы драфта: ключ → {label, gen(fpId,dblId) → [{n, pid, type}]}
+const DRAFT_FORMATS={
+  '2b7p':{label:'2 бана · 7 пиков (18 слотов)',gen:(fp,dbl)=>[
+    {n:1,pid:fp,type:'ban'},{n:2,pid:dbl,type:'ban'},{n:3,pid:dbl,type:'ban'},{n:4,pid:fp,type:'ban'},
+    {n:5,pid:fp,type:'pick'},{n:6,pid:dbl,type:'pick'},{n:7,pid:dbl,type:'pick'},{n:8,pid:fp,type:'pick'},
+    {n:9,pid:fp,type:'pick'},{n:10,pid:dbl,type:'pick'},{n:11,pid:dbl,type:'pick'},{n:12,pid:fp,type:'pick'},
+    {n:13,pid:fp,type:'pick'},{n:14,pid:dbl,type:'pick'},{n:15,pid:dbl,type:'pick'},{n:16,pid:fp,type:'pick'},
+    {n:17,pid:fp,type:'pick'},{n:18,pid:dbl,type:'pick'},
+  ]},
+  '2b3p':{label:'2 бана · 3 пика (10 слотов)',gen:(fp,dbl)=>[
+    {n:1,pid:fp,type:'ban'},{n:2,pid:dbl,type:'ban'},{n:3,pid:dbl,type:'ban'},{n:4,pid:fp,type:'ban'},
+    {n:5,pid:fp,type:'pick'},{n:6,pid:dbl,type:'pick'},{n:7,pid:dbl,type:'pick'},{n:8,pid:fp,type:'pick'},
+    {n:9,pid:fp,type:'pick'},{n:10,pid:dbl,type:'pick'},
+  ]},
+  '1b3p':{label:'1 бан · 3 пика (8 слотов)',gen:(fp,dbl)=>[
+    {n:1,pid:fp,type:'ban'},{n:2,pid:dbl,type:'ban'},
+    {n:3,pid:fp,type:'pick'},{n:4,pid:dbl,type:'pick'},{n:5,pid:dbl,type:'pick'},{n:6,pid:fp,type:'pick'},
+    {n:7,pid:fp,type:'pick'},{n:8,pid:dbl,type:'pick'},
+  ]},
+};
+
 async function pgMatches(){
   const{data:encs}=await sb.from('encounters').select('*').order('created_at',{ascending:false});
   const{data:ms}=encs?.length?await sb.from('matches').select('*').in('encounter_id',encs.map(e=>e.id)):{data:[]};
@@ -45,7 +66,7 @@ async function addEnc(){
   const t=v('e-tour'),p1=v('e-p1'),p2=v('e-p2');
   if(!t)return toast('Выбери турнир','err');
   if(p1===p2)return toast('Выбери разных игроков','err');
-  const{error}=await sb.from('encounters').insert({tournament_id:t,stage:v('e-stage'),player1_id:p1,player2_id:p2});
+  const{error}=await sb.from('encounters').insert({tournament_id:t,player1_id:p1,player2_id:p2});
   if(dbErr(error,'создание встречи'))return;
   toast('Встреча создана');pgMatches();
 }
@@ -58,15 +79,18 @@ async function openMatch(encId,num,p1Id,p2Id){
   const{data:match}=await sb.from('matches').select('*,picks:match_picks(*),bans:match_bans(*)').eq('encounter_id',encId).eq('match_number',num).maybeSingle();
   const mid=match?.id||'';
 
-  const charOpts=D.chars.map(c=>`<option value="${c.id}">${c.name}</option>`).join('');
-  const pSec=s=>s?`${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`:'';
+  const fmt=localStorage.getItem('zzz_dfmt')||'2b7p';
+  const template=(DRAFT_FORMATS[fmt]||DRAFT_FORMATS['2b7p']).gen(fpId,dblId);
 
+  const pSec=s=>s?`${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`:'';
   const fpTimer=pSec(fpId===p1Id?match?.player1_timer_sec:match?.player2_timer_sec);
   const dblTimer=pSec(dblId===p1Id?match?.player1_timer_sec:match?.player2_timer_sec);
   const fpR=fpId===p1Id?(match?.player1_restarts||0):(match?.player2_restarts||0);
   const dblR=dblId===p1Id?(match?.player1_restarts||0):(match?.player2_restarts||0);
 
   document.getElementById('page-title').textContent=`Матч ${num} — ${fp?.nickname} (фп) vs ${dbl?.nickname}`;
+
+  const fmtOpts=Object.entries(DRAFT_FORMATS).map(([k,f])=>`<option value="${k}" ${k===fmt?'selected':''}>${f.label}</option>`).join('');
 
   html(`<button class="btn btn-g" style="margin-bottom:16px" onclick="go('matches')">← Назад к встречам</button>
 
@@ -101,34 +125,15 @@ async function openMatch(encId,num,p1Id,p2Id){
     </div>
   </div>
 
-  <div class="card" style="margin-bottom:12px">
-    <h3>Баны</h3>
-    <div id="bans-list" class="space-y" style="margin-bottom:10px">
-      ${(match?.bans||[]).map(b=>`<div class="ban-row" data-player="${b.player_id}">
-        <span style="font-size:12px;color:var(--sub);min-width:80px">${b.player_id===fpId?fp?.nickname:dbl?.nickname}</span>
-        <select class="ban-char" style="flex:1"><option value="">—</option>${charOpts.replace(`value="${b.character_id}"`,`value="${b.character_id}" selected`)}</select>
-        <button class="btn-r" onclick="this.closest('.ban-row').remove()">✕</button>
-      </div>`).join('')}
-    </div>
-    <div style="display:flex;gap:8px">
-      <button class="btn btn-g" onclick="addBanRow('${fpId}','${fp?.nickname}','${charOpts.replace(/'/g,"&apos;")}')">+ Бан ${fp?.nickname}</button>
-      <button class="btn btn-g" onclick="addBanRow('${dblId}','${dbl?.nickname}','${charOpts.replace(/'/g,"&apos;")}')">+ Бан ${dbl?.nickname}</button>
-    </div>
-  </div>
-
   <div class="card" style="margin-bottom:16px">
-    <h3>Пики</h3>
-    <h4>${fp?.nickname} <span style="color:var(--sub);font-weight:400;font-size:12px">(фп в этом матче)</span></h4>
-    <div id="picks-fp" class="space-y" style="margin-bottom:10px">
-      ${(match?.picks||[]).filter(p=>p.player_id===fpId).map(p=>pickRowHTML(fpId,charOpts,p)).join('')}
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px">
+      <h3 style="margin:0">Драфт</h3>
+      <div style="display:flex;align-items:center;gap:8px">
+        <label style="display:inline;margin:0">Формат:</label>
+        <select style="width:auto;font-size:13px" onchange="changeDraftFmt(this.value,'${encId}',${num},'${p1Id}','${p2Id}')">${fmtOpts}</select>
+      </div>
     </div>
-    <button class="btn btn-g" onclick="addPickRow('picks-fp','${fpId}','${charOpts.replace(/'/g,"&apos;")}')">+ Пик</button>
-
-    <h4 style="margin-top:20px">${dbl?.nickname}</h4>
-    <div id="picks-dbl" class="space-y" style="margin-bottom:10px">
-      ${(match?.picks||[]).filter(p=>p.player_id===dblId).map(p=>pickRowHTML(dblId,charOpts,p)).join('')}
-    </div>
-    <button class="btn btn-g" onclick="addPickRow('picks-dbl','${dblId}','${charOpts.replace(/'/g,"&apos;")}')">+ Пик</button>
+    ${renderDraftBoard(template,fpId,dblId,fp?.nickname,dbl?.nickname,match)}
   </div>
 
   <button class="btn btn-y" style="font-size:15px;padding:10px 28px" onclick="saveMatch('${encId}','${num}','${p1Id}','${p2Id}','${fpId}','${mid}')">
@@ -136,34 +141,55 @@ async function openMatch(encId,num,p1Id,p2Id){
   </button>`);
 }
 
-function pickRowHTML(playerId,charOpts,existing={}){
-  return`<div class="pick-row" data-player="${playerId}">
-    <select class="pr-char" style="flex:1"><option value="">— персонаж —</option>${charOpts.replace(`value="${existing.character_id||''}"`,`value="${existing.character_id||''}" selected`)}</select>
-    <select class="pr-ms sm-sel">${msOpts.replace(`value="${existing.mindscape||0}"`,`value="${existing.mindscape||0}" selected`)}</select>
-    <select class="pr-team sm-sel">
-      <option value="1" ${(existing.team_slot||1)===1?'selected':''}>Team 1</option>
-      <option value="2" ${existing.team_slot===2?'selected':''}>Team 2</option>
-    </select>
-    <label class="cb-label"><input type="checkbox" class="pr-sig" ${existing.has_signature?'checked':''}>сигна</label>
-    <label class="cb-label"><input type="checkbox" class="pr-fp" ${existing.is_fp?'checked':''}>фп</label>
-    <label class="cb-label"><input type="checkbox" class="pr-dbl" ${existing.is_double?'checked':''}>дабл</label>
-    <button class="btn-r" onclick="this.closest('.pick-row').remove()">✕</button>
+function changeDraftFmt(fmt,encId,num,p1Id,p2Id){
+  localStorage.setItem('zzz_dfmt',fmt);
+  openMatch(encId,num,p1Id,p2Id);
+}
+
+function renderDraftBoard(slots,fpId,dblId,fpName,dblName,match){
+  const banMap={},pickMap={};
+  (match?.bans||[]).forEach(b=>banMap[b.ban_order]=b);
+  (match?.picks||[]).forEach(p=>pickMap[p.pick_order]=p);
+
+  const charOpts=D.chars.map(c=>`<option value="${c.id}">${c.name}</option>`).join('');
+  const setSel=(opts,val)=>val?opts.replace(`value="${val}"`,`value="${val}" selected`):opts;
+
+  const rows=slots.map(slot=>{
+    const isFp=slot.pid===fpId;
+    const isBan=slot.type==='ban';
+    const ex=isBan?(banMap[slot.n]||{}):(pickMap[slot.n]||{});
+
+    const charSel=`<select class="draft-char" data-slot="${slot.n}" data-type="${slot.type}" data-pid="${slot.pid}"
+      style="flex:1;min-width:110px;font-size:12px;padding:4px 6px">
+      <option value="">—</option>${setSel(charOpts,ex.character_id)}
+    </select>`;
+
+    const pickExtras=isBan?'':`
+      <select class="draft-ms sm-sel" data-slot="${slot.n}" style="font-size:12px;padding:3px 5px">${msOpts.replace(`value="${ex.mindscape||0}"`,`value="${ex.mindscape||0}" selected`)}</select>
+      <select class="draft-team sm-sel" data-slot="${slot.n}" style="font-size:12px;padding:3px 5px;width:auto">
+        <option value="1" ${(ex.team_slot||1)===1?'selected':''}>T1</option>
+        <option value="2" ${ex.team_slot===2?'selected':''}>T2</option>
+      </select>
+      <label class="cb-label" style="font-size:11px"><input type="checkbox" class="draft-sig" data-slot="${slot.n}" ${ex.has_signature?'checked':''}>sig</label>`;
+
+    const cell=`<div style="display:flex;align-items:center;gap:3px;padding:2px 0">${charSel}${pickExtras}</div>`;
+    const empty=`<div></div>`;
+    const numCell=`<div style="text-align:center;padding:0 4px">
+      <div style="font-size:15px;font-weight:700;line-height:1.1;color:${isBan?'#f87171':'var(--accent)'}">${slot.n}</div>
+      <div style="font-size:9px;letter-spacing:.04em;color:${isBan?'#f87171':'var(--sub)'}">${isBan?'БАН':'ПИК'}</div>
+    </div>`;
+
+    return isFp
+      ?`${cell}${numCell}${empty}`
+      :`${empty}${numCell}${cell}`;
+  }).join('');
+
+  return`<div style="display:grid;grid-template-columns:1fr 44px 1fr;align-items:center;row-gap:3px">
+    <div style="text-align:center;font-size:13px;font-weight:600;color:var(--accent);padding:4px 0">${fpName||'ФП'} <span style="color:var(--sub);font-weight:400;font-size:11px">(фп)</span></div>
+    <div></div>
+    <div style="text-align:center;font-size:13px;font-weight:600;color:var(--accent);padding:4px 0">${dblName||'Дабл'}</div>
+    ${rows}
   </div>`;
-}
-
-function addPickRow(containerId,playerId,charOpts){
-  const div=document.createElement('div');
-  div.innerHTML=pickRowHTML(playerId,charOpts);
-  document.getElementById(containerId).appendChild(div.firstElementChild);
-}
-
-function addBanRow(playerId,playerName,charOpts){
-  const div=document.createElement('div');
-  div.className='ban-row';div.dataset.player=playerId;
-  div.innerHTML=`<span style="font-size:12px;color:var(--sub);min-width:80px">${playerName}</span>
-    <select class="ban-char" style="flex:1"><option value="">—</option>${charOpts}</select>
-    <button class="btn-r" onclick="this.closest('.ban-row').remove()">✕</button>`;
-  document.getElementById('bans-list').appendChild(div);
 }
 
 function parseSec(s){if(!s)return null;const p=s.split(':').map(Number);if(p.length!==2||isNaN(p[0])||isNaN(p[1]))return null;return p[0]*60+p[1];}
@@ -181,9 +207,7 @@ async function saveMatch(encId,num,p1Id,p2Id,fpId,existingId){
   const p2R=fpId===p1Id?r2:r1;
 
   let winnerId=v('m-winner');
-  if(!winnerId&&!isDraw&&t1!=null&&t2!=null){
-    winnerId=t1<=t2?fpId:dblId;
-  }
+  if(!winnerId&&!isDraw&&t1!=null&&t2!=null){winnerId=t1<=t2?fpId:dblId;}
 
   const mData={encounter_id:encId,match_number:+num,fp_player_id:fpId,is_draw:isDraw,
     winner_id:isDraw?null:(winnerId||null),
@@ -195,26 +219,34 @@ async function saveMatch(encId,num,p1Id,p2Id,fpId,existingId){
   else{const{data,error}=await sb.from('matches').insert(mData).select().single();if(dbErr(error,'создание матча'))return;mid=data?.id;}
   if(!mid)return toast('Ошибка сохранения матча','err');
 
+  // Собираем баны и пики из драфт-борда
+  const bans=[],picks=[];
+  document.querySelectorAll('.draft-char').forEach(el=>{
+    if(!el.value)return;
+    const slot=+el.dataset.slot,type=el.dataset.type,pid=el.dataset.pid;
+    if(type==='ban'){
+      bans.push({match_id:mid,player_id:pid,character_id:el.value,ban_order:slot});
+    }else{
+      const ms=+document.querySelector(`.draft-ms[data-slot="${slot}"]`)?.value||0;
+      const team=+document.querySelector(`.draft-team[data-slot="${slot}"]`)?.value||1;
+      const sig=document.querySelector(`.draft-sig[data-slot="${slot}"]`)?.checked||false;
+      picks.push({match_id:mid,player_id:pid,character_id:el.value,
+        mindscape:ms,team_slot:team,has_signature:sig,pick_order:slot,
+        is_fp:pid===fpId,is_double:false});
+    }
+  });
+  // Дабл-пик: один персонаж у обоих игроков
+  const charCount={};
+  picks.forEach(p=>charCount[p.character_id]=(charCount[p.character_id]||0)+1);
+  picks.forEach(p=>p.is_double=charCount[p.character_id]>1);
+
   {const{error}=await sb.from('match_bans').delete().eq('match_id',mid);if(dbErr(error,'очистка банов'))return;}
-  const bans=[...document.querySelectorAll('.ban-row')].map((row,i)=>({
-    match_id:mid,player_id:row.dataset.player,
-    character_id:row.querySelector('.ban-char')?.value,ban_order:i+1
-  })).filter(b=>b.character_id);
   if(bans.length){const{error}=await sb.from('match_bans').insert(bans);if(dbErr(error,'сохранение банов'))return;}
 
   {const{error}=await sb.from('match_picks').delete().eq('match_id',mid);if(dbErr(error,'очистка пиков'))return;}
-  const picks=[...document.querySelectorAll('#picks-fp .pick-row, #picks-dbl .pick-row')].map((row,i)=>({
-    match_id:mid,player_id:row.dataset.player,
-    character_id:row.querySelector('.pr-char')?.value,
-    mindscape:+row.querySelector('.pr-ms')?.value||0,
-    has_signature:row.querySelector('.pr-sig')?.checked||false,
-    team_slot:+row.querySelector('.pr-team')?.value||1,
-    pick_order:i+1,
-    is_fp:row.querySelector('.pr-fp')?.checked||false,
-    is_double:row.querySelector('.pr-dbl')?.checked||false,
-  })).filter(p=>p.character_id);
   if(picks.length){const{error}=await sb.from('match_picks').insert(picks);if(dbErr(error,'сохранение пиков'))return;}
 
+  // Обновляем победителя встречи по суммарному таймеру
   const{data:allMs}=await sb.from('matches').select('*').eq('encounter_id',encId);
   if(allMs&&allMs.length>=2){
     let p1T=0,p2T=0;
