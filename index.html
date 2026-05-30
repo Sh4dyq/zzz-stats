@@ -121,7 +121,7 @@ const sb=supabase.createClient(SB_URL,SB_KEY);
 
 const ROLES={atk:{bg:'#3b1010',fg:'#fca5a5'},stun:{bg:'#0f1f3b',fg:'#93c5fd'},rupt:{bg:'#2d1a00',fg:'#fcd34d'},sup:{bg:'#0a2218',fg:'#6ee7b7'},ano:{bg:'#1a0d3b',fg:'#c4b5fd'}};
 
-let S={tournaments:[],characters:[],players:[],encounters:[],matches:[],picks:[],bans:[],costs:{},rosters:{},prizes:{},tour:'__all__',view:'v',cSort:{k:'pk',asc:false}};
+let S={tournaments:[],characters:[],players:[],encounters:[],matches:[],picks:[],bans:[],costs:{},rosters:{},tour:'__all__',view:'v',cSort:{k:'pk',asc:false}};
 
 const ALL='__all__';
 const f1=v=>typeof v==='number'?v.toFixed(1)+'%':v;
@@ -167,16 +167,14 @@ async function loadAll(){
     }else{S.picks=[];S.bans=[];}
   }else{S.matches=[];S.picks=[];S.bans=[];}
 
-  S.costs={};S.rosters={};S.prizes={};
+  S.costs={};S.rosters={};
   if(S.tour!==ALL){
-    const[{data:cs},{data:rs},{data:pr}]=await Promise.all([
+    const[{data:cs},{data:rs}]=await Promise.all([
       sb.from('tournament_costs').select('*').eq('tournament_id',S.tour),
-      sb.from('player_rosters').select('*').eq('tournament_id',S.tour),
-      sb.from('player_prizes').select('*').eq('tournament_id',S.tour)
+      sb.from('player_rosters').select('*').eq('tournament_id',S.tour)
     ]);
     (cs||[]).forEach(c=>{if(!S.costs[c.character_id])S.costs[c.character_id]={};S.costs[c.character_id][c.mindscape]=c;});
     (rs||[]).forEach(r=>{if(!S.rosters[r.player_id])S.rosters[r.player_id]=[];S.rosters[r.player_id].push(r);});
-    (pr||[]).forEach(p=>S.prizes[p.player_id]=p.amount);
   }
 
   document.getElementById('loading').style.display='none';
@@ -356,7 +354,7 @@ function renderPV(vStats,isAll){
     const s=vStats[p.id]||{v:0,w:0,l:0,timers:[]};
     const wrPct=wr(s.w,0,s.v);
     const avgT=fSec(avg(s.timers));
-    const pr=S.prizes[p.id];
+    const pr=S.playerMap[p.id]?.prize;
     return`<tr><td class="nc"><div style="display:flex;align-items:center;gap:6px">${pic(p.nickname,'')}<span>${p.nickname}</span></div></td><td>${s.v}</td><td>${s.w}</td><td>${s.l}</td><td class="${wc(wrPct)}">${f1(wrPct)}</td><td>${avgT}</td><td>${p.age??'—'}</td><td>${pr!=null?pr+'$':'—'}</td>${isAll?'':rosterCols(p.id)}</tr>`;
   });
   document.getElementById('players-area').innerHTML=`<table>${head}<tbody>${rows.join('')}</tbody></table>`;
@@ -371,7 +369,7 @@ function renderPM(mStats,isAll){
     const s=mStats[p.id]||{m:0,w:0,d:0,l:0,fpm:0,fpw:0,fpd:0,dm:0,dw2:0,dd:0,rests:0,wtimers:[],ltimers:[]};
     const wrPct=wr(s.w,s.d,s.m),wrfp=wr(s.fpw,s.fpd,s.fpm),wrdbl=wr(s.dw2,s.dd,s.dm);
     const allT=[...s.wtimers,...s.ltimers];
-    const pr=S.prizes[p.id];
+    const pr=S.playerMap[p.id]?.prize;
     return`<tr><td class="nc"><div style="display:flex;align-items:center;gap:6px">${pic(p.nickname,'')}<span>${p.nickname}</span></div></td><td>${s.m}</td><td>${s.w}</td><td class="m">${s.d}</td><td>${s.l}</td><td class="${wc(wrPct)}">${f1(wrPct)}</td><td class="${wc(wrfp)}">${f1(wrfp)}</td><td class="${wc(wrdbl)}">${f1(wrdbl)}</td><td>${s.rests}</td><td>${s.m?(s.rests/s.m).toFixed(2):'—'}</td><td>${fSec(avg(allT))}</td><td>${p.age??'—'}</td><td>${pr!=null?pr+'$':'—'}</td>${isAll?'':rosterCols(p.id)}</tr>`;
   });
   document.getElementById('players-area').innerHTML=`<table>${head}<tbody>${rows.join('')}</tbody></table>`;
