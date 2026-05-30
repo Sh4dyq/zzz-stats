@@ -119,7 +119,7 @@ const SB_URL='https://zoavnckfbfiejxfjakue.supabase.co';
 const SB_KEY='sb_publishable_37RZBsmdp3O1i795EuEfeg_vFpdPTFZ';
 const sb=supabase.createClient(SB_URL,SB_KEY);
 
-const ROLES={atk:{bg:'#3b1010',fg:'#fca5a5'},stun:{bg:'#0f1f3b',fg:'#93c5fd'},rupt:{bg:'#2d1a00',fg:'#fcd34d'},sup:{bg:'#0a2218',fg:'#6ee7b7'},ano:{bg:'#1a0d3b',fg:'#c4b5fd'}};
+const ROLES={atk:{bg:'#3b1010',fg:'#fca5a5'},stun:{bg:'#0f1f3b',fg:'#93c5fd'},rupt:{bg:'#2d1a00',fg:'#fcd34d'},sup:{bg:'#0a2218',fg:'#6ee7b7'},def:{bg:'#0a2218',fg:'#86efac'},ano:{bg:'#1a0d3b',fg:'#c4b5fd'}};
 
 let S={tournaments:[],characters:[],players:[],encounters:[],matches:[],picks:[],bans:[],costs:{},rosters:{},tour:'__all__',view:'v',cSort:{k:'pk',asc:false}};
 
@@ -338,15 +338,15 @@ function computePlayers(){
 function rosterCols(pid){
   const r=S.rosters[pid]||[];
   if(!r.length)return'<td>—</td>'.repeat(5);
-  let atk=0,stun=0,rupt=0,sup=0,ano=0;
+  let atk=0,stun=0,rupt=0,supdef=0,ano=0;
   r.forEach(x=>{const c=S.charMap[x.character_id];if(!c)return;
-    if(c.role==='atk')atk++;else if(c.role==='stun')stun++;else if(c.role==='rupt')rupt++;else if(c.role==='sup')sup++;else if(c.role==='ano')ano++;
+    if(c.role==='atk')atk++;else if(c.role==='stun')stun++;else if(c.role==='rupt')rupt++;else if(c.role==='sup'||c.role==='def')supdef++;else if(c.role==='ano')ano++;
   });
-  return`<td>${atk}</td><td>${stun}</td><td>${rupt}</td><td>${sup}</td><td>${ano}</td>`;
+  return`<td>${atk}</td><td>${stun}</td><td>${rupt}</td><td>${supdef}</td><td>${ano}</td>`;
 }
 
 function renderPV(vStats,isAll){
-  const rcols=isAll?'':'<th>Атак</th><th>Стан</th><th>Разр</th><th>Сап</th><th>Аном</th>';
+  const rcols=isAll?'':'<th>Атак</th><th>Стан</th><th>Разр</th><th>Сап/Деф</th><th>Аном</th>';
   const head=`<thead><tr><th class="nc">Ник</th><th onclick="sortP(1)">Σ встреч</th><th onclick="sortP(2)">W</th><th onclick="sortP(3)">L</th><th onclick="sortP(4)">WR%</th><th onclick="sortP(5)">AVG таймер</th><th onclick="sortP(6)">Возраст</th><th onclick="sortP(7)">Призовые</th>${rcols}</tr></thead>`;
   const activePl=S.players.filter(p=>vStats[p.id]);
   if(!activePl.length){document.getElementById('players-area').innerHTML=`<table><tbody><tr><td class="empty" colspan="8">Нет данных</td></tr></tbody></table>`;return;}
@@ -361,7 +361,7 @@ function renderPV(vStats,isAll){
 }
 
 function renderPM(mStats,isAll){
-  const rcols=isAll?'':'<th>Атак</th><th>Стан</th><th>Разр</th><th>Сап</th><th>Аном</th>';
+  const rcols=isAll?'':'<th>Атак</th><th>Стан</th><th>Разр</th><th>Сап/Деф</th><th>Аном</th>';
   const head=`<thead><tr><th class="nc">Ник</th><th onclick="sortP(1)">Σ матч</th><th onclick="sortP(2)">W</th><th>D</th><th onclick="sortP(4)">L</th><th onclick="sortP(5)">WR%</th><th onclick="sortP(6)">WR фп%</th><th onclick="sortP(7)">WR дабл%</th><th onclick="sortP(8)">Σ рест</th><th onclick="sortP(9)">AVG рест</th><th onclick="sortP(10)">AVG таймер</th><th onclick="sortP(11)">Возраст</th><th onclick="sortP(12)">Призовые</th>${rcols}</tr></thead>`;
   const activePl=S.players.filter(p=>mStats[p.id]);
   if(!activePl.length){document.getElementById('players-area').innerHTML=`<table><tbody><tr><td class="empty" colspan="13">Нет данных</td></tr></tbody></table>`;return;}
