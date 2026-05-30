@@ -114,11 +114,16 @@ function authMsg(t,type){const el=document.getElementById('auth-msg');el.classNa
 
 sb.auth.onAuthStateChange((_,session)=>{
   if(session){
+    const wasActive=document.getElementById('admin-area').style.display==='flex';
     document.getElementById('login-screen').style.display='none';
     document.getElementById('admin-area').style.display='flex';
     document.getElementById('sidebar').style.display='flex';
     document.getElementById('user-email').textContent=session.user.email;
-    go('dashboard');
+    // Supabase пересоздаёт событие при visibilitychange — не сбрасываем страницу повторно
+    if(!wasActive){
+      const saved=localStorage.getItem('zzz_page')||'dashboard';
+      go(saved);
+    }
   }else{
     document.getElementById('login-screen').style.display='flex';
     document.getElementById('admin-area').style.display='none';
@@ -132,6 +137,8 @@ document.querySelectorAll('.nav-a[data-page]').forEach(a=>{
 });
 
 async function go(page){
+  localStorage.setItem('zzz_page',page);
+  document.querySelectorAll('.nav-a[data-page]').forEach(a=>a.classList.toggle('on',a.dataset.page===page));
   document.getElementById('page-title').textContent={dashboard:'Дашборд',tournaments:'Турниры',characters:'Персонажи',signatures:'Амплификаторы',players:'Игроки',matches:'Матчи'}[page]||page;
   await refreshData();
   const fn={dashboard:pgDashboard,tournaments:pgTournaments,characters:pgCharacters,signatures:pgSignatures,players:pgPlayers,matches:pgMatches}[page];
