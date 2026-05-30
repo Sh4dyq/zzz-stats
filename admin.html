@@ -79,7 +79,6 @@
         <button class="btn btn-y" style="flex:1" onclick="signIn()">Войти</button>
         <button class="btn btn-g" style="flex:1" onclick="signUp()">Регистрация</button>
       </div>
-      <p style="font-size:11px;color:var(--sub);margin-top:12px;text-align:center">После регистрации отключи публичные регистрации в Supabase → Authentication → Providers</p>
     </div>
   </div>
 
@@ -300,7 +299,7 @@ async function delSig(id){if(!confirm('Удалить?'))return;await sb.from('s
 // --- PLAYERS ---
 async function pgPlayers(){
   const list=D.players.map(p=>`<div class="row-item">
-    <div><div style="font-weight:600">${p.nickname}</div><div style="font-size:12px;color:var(--sub)">${p.age?p.age+' лет':'—'}</div></div>
+    <div><div style="font-weight:600">${p.nickname}</div><div style="font-size:12px;color:var(--sub)">${p.age?p.age:'—'}</div></div>
     <div style="display:flex;gap:8px">
       <button class="btn btn-g" style="font-size:12px;padding:5px 12px" onclick="openRoster('${p.id}','${p.nickname.replace(/'/g,"\\'")}')">Ростер</button>
       <button class="btn-r" onclick="delPlayer('${p.id}')">✕</button>
