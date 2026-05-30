@@ -30,7 +30,7 @@ async function pgSignatures(){
   <div class="card" style="margin-bottom:16px">
     <h4>Быстрый импорт списка</h4>
     <p style="color:var(--sub);font-size:13px;margin:4px 0">Каждая строка: <code>Название | Персонаж</code> — поле персонажа можно опустить.</p>
-    <textarea id="s-list" rows="6" style="width:100%" placeholder="Deep Sea Visitor | Ellen Joe"></textarea>
+    <textarea id="s-list" rows="6" style="width:100%" placeholder="Название сигны | Имя персонажа"></textarea>
     <div style="display:flex;gap:8px;margin-top:8px">
       <button class="btn btn-y" onclick="addSigsList()">Добавить список</button>
       <button class="btn" onclick="document.getElementById('s-list').value=''">Очистить</button>
