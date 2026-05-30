@@ -2,11 +2,11 @@
 
 // Форматы драфта: ключ → {label, gen(fpId,dblId) → [{n, pid, type}]}
 const DRAFT_FORMATS={
-  '2b7p':{label:'2 бана · 7 пиков (18 слотов)',gen:(fp,dbl)=>[
+  '2b7p':{label:'6 банов · 12 пиков (18 слотов)',gen:(fp,dbl)=>[
     {n:1,pid:fp,type:'ban'},{n:2,pid:dbl,type:'ban'},{n:3,pid:dbl,type:'ban'},{n:4,pid:fp,type:'ban'},
     {n:5,pid:fp,type:'pick'},{n:6,pid:dbl,type:'pick'},{n:7,pid:dbl,type:'pick'},{n:8,pid:fp,type:'pick'},
     {n:9,pid:fp,type:'pick'},{n:10,pid:dbl,type:'pick'},{n:11,pid:dbl,type:'pick'},{n:12,pid:fp,type:'pick'},
-    {n:13,pid:fp,type:'pick'},{n:14,pid:dbl,type:'pick'},{n:15,pid:dbl,type:'pick'},{n:16,pid:fp,type:'pick'},
+    {n:13,pid:fp,type:'ban'},{n:14,pid:dbl,type:'ban'},{n:15,pid:dbl,type:'pick'},{n:16,pid:fp,type:'pick'},
     {n:17,pid:fp,type:'pick'},{n:18,pid:dbl,type:'pick'},
   ]},
   '2b3p':{label:'2 бана · 3 пика (10 слотов)',gen:(fp,dbl)=>[
