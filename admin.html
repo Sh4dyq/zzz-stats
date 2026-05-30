@@ -290,33 +290,185 @@ async function saveCosts(tourId){
 }
 
 // --- CHARACTERS ---
+// Встроенный каталог персонажей ZZZ. element — атрибут (Лёд/Огонь/…), role — амплуа из схемы БД.
+const ELEMENTS={ice:'Лёд',fire:'Огонь',electric:'Электро',physical:'Физический',ether:'Эфир',auric:'Аура-тушь',honed:'Особый клинок'};
+const ELEM_C={ice:'#7dd3fc',fire:'#fb923c',electric:'#c084fc',physical:'#fbbf24',ether:'#f472b6',auric:'#f0abfc',honed:'#cbd5e1'};
+const ROLE_LBL={atk:'Attack',stun:'Stun',rupt:'Rupture',sup:'Sup/Def',ano:'Anomaly'};
+// r — редкость, el — атрибут, role — амплуа. Двойные роли (Атака/Разрушение) проставлены как rupt — поправь кнопкой ✎ при желании.
+const CATALOG=[
+  {n:'Von Lycaon',ru:'Ликаон',r:'S',el:'ice',role:'stun'},
+  {n:'Ellen Joe',ru:'Эллен',r:'S',el:'ice',role:'atk'},
+  {n:'Yidhari',ru:'Йидхари',r:'S',el:'ice',role:'ano'},
+  {n:'Promeia',ru:'Промея',r:'S',el:'ice',role:'ano'},
+  {n:'Zhao',ru:'Чжао',r:'S',el:'ice',role:'sup'},
+  {n:'Hoshimi Miyabi',ru:'Мияби',r:'S',el:'ice',role:'ano'},
+  {n:'Koleda Belobog',ru:'Коляда',r:'S',el:'fire',role:'stun'},
+  {n:'Soldier 11',ru:'Солдат 11',r:'S',el:'fire',role:'atk'},
+  {n:'Burnice White',ru:'Бёрнис',r:'S',el:'fire',role:'ano'},
+  {n:'Lighter',ru:'Лайтер',r:'S',el:'fire',role:'stun'},
+  {n:'Manato',ru:'Манато',r:'S',el:'fire',role:'rupt'},
+  {n:'Grace Howard',ru:'Грейс',r:'S',el:'electric',role:'ano'},
+  {n:'Alexandrina Sebastiane',ru:'Рина',r:'S',el:'electric',role:'sup'},
+  {n:'Qingyi',ru:'Цинъи',r:'S',el:'electric',role:'stun'},
+  {n:'Tsukishiro Yanagi',ru:'Янаги',r:'S',el:'electric',role:'ano'},
+  {n:'Asaba Harumasa',ru:'Харумаса',r:'S',el:'electric',role:'atk'},
+  {n:'Nekomiya Mana',ru:'Нэкомата',r:'S',el:'physical',role:'atk'},
+  {n:'Jane Doe',ru:'Джейн Доу',r:'S',el:'physical',role:'ano'},
+  {n:'Caesar King',ru:'Цезарь',r:'S',el:'physical',role:'sup'},
+  {n:'Pan Yinhu',ru:'Пань Иньху',r:'S',el:'physical',role:'sup'},
+  {n:'Pulchra',ru:'Пульхра',r:'S',el:'physical',role:'stun'},
+  {n:'Zhu Yuan',ru:'Чжу Юань',r:'S',el:'ether',role:'atk'},
+  {n:'Astra Yao',ru:'Астра Яо',r:'S',el:'ether',role:'sup'},
+  {n:'Vivian Banshee',ru:'Вивиан',r:'S',el:'ether',role:'ano'},
+  {n:'Nangong Yu',ru:'Наньгун Юй',r:'S',el:'ether',role:'stun'},
+  {n:'Yixuan',ru:'Исюань',r:'S',el:'auric',role:'rupt'},
+  {n:'Ye Shunguang',ru:'Е Шуньгуан',r:'S',el:'honed',role:'atk'},
+  {n:'Soukaku',ru:'Соукаку',r:'A',el:'ice',role:'sup'},
+  {n:'Hugo Vlad',ru:'Хьюго',r:'A',el:'ice',role:'atk'},
+  {n:'Ben Bigger',ru:'Бен',r:'A',el:'fire',role:'sup'},
+  {n:'Luciana',ru:'Люси',r:'A',el:'fire',role:'sup'},
+  {n:'Anton Ivanov',ru:'Антон',r:'A',el:'electric',role:'atk'},
+  {n:'Anby Demara',ru:'Анби',r:'A',el:'electric',role:'stun'},
+  {n:'Seth Lowell',ru:'Сет',r:'A',el:'electric',role:'sup'},
+  {n:'Trigger',ru:'Триггер',r:'A',el:'electric',role:'stun'},
+  {n:'Billy Kid',ru:'Билли',r:'A',el:'physical',role:'atk'},
+  {n:'Corin Wickes',ru:'Корин',r:'A',el:'physical',role:'atk'},
+  {n:'Piper Wheel',ru:'Пайпер',r:'A',el:'physical',role:'ano'},
+  {n:'Nicole Demara',ru:'Николь',r:'A',el:'ether',role:'sup'},
+];
+
+// Определяем, есть ли в таблице колонка element (чтобы код не падал до миграции)
+async function ensureSchema(){
+  if(D.hasElement!==undefined)return;
+  const{error}=await sb.from('characters').select('element').limit(1);
+  D.hasElement=!error;
+}
+function charPayload(o){
+  const p={name:o.name,rarity:o.rarity,role:o.role};
+  if(D.hasElement)p.element=o.element||null;
+  return p;
+}
+function roleSelect(id,val){
+  return`<select id="${id}">${Object.entries(ROLE_LBL).map(([k,l])=>`<option value="${k}" ${val===k?'selected':''}>${l}</option>`).join('')}</select>`;
+}
+
+let _editChar=null;
+
 async function pgCharacters(){
-  const list=D.chars.map(c=>`<div class="row-item">
-    <div style="display:flex;align-items:center;gap:10px">
-      <span class="${c.rarity==='S'?'badge-s':'badge-a'}">${c.rarity}</span>
-      <span style="font-weight:600">${c.name}</span>
-      <span style="font-size:12px;color:var(--sub)">${{atk:'Attack',stun:'Stun',rupt:'Rupture',sup:'Sup/Def',ano:'Anomaly'}[c.role]||c.role}</span>
-    </div>
-    <button class="btn-r" onclick="delChar('${c.id}')">✕</button>
-  </div>`).join('');
+  await ensureSchema();
+  const list=D.chars.map(c=>{
+    if(c.id===_editChar)return charEditRow(c);
+    const elBadge=c.element&&ELEMENTS[c.element]
+      ?`<span style="font-size:11px;color:${ELEM_C[c.element]||'var(--sub)'}">${ELEMENTS[c.element]}</span>`:'';
+    return`<div class="row-item">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <span class="${c.rarity==='S'?'badge-s':'badge-a'}">${c.rarity}</span>
+        <span style="font-weight:600">${c.name}</span>
+        ${elBadge}
+        <span style="font-size:12px;color:var(--sub)">${ROLE_LBL[c.role]||c.role}</span>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-g" style="font-size:13px;padding:4px 11px" onclick="startEditChar('${c.id}')">✎</button>
+        <button class="btn-r" onclick="delChar('${c.id}')">✕</button>
+      </div>
+    </div>`;
+  }).join('');
+
+  const elField=D.hasElement?`<div><label>Атрибут</label><select id="c-el"><option value="">—</option>${Object.entries(ELEMENTS).map(([k,vv])=>`<option value="${k}">${vv}</option>`).join('')}</select></div>`:'';
+
   html(`<div class="card" style="margin-bottom:16px">
-    <h3>Добавить персонажа</h3>
-    <div class="grid3">
+    <h3>Каталог персонажей ZZZ</h3>
+    <p style="color:var(--sub);font-size:13px;margin-bottom:12px">Добавь сразу всех персонажей игры списком — отметь нужных галочками и нажми «Добавить выбранных».</p>
+    <button class="btn btn-y" onclick="openCatalog()">📋 Открыть каталог (${CATALOG.length})</button>
+  </div>
+  <div class="card" style="margin-bottom:16px">
+    <h3>Добавить вручную</h3>
+    <div class="${D.hasElement?'grid2':'grid3'}">
       <div><label>Имя (EN)</label><input id="c-name" type="text" placeholder="Ellen Joe"></div>
+      ${elField}
       <div><label>Редкость</label><select id="c-rar"><option value="S">S</option><option value="A">A</option></select></div>
-      <div><label>Роль</label><select id="c-role"><option value="atk">Attack</option><option value="stun">Stun</option><option value="rupt">Rupture</option><option value="sup">Sup/Def</option><option value="ano">Anomaly</option></select></div>
+      <div><label>Роль</label>${roleSelect('c-role')}</div>
     </div>
     <button class="btn btn-y" style="margin-top:12px" onclick="addChar()">Добавить</button>
+    ${D.hasElement?'':`<p style="color:var(--sub);font-size:12px;margin-top:10px">💡 Чтобы хранить атрибут (Лёд/Огонь/…), один раз выполни в Supabase → SQL Editor:<br><code style="color:var(--accent)">alter table characters add column if not exists element text;</code><br>после этого обнови страницу.</p>`}
   </div>
   <div class="space-y">${list||'<p style="color:var(--sub);font-size:14px">Персонажей ещё нет</p>'}</div>`);
 }
-async function addChar(){
-  const n=v('c-name');if(!n)return;
-  const{error}=await sb.from('characters').insert({name:n,rarity:v('c-rar'),role:v('c-role')});
-  if(dbErr(error,'добавление персонажа'))return;
-  toast('Персонаж добавлен');pgCharacters();
+
+function charEditRow(c){
+  const elField=D.hasElement?`<select id="ec-el"><option value="">—</option>${Object.entries(ELEMENTS).map(([k,vv])=>`<option value="${k}" ${c.element===k?'selected':''}>${vv}</option>`).join('')}</select>`:'';
+  return`<div class="row-item" style="border-color:var(--accent);flex-wrap:wrap;gap:8px">
+    <input id="ec-name" type="text" value="${(c.name||'').replace(/"/g,'&quot;')}" style="flex:1;min-width:150px">
+    <select id="ec-rar"><option value="S" ${c.rarity==='S'?'selected':''}>S</option><option value="A" ${c.rarity==='A'?'selected':''}>A</option></select>
+    ${elField}
+    ${roleSelect('ec-role',c.role)}
+    <button class="btn btn-y" style="font-size:12px;padding:5px 12px" onclick="saveEditChar('${c.id}')">Сохранить</button>
+    <button class="btn btn-g" style="font-size:12px;padding:5px 12px" onclick="cancelEditChar()">Отмена</button>
+  </div>`;
 }
-async function delChar(id){if(!confirm('Удалить?'))return;const{error}=await sb.from('characters').delete().eq('id',id);if(dbErr(error,'удаление персонажа'))return;pgCharacters();}
+function startEditChar(id){_editChar=id;pgCharacters();}
+function cancelEditChar(){_editChar=null;pgCharacters();}
+async function saveEditChar(id){
+  const name=document.getElementById('ec-name').value.trim();
+  if(!name)return toast('Имя не может быть пустым','err');
+  const payload={name,rarity:document.getElementById('ec-rar').value,role:document.getElementById('ec-role').value};
+  if(D.hasElement)payload.element=document.getElementById('ec-el')?.value||null;
+  const{error}=await sb.from('characters').update(payload).eq('id',id);
+  if(dbErr(error,'редактирование персонажа'))return;
+  _editChar=null;await refreshData();toast('Изменения сохранены');pgCharacters();
+}
+
+async function addChar(){
+  await ensureSchema();
+  const n=v('c-name');if(!n)return;
+  const{error}=await sb.from('characters').insert(charPayload({name:n,rarity:v('c-rar'),role:v('c-role'),element:v('c-el')}));
+  if(dbErr(error,'добавление персонажа'))return;
+  await refreshData();toast('Персонаж добавлен');pgCharacters();
+}
+async function delChar(id){if(!confirm('Удалить?'))return;const{error}=await sb.from('characters').delete().eq('id',id);if(dbErr(error,'удаление персонажа'))return;if(_editChar===id)_editChar=null;await refreshData();pgCharacters();}
+
+// Каталог персонажей: массовое добавление списком
+function openCatalog(){
+  document.getElementById('page-title').textContent='Каталог персонажей';
+  const existing=new Set(D.chars.map(c=>c.name.toLowerCase()));
+  const rowFor=o=>{
+    const inDb=existing.has(o.n.toLowerCase());
+    return`<label style="display:flex;align-items:center;gap:10px;padding:8px 12px;border:1px solid var(--border);border-radius:8px;background:${inDb?'#0a0c12':'var(--card)'};${inDb?'opacity:.55':'cursor:pointer'}">
+      <input type="checkbox" class="cat-cb" data-n="${o.n.replace(/"/g,'&quot;')}" ${inDb?'checked disabled':''}>
+      <span class="${o.r==='S'?'badge-s':'badge-a'}">${o.r}</span>
+      <span style="font-weight:600;min-width:155px">${o.n}</span>
+      <span style="font-size:12px;color:var(--sub);min-width:90px">${o.ru}</span>
+      <span style="font-size:12px;color:${ELEM_C[o.el]};min-width:95px">${ELEMENTS[o.el]}</span>
+      <span style="font-size:12px;color:var(--sub)">${ROLE_LBL[o.role]}</span>
+      ${inDb?'<span style="font-size:11px;color:#4ade80;margin-left:auto">уже на сайте</span>':''}
+    </label>`;
+  };
+  const sList=CATALOG.filter(o=>o.r==='S').map(rowFor).join('');
+  const aList=CATALOG.filter(o=>o.r==='A').map(rowFor).join('');
+  const missing=CATALOG.filter(o=>!existing.has(o.n.toLowerCase())).length;
+  html(`<button class="btn btn-g" style="margin-bottom:16px" onclick="go('characters')">← Назад</button>
+  <div class="card" style="margin-bottom:16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+    <button class="btn btn-g" onclick="catAll(true)">Выбрать всех недостающих</button>
+    <button class="btn btn-g" onclick="catAll(false)">Снять выбор</button>
+    <button class="btn btn-y" style="margin-left:auto" onclick="addCatalog()">Добавить выбранных</button>
+    <span style="font-size:13px;color:var(--sub);width:100%">Недостающих в базе: <b style="color:var(--accent)">${missing}</b> из ${CATALOG.length}. Уже добавленные отмечены и заблокированы.</span>
+    ${D.hasElement?'':'<span style="font-size:12px;color:#f87171;width:100%">⚠ Колонка element отсутствует — добавятся имя/редкость/роль, атрибут не сохранится (см. подсказку на странице «Персонажи»).</span>'}
+  </div>
+  <div class="card"><h3>S-ранг (5★)</h3><div class="space-y">${sList}</div></div>
+  <div class="card" style="margin-top:16px"><h3>A-ранг (4★)</h3><div class="space-y">${aList}</div></div>`);
+}
+function catAll(on){document.querySelectorAll('.cat-cb:not(:disabled)').forEach(cb=>cb.checked=on);}
+async function addCatalog(){
+  await ensureSchema();
+  const existing=new Set(D.chars.map(c=>c.name.toLowerCase()));
+  const picked=[...document.querySelectorAll('.cat-cb:checked:not(:disabled)')].map(cb=>cb.dataset.n);
+  const rows=CATALOG.filter(o=>picked.includes(o.n)&&!existing.has(o.n.toLowerCase()))
+    .map(o=>charPayload({name:o.n,rarity:o.r,role:o.role,element:o.el}));
+  if(!rows.length)return toast('Никто не выбран','err');
+  const{error}=await sb.from('characters').insert(rows);
+  if(dbErr(error,'добавление из каталога'))return;
+  await refreshData();toast(`Добавлено персонажей: ${rows.length}`);openCatalog();
+}
 
 // --- SIGNATURES ---
 async function pgSignatures(){
