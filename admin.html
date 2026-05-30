@@ -291,49 +291,11 @@ async function saveCosts(tourId){
 
 // --- CHARACTERS ---
 // Встроенный каталог персонажей ZZZ. element — атрибут (Лёд/Огонь/…), role — амплуа из схемы БД.
-const ELEMENTS={ice:'Лёд',fire:'Огонь',electric:'Электро',physical:'Физический',ether:'Эфир',wind:'Ветер',honed:'Особый клинок'};
+const ELEMENTS={ice:'Лёд',fire:'Огонь',electric:'Электро',physical:'Физический',ether:'Эфир',wind:'Ветер'};
 const ELEM_C={ice:'#7dd3fc',fire:'#fb923c',electric:'#c084fc',physical:'#fbbf24',ether:'#f472b6',wind:'#64b5f6'};
-const ROLE_LBL={atk:'Attack',stun:'Stun',rupt:'Rupture',sup:'Sup/Def',ano:'Anomaly'};
+const ROLE_LBL={atk:'Attack',stun:'Stun',rupt:'Rupture',sup:'Support',def:'Defense',ano:'Anomaly'};
 const CATALOG=[
-  {n:'Von Lycaon',ru:'Ликаон',r:'S',el:'ice',role:'stun'},
-  {n:'Ellen Joe',ru:'Эллен',r:'S',el:'ice',role:'atk'},
-  {n:'Yidhari',ru:'Йидхари',r:'S',el:'ice',role:'ano'},
-  {n:'Promeia',ru:'Промея',r:'S',el:'ice',role:'ano'},
-  {n:'Zhao',ru:'Чжао',r:'S',el:'ice',role:'sup'},
-  {n:'Hoshimi Miyabi',ru:'Мияби',r:'S',el:'ice',role:'ano'},
-  {n:'Koleda Belobog',ru:'Коляда',r:'S',el:'fire',role:'stun'},
-  {n:'Soldier 11',ru:'Солдат 11',r:'S',el:'fire',role:'atk'},
-  {n:'Burnice White',ru:'Бёрнис',r:'S',el:'fire',role:'ano'},
-  {n:'Lighter',ru:'Лайтер',r:'S',el:'fire',role:'stun'},
-  {n:'Manato',ru:'Манато',r:'S',el:'fire',role:'rupt'},
-  {n:'Grace Howard',ru:'Грейс',r:'S',el:'electric',role:'ano'},
-  {n:'Alexandrina Sebastiane',ru:'Рина',r:'S',el:'electric',role:'sup'},
-  {n:'Qingyi',ru:'Цинъи',r:'S',el:'electric',role:'stun'},
-  {n:'Tsukishiro Yanagi',ru:'Янаги',r:'S',el:'electric',role:'ano'},
-  {n:'Asaba Harumasa',ru:'Харумаса',r:'S',el:'electric',role:'atk'},
-  {n:'Nekomiya Mana',ru:'Нэкомата',r:'S',el:'physical',role:'atk'},
-  {n:'Jane Doe',ru:'Джейн Доу',r:'S',el:'physical',role:'ano'},
-  {n:'Caesar King',ru:'Цезарь',r:'S',el:'physical',role:'sup'},
-  {n:'Pan Yinhu',ru:'Пань Иньху',r:'S',el:'physical',role:'sup'},
-  {n:'Pulchra',ru:'Пульхра',r:'S',el:'physical',role:'stun'},
-  {n:'Zhu Yuan',ru:'Чжу Юань',r:'S',el:'ether',role:'atk'},
-  {n:'Astra Yao',ru:'Астра Яо',r:'S',el:'ether',role:'sup'},
-  {n:'Vivian Banshee',ru:'Вивиан',r:'S',el:'ether',role:'ano'},
-  {n:'Nangong Yu',ru:'Наньгун Юй',r:'S',el:'ether',role:'stun'},
-  {n:'Yixuan',ru:'Исюань',r:'S',el:'auric',role:'rupt'},
-  {n:'Ye Shunguang',ru:'Е Шуньгуан',r:'S',el:'honed',role:'atk'},
-  {n:'Soukaku',ru:'Соукаку',r:'A',el:'ice',role:'sup'},
-  {n:'Hugo Vlad',ru:'Хьюго',r:'A',el:'ice',role:'atk'},
-  {n:'Ben Bigger',ru:'Бен',r:'A',el:'fire',role:'sup'},
-  {n:'Luciana',ru:'Люси',r:'A',el:'fire',role:'sup'},
-  {n:'Anton Ivanov',ru:'Антон',r:'A',el:'electric',role:'atk'},
-  {n:'Anby Demara',ru:'Анби',r:'A',el:'electric',role:'stun'},
-  {n:'Seth Lowell',ru:'Сет',r:'A',el:'electric',role:'sup'},
-  {n:'Trigger',ru:'Триггер',r:'A',el:'electric',role:'stun'},
-  {n:'Billy Kid',ru:'Билли',r:'A',el:'physical',role:'atk'},
-  {n:'Corin Wickes',ru:'Корин',r:'A',el:'physical',role:'atk'},
-  {n:'Piper Wheel',ru:'Пайпер',r:'A',el:'physical',role:'ano'},
-  {n:'Nicole Demara',ru:'Николь',r:'A',el:'ether',role:'sup'},
+  {n:'Miyabi',ru:'Мияби',r:'S',el:'ice',role:'ano'},
 ];
 
 // Определяем, есть ли в таблице колонка element (чтобы код не падал до миграции)
