@@ -45,10 +45,10 @@ async function addSig(){
   if(window.DEV_PREVIEW){
     // local-only add for dev preview
     const id='dev-'+Math.random().toString(36).slice(2,9);
-    D.sigs.push({id,name:n,character_id:c,agent_id:null});
+    D.sigs.push({id,name:n,character_id:c});
     toast('Амплификатор добавлен (dev)');pgSignatures();return;
   }
-  const{error}=await sb.from('signatures').insert({name:n,character_id:c});if(dbErr(error,'добавление амплификатора'))return;toast('Амплификатор добавлен');pgSignatures();
+  const{error}=await sb.from('signatures').insert({name:n,character_id:c});if(dbErr(error,'добавление амплификатора'))return;toast('Амплификатор добавлен');await refreshData();pgSignatures();
 }
 
 // Bulk add: parse textarea lines and insert multiple rows
@@ -67,7 +67,7 @@ async function addSigsList(){
       if(ch) charId=ch.id; else if(/^[0-9-]+$/.test(parts2[1])) charId=parts2[1];
     }
     if(!name) continue;
-    toInsert.push({name,character_id:charId,agent_id:null});
+    toInsert.push({name,character_id:charId});
   }
   if(!toInsert.length){toast('Нечего добавлять');return}
   if(window.DEV_PREVIEW){
@@ -75,12 +75,12 @@ async function addSigsList(){
     toast(`Добавлено ${toInsert.length} амплификаторов (dev)`);pgSignatures();return;
   }
   const {error} = await sb.from('signatures').insert(toInsert);
-  if(dbErr(error,'добавление списка амплификаторов'))return;toast(`Добавлено ${toInsert.length} амплификаторов`);pgSignatures();
+  if(dbErr(error,'добавление списка амплификаторов'))return;toast(`Добавлено ${toInsert.length} амплификаторов`);await refreshData();pgSignatures();
 }
 
 async function delSig(id){if(!confirm('Удалить?'))return;
   if(window.DEV_PREVIEW){D.sigs=D.sigs.filter(x=>x.id!==id);toast('Удалено (dev)');pgSignatures();return}
-  const{error}=await sb.from('signatures').delete().eq('id',id);if(dbErr(error,'удаление амплификатора'))return;pgSignatures();}
+  const{error}=await sb.from('signatures').delete().eq('id',id);if(dbErr(error,'удаление амплификатора'))return;await refreshData();pgSignatures();}
 
 // --- Edit in place ---
 function startEditSig(id){
@@ -108,7 +108,7 @@ async function saveEditSig(id){
   }
   const {error} = await sb.from('signatures').update({name,character_id:char}).eq('id',id);
   if(dbErr(error,'обновление амплификатора'))return;toast('Сигна обновлена');
-  if(typeof loadData==='function'){await loadData();}
+  await refreshData();
   pgSignatures();
 }
 
