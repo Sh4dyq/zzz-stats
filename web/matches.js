@@ -149,9 +149,8 @@ function changeDraftFmt(fmt,encId,num,p1Id,p2Id){
 }
 
 function renderDraftBoard(slots,fpId,dblId,fpName,dblName,match){
-  const banMap={},pickMap={};
+  const banMap={};
   (match?.bans||[]).forEach(b=>banMap[b.ban_order]=b);
-  (match?.picks||[]).forEach(p=>pickMap[p.pick_order]=p);
 
   const charOpts=D.chars.map(c=>`<option value="${c.id}">${c.name}</option>`).join('');
   const setSel=(opts,val)=>val?opts.replace(`value="${val}"`,`value="${val}" selected`):opts;
@@ -159,18 +158,16 @@ function renderDraftBoard(slots,fpId,dblId,fpName,dblName,match){
   const rows=slots.map(slot=>{
     const isFp=slot.pid===fpId;
     const isBan=slot.type==='ban';
-    const ex=isBan?(banMap[slot.n]||{}):(pickMap[slot.n]||{});
+    const ex=isBan?(banMap[slot.n]||{}):{};
 
-    const onChange=isBan?'':' onchange="draftCharChanged(this)"';
-    const charSel=`<select class="draft-char" data-slot="${slot.n}" data-type="${slot.type}" data-pid="${slot.pid}"${onChange}
-      style="flex:1;min-width:110px;font-size:12px;padding:4px 6px">
-      <option value="">—</option>${setSel(charOpts,ex.character_id)}
-    </select>`;
-
-    const pickExtras=isBan?'':`
-      <select class="draft-ms sm-sel" data-slot="${slot.n}" style="font-size:12px;padding:3px 5px">${msOpts.replace(`value="${ex.mindscape||0}"`,`value="${ex.mindscape||0}" selected`)}</select>`;
-
-    const cell=`<div style="display:flex;align-items:center;gap:3px;padding:2px 0">${charSel}${pickExtras}</div>`;
+    const cell=isBan
+      ?`<div style="display:flex;align-items:center;gap:3px;padding:2px 0">
+          <select class="draft-char" data-slot="${slot.n}" data-type="ban" data-pid="${slot.pid}"
+            style="flex:1;min-width:110px;font-size:12px;padding:4px 6px">
+            <option value="">—</option>${setSel(charOpts,ex.character_id)}
+          </select>
+        </div>`
+      :`<div style="padding:2px 0;min-height:30px"></div>`;
     const empty=`<div></div>`;
     const numCell=`<div style="text-align:center;padding:0 4px">
       <div style="font-size:15px;font-weight:700;line-height:1.1;color:${isBan?'#f87171':'var(--accent)'}">${slot.n}</div>
@@ -194,44 +191,47 @@ function renderPickMeta(slots,fpId,dblId,fpName,dblName,match){
   const pickMap={};
   (match?.picks||[]).forEach(p=>pickMap[p.pick_order]=p);
 
-  const pickSlots=slots.filter(s=>s.type==='pick');
-  if(!pickSlots.length)return'';
+  const charOpts=D.chars.map(c=>`<option value="${c.id}">${c.name}</option>`).join('');
+  const setSel=(opts,val)=>val?opts.replace(`value="${val}"`,`value="${val}" selected`):opts;
 
-  const rows=pickSlots.map(slot=>{
+  const fpSlots=slots.filter(s=>s.type==='pick'&&s.pid===fpId);
+  const dblSlots=slots.filter(s=>s.type==='pick'&&s.pid===dblId);
+  if(!fpSlots.length&&!dblSlots.length)return'';
+
+  const makeSlot=slot=>{
     const ex=pickMap[slot.n]||{};
-    const isFp=slot.pid===fpId;
-    const playerName=isFp?(fpName||'ФП'):(dblName||'Дабл');
-    const playerLabel=isFp?`${playerName} <span style="color:var(--sub);font-size:10px">(фп)</span>`:playerName;
-    return`<tr>
-      <td style="padding:4px 8px;font-size:12px;color:var(--sub);text-align:center">${slot.n}</td>
-      <td style="padding:4px 8px;font-size:12px">${playerLabel}</td>
-      <td style="padding:4px 8px;text-align:center">
-        <select class="draft-team sm-sel" data-slot="${slot.n}" style="font-size:12px;padding:3px 8px">
-          <option value="1" ${(ex.team_slot||1)===1?'selected':''}>Team 1</option>
-          <option value="2" ${ex.team_slot===2?'selected':''}>Team 2</option>
-        </select>
-      </td>
-      <td style="padding:4px 8px;text-align:center">
-        <label class="cb-label" style="font-size:12px;justify-content:center">
-          <input type="checkbox" class="draft-sig" data-slot="${slot.n}" ${ex.has_signature?'checked':''}>Сигна
-        </label>
-      </td>
-    </tr>`;
-  }).join('');
+    return`<div style="display:flex;align-items:center;gap:5px;padding:3px 0">
+      <select class="draft-char" data-slot="${slot.n}" data-type="pick" data-pid="${slot.pid}" onchange="draftCharChanged(this)"
+        style="flex:1;min-width:90px;font-size:12px;padding:4px 6px">
+        <option value="">—</option>${setSel(charOpts,ex.character_id)}
+      </select>
+      <select class="draft-ms sm-sel" data-slot="${slot.n}" style="font-size:12px;padding:3px 4px">${msOpts.replace(`value="${ex.mindscape||0}"`,`value="${ex.mindscape||0}" selected`)}</select>
+      <select class="draft-team sm-sel" data-slot="${slot.n}" style="font-size:12px;padding:3px 4px;width:auto">
+        <option value="1" ${(ex.team_slot||1)===1?'selected':''}>T1</option>
+        <option value="2" ${ex.team_slot===2?'selected':''}>T2</option>
+      </select>
+      <label class="cb-label" style="font-size:11px;white-space:nowrap">
+        <input type="checkbox" class="draft-sig" data-slot="${slot.n}" ${ex.has_signature?'checked':''}>sig
+      </label>
+    </div>`;
+  };
+
+  const maxLen=Math.max(fpSlots.length,dblSlots.length);
+  const rows=Array.from({length:maxLen},(_,i)=>`
+    <div>${fpSlots[i]?makeSlot(fpSlots[i]):''}</div>
+    <div>${dblSlots[i]?makeSlot(dblSlots[i]):''}</div>`).join('');
 
   return`<div class="card" style="margin-bottom:16px">
     <h3 style="margin-bottom:12px">Половины и сигнатуры</h3>
-    <table style="width:100%;border-collapse:collapse">
-      <thead>
-        <tr style="border-bottom:1px solid var(--border)">
-          <th style="padding:4px 8px;font-size:11px;color:var(--sub);text-align:center;font-weight:500">Пик №</th>
-          <th style="padding:4px 8px;font-size:11px;color:var(--sub);text-align:left;font-weight:500">Игрок</th>
-          <th style="padding:4px 8px;font-size:11px;color:var(--sub);text-align:center;font-weight:500">Половина</th>
-          <th style="padding:4px 8px;font-size:11px;color:var(--sub);text-align:center;font-weight:500">Сигнатура</th>
-        </tr>
-      </thead>
-      <tbody>${rows}</tbody>
-    </table>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 16px">
+      <div style="text-align:center;font-size:13px;font-weight:600;color:var(--accent);padding:4px 0;border-bottom:1px solid var(--border);margin-bottom:4px">
+        ${fpName||'ФП'} <span style="color:var(--sub);font-weight:400;font-size:11px">(фп)</span>
+      </div>
+      <div style="text-align:center;font-size:13px;font-weight:600;color:var(--accent);padding:4px 0;border-bottom:1px solid var(--border);margin-bottom:4px">
+        ${dblName||'Дабл'}
+      </div>
+      ${rows}
+    </div>
   </div>`;
 }
 
