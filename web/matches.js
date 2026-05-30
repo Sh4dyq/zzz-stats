@@ -136,6 +136,8 @@ async function openMatch(encId,num,p1Id,p2Id){
     ${renderDraftBoard(template,fpId,dblId,fp?.nickname,dbl?.nickname,match)}
   </div>
 
+  ${renderPickMeta(template,fpId,dblId,fp?.nickname,dbl?.nickname,match)}
+
   <button class="btn btn-y" style="font-size:15px;padding:10px 28px" onclick="saveMatch('${encId}','${num}','${p1Id}','${p2Id}','${fpId}','${mid}')">
     Сохранить матч
   </button>`);
@@ -165,12 +167,7 @@ function renderDraftBoard(slots,fpId,dblId,fpName,dblName,match){
     </select>`;
 
     const pickExtras=isBan?'':`
-      <select class="draft-ms sm-sel" data-slot="${slot.n}" style="font-size:12px;padding:3px 5px">${msOpts.replace(`value="${ex.mindscape||0}"`,`value="${ex.mindscape||0}" selected`)}</select>
-      <select class="draft-team sm-sel" data-slot="${slot.n}" style="font-size:12px;padding:3px 5px;width:auto">
-        <option value="1" ${(ex.team_slot||1)===1?'selected':''}>T1</option>
-        <option value="2" ${ex.team_slot===2?'selected':''}>T2</option>
-      </select>
-      <label class="cb-label" style="font-size:11px"><input type="checkbox" class="draft-sig" data-slot="${slot.n}" ${ex.has_signature?'checked':''}>sig</label>`;
+      <select class="draft-ms sm-sel" data-slot="${slot.n}" style="font-size:12px;padding:3px 5px">${msOpts.replace(`value="${ex.mindscape||0}"`,`value="${ex.mindscape||0}" selected`)}</select>`;
 
     const cell=`<div style="display:flex;align-items:center;gap:3px;padding:2px 0">${charSel}${pickExtras}</div>`;
     const empty=`<div></div>`;
@@ -189,6 +186,51 @@ function renderDraftBoard(slots,fpId,dblId,fpName,dblName,match){
     <div></div>
     <div style="text-align:center;font-size:13px;font-weight:600;color:var(--accent);padding:4px 0">${dblName||'Дабл'}</div>
     ${rows}
+  </div>`;
+}
+
+function renderPickMeta(slots,fpId,dblId,fpName,dblName,match){
+  const pickMap={};
+  (match?.picks||[]).forEach(p=>pickMap[p.pick_order]=p);
+
+  const pickSlots=slots.filter(s=>s.type==='pick');
+  if(!pickSlots.length)return'';
+
+  const rows=pickSlots.map(slot=>{
+    const ex=pickMap[slot.n]||{};
+    const isFp=slot.pid===fpId;
+    const playerName=isFp?(fpName||'ФП'):(dblName||'Дабл');
+    const playerLabel=isFp?`${playerName} <span style="color:var(--sub);font-size:10px">(фп)</span>`:playerName;
+    return`<tr>
+      <td style="padding:4px 8px;font-size:12px;color:var(--sub);text-align:center">${slot.n}</td>
+      <td style="padding:4px 8px;font-size:12px">${playerLabel}</td>
+      <td style="padding:4px 8px;text-align:center">
+        <select class="draft-team sm-sel" data-slot="${slot.n}" style="font-size:12px;padding:3px 8px">
+          <option value="1" ${(ex.team_slot||1)===1?'selected':''}>Team 1</option>
+          <option value="2" ${ex.team_slot===2?'selected':''}>Team 2</option>
+        </select>
+      </td>
+      <td style="padding:4px 8px;text-align:center">
+        <label class="cb-label" style="font-size:12px;justify-content:center">
+          <input type="checkbox" class="draft-sig" data-slot="${slot.n}" ${ex.has_signature?'checked':''}>Сигна
+        </label>
+      </td>
+    </tr>`;
+  }).join('');
+
+  return`<div class="card" style="margin-bottom:16px">
+    <h3 style="margin-bottom:12px">Половины и сигнатуры</h3>
+    <table style="width:100%;border-collapse:collapse">
+      <thead>
+        <tr style="border-bottom:1px solid var(--border)">
+          <th style="padding:4px 8px;font-size:11px;color:var(--sub);text-align:center;font-weight:500">Пик №</th>
+          <th style="padding:4px 8px;font-size:11px;color:var(--sub);text-align:left;font-weight:500">Игрок</th>
+          <th style="padding:4px 8px;font-size:11px;color:var(--sub);text-align:center;font-weight:500">Половина</th>
+          <th style="padding:4px 8px;font-size:11px;color:var(--sub);text-align:center;font-weight:500">Сигнатура</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>
   </div>`;
 }
 
