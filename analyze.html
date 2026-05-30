@@ -1,0 +1,660 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ZZZ Stats — Анализ скриншота</title>
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#08090d;--card:#0f1118;--border:#1c1f2e;--accent:#f5c842;--text:#e8eaf0;--sub:#7b7f96}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:'Rajdhani',sans-serif;min-height:100vh}
+input[type=text],input[type=email],input[type=password],input[type=number],select{
+  background:#0d0f18;border:1px solid var(--border);color:var(--text);border-radius:6px;
+  padding:7px 10px;font-family:'Rajdhani',sans-serif;font-size:14px;outline:none}
+input:focus,select:focus{border-color:#3b4260}
+label{font-size:12px;color:var(--sub);display:block;margin-bottom:4px;letter-spacing:.04em}
+.btn{border:none;border-radius:6px;padding:8px 18px;font-family:'Rajdhani',sans-serif;font-size:14px;font-weight:600;cursor:pointer;letter-spacing:.04em;transition:.15s}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn-y{background:var(--accent);color:#000}.btn-y:hover:not(:disabled){background:#ffd235}
+.btn-g{background:#1c1f2e;color:var(--text);border:1px solid var(--border)}.btn-g:hover:not(:disabled){background:#252840}
+.card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:20px}
+.alert-err{background:#2b0a0a;color:#f87171;border:1px solid #7f1d1d;padding:10px 14px;border-radius:6px;font-size:13px}
+.alert-ok{background:#052e16;color:#4ade80;border:1px solid #14532d;padding:10px 14px;border-radius:6px;font-size:13px}
+h3{font-size:16px;font-weight:600;margin-bottom:14px;letter-spacing:.04em}
+.spinner{width:18px;height:18px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;display:inline-block;vertical-align:middle;margin-right:6px}
+@keyframes spin{to{transform:rotate(360deg)}}
+.row{display:flex;gap:8px;align-items:center;padding:5px 0;border-bottom:1px solid var(--border)}
+.row:last-child{border-bottom:none}
+.unmatched{border-color:#f87171!important;background:#1a0808!important}
+.team-label{font-size:10px;font-weight:700;letter-spacing:.06em;color:var(--sub);padding:6px 0 3px}
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<div style="border-bottom:1px solid var(--border);padding:12px 24px;display:flex;align-items:center;justify-content:space-between">
+  <div style="display:flex;align-items:center;gap:16px">
+    <a href="index.html" style="font-size:20px;font-weight:700;color:var(--accent);text-decoration:none;letter-spacing:.06em">ZZZ STATS</a>
+    <span style="color:var(--sub);font-size:14px">/ Анализ скриншота</span>
+  </div>
+  <div style="display:flex;gap:12px;align-items:center">
+    <span id="user-label" style="font-size:12px;color:var(--sub)"></span>
+    <a href="admin.html" style="font-size:12px;color:var(--sub);text-decoration:none">Управление →</a>
+  </div>
+</div>
+
+<!-- Login screen -->
+<div id="login-screen" style="display:flex;align-items:center;justify-content:center;min-height:calc(100vh - 53px)">
+  <div class="card" style="width:340px">
+    <div style="font-size:18px;font-weight:700;color:var(--accent);margin-bottom:16px;letter-spacing:.06em">Войдите для работы</div>
+    <div id="auth-msg" style="margin-bottom:10px"></div>
+    <div style="margin-bottom:12px"><label>Email</label><input id="a-email" type="email" style="width:100%"></div>
+    <div style="margin-bottom:16px"><label>Пароль</label><input id="a-pass" type="password" style="width:100%"></div>
+    <button class="btn btn-y" style="width:100%" onclick="signIn()">Войти</button>
+  </div>
+</div>
+
+<!-- Main -->
+<div id="main" style="display:none;padding:24px;max-width:960px;margin:0 auto">
+
+  <!-- Gemini key -->
+  <div class="card" style="margin-bottom:16px">
+    <h3>Gemini API ключ</h3>
+    <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
+      <div style="flex:1;min-width:200px">
+        <label>Ключ сохраняется только в вашем браузере</label>
+        <input id="gemini-key" type="text" placeholder="AIza..." style="width:100%;font-family:'JetBrains Mono',monospace;font-size:12px">
+      </div>
+      <button class="btn btn-g" onclick="saveKey()">Сохранить</button>
+      <a href="https://aistudio.google.com/app/apikey" target="_blank"
+         style="font-size:12px;color:var(--accent);text-decoration:none;white-space:nowrap;padding-bottom:10px">
+        Получить бесплатно →
+      </a>
+    </div>
+    <div id="key-status" style="font-size:12px;color:var(--sub);margin-top:6px"></div>
+  </div>
+
+  <!-- Upload -->
+  <div class="card" style="margin-bottom:16px">
+    <h3>Скриншот завершённого драфта</h3>
+    <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:12px">
+      <div>
+        <label>Номер матча в Bo2</label>
+        <div style="display:flex;gap:4px">
+          <button id="mn-1" class="btn btn-y" style="padding:6px 20px" onclick="setMatchNum(1)">Матч 1</button>
+          <button id="mn-2" class="btn btn-g" style="padding:6px 20px" onclick="setMatchNum(2)">Матч 2</button>
+        </div>
+      </div>
+      <div style="flex:1;min-width:200px">
+        <label>Файл скриншота (jpg / png)</label>
+        <input id="file-input" type="file" accept="image/*" style="width:100%" onchange="onFile(event)">
+      </div>
+    </div>
+    <div id="preview-wrap" style="margin-bottom:12px;display:none">
+      <img id="preview-img" style="max-width:100%;max-height:180px;border-radius:6px;border:1px solid var(--border)">
+    </div>
+    <button id="analyze-btn" class="btn btn-y" style="min-width:150px" onclick="runAnalysis()">Анализировать</button>
+    <div id="analyze-status" style="margin-top:8px;font-size:13px"></div>
+  </div>
+
+  <!-- Results -->
+  <div id="results" style="display:none">
+
+    <!-- Context -->
+    <div class="card" style="margin-bottom:16px">
+      <h3>Контекст встречи</h3>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:end">
+        <div>
+          <label>Встреча (Bo2) из базы</label>
+          <select id="enc-sel" style="width:100%"><option value="">— выбери —</option></select>
+        </div>
+        <div id="autodetect" style="font-size:13px;padding-bottom:8px;color:var(--sub)"></div>
+      </div>
+    </div>
+
+    <!-- Match result -->
+    <div class="card" style="margin-bottom:16px">
+      <h3>Результат матча</h3>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+        <div>
+          <div id="left-name" style="font-size:15px;font-weight:700;color:var(--accent);margin-bottom:10px">—</div>
+          <div style="display:flex;gap:8px">
+            <div style="flex:1"><label>Таймер (м:сс)</label><input id="left-timer" type="text" placeholder="2:03" style="width:100%"></div>
+            <div><label>Рестарты</label><input id="left-restarts" type="number" min="0" style="width:72px"></div>
+          </div>
+        </div>
+        <div>
+          <div id="right-name" style="font-size:15px;font-weight:700;color:var(--accent);margin-bottom:10px">—</div>
+          <div style="display:flex;gap:8px">
+            <div style="flex:1"><label>Таймер (м:сс)</label><input id="right-timer" type="text" placeholder="1:47" style="width:100%"></div>
+            <div><label>Рестарты</label><input id="right-restarts" type="number" min="0" style="width:72px"></div>
+          </div>
+        </div>
+      </div>
+      <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;margin-top:12px;font-size:13px;color:var(--sub)">
+        <input type="checkbox" id="is-draw" style="accent-color:var(--accent)"> Ничья в этом матче
+      </label>
+    </div>
+
+    <!-- Picks -->
+    <div class="card" style="margin-bottom:16px">
+      <h3>Пики</h3>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px">
+        <div>
+          <div id="left-picks-name" style="font-size:13px;font-weight:600;color:var(--accent);margin-bottom:8px">—</div>
+          <div class="team-label">TEAM 1</div>
+          <div id="left-t1"></div>
+          <div class="team-label" style="margin-top:8px">TEAM 2</div>
+          <div id="left-t2"></div>
+        </div>
+        <div>
+          <div id="right-picks-name" style="font-size:13px;font-weight:600;color:var(--accent);margin-bottom:8px">—</div>
+          <div class="team-label">TEAM 1</div>
+          <div id="right-t1"></div>
+          <div class="team-label" style="margin-top:8px">TEAM 2</div>
+          <div id="right-t2"></div>
+        </div>
+      </div>
+      <p style="font-size:11px;color:var(--sub);margin-top:12px">
+        Красная рамка = персонаж не найден в базе. Выберите вручную или добавьте персонажа в Управлении.
+      </p>
+    </div>
+
+    <!-- Bans -->
+    <div class="card" style="margin-bottom:20px">
+      <h3>Баны</h3>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px">
+        <div>
+          <div id="left-bans-name" style="font-size:13px;color:var(--sub);margin-bottom:6px">—</div>
+          <div id="left-bans"></div>
+        </div>
+        <div>
+          <div id="right-bans-name" style="font-size:13px;color:var(--sub);margin-bottom:6px">—</div>
+          <div id="right-bans"></div>
+        </div>
+      </div>
+    </div>
+
+    <button id="save-btn" class="btn btn-y" style="font-size:16px;padding:12px 36px" onclick="saveData()">
+      Сохранить в базу
+    </button>
+    <div id="save-status" style="margin-top:10px;font-size:13px"></div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+const SB_URL='https://zoavnckfbfiejxfjakue.supabase.co';
+const SB_KEY='sb_publishable_37RZBsmdp3O1i795EuEfeg_vFpdPTFZ';
+const sb=supabase.createClient(SB_URL,SB_KEY);
+
+// Pick/ban slot order from DRAFT_TEMPLATE
+// fp  picks: 5,8,9 (T1), 12,16,17 (T2)
+// dbl picks: 6,7,10 (T1), 11,15,18 (T2)
+// fp  bans:  1, 4, 13
+// dbl bans:  2, 3, 14
+const FP_T1=[5,8,9], FP_T2=[12,16,17];
+const DBL_T1=[6,7,10], DBL_T2=[11,15,18];
+const FP_BANS=[1,4,13], DBL_BANS=[2,3,14];
+
+let matchNum=1, fileB64=null, fileMime='image/png';
+let dbChars=[], dbPlayers=[], dbEncs=[];
+
+// --- AUTH ---
+async function signIn(){
+  const{error}=await sb.auth.signInWithPassword({
+    email:document.getElementById('a-email').value.trim(),
+    password:document.getElementById('a-pass').value
+  });
+  if(error){
+    const m=document.getElementById('auth-msg');
+    m.className='alert-err';m.textContent=error.message;
+  }
+}
+
+sb.auth.onAuthStateChange((_,sess)=>{
+  if(sess){
+    document.getElementById('login-screen').style.display='none';
+    document.getElementById('main').style.display='block';
+    document.getElementById('user-label').textContent=sess.user.email;
+    init();
+  }else{
+    document.getElementById('login-screen').style.display='flex';
+    document.getElementById('main').style.display='none';
+  }
+});
+
+// --- INIT ---
+async function init(){
+  const k=localStorage.getItem('gemini_key')||'';
+  document.getElementById('gemini-key').value=k;
+  updateKeyStatus(k);
+
+  const[{data:ch},{data:pl},{data:en},{data:to}]=await Promise.all([
+    sb.from('characters').select('*').order('name'),
+    sb.from('players').select('*').order('nickname'),
+    sb.from('encounters').select('*').order('created_at',{ascending:false}),
+    sb.from('tournaments').select('*')
+  ]);
+  dbChars=ch||[]; dbPlayers=pl||[]; dbEncs=en||[];
+
+  const tourMap={};(to||[]).forEach(t=>tourMap[t.id]=t);
+  const plMap={};dbPlayers.forEach(p=>plMap[p.id]=p);
+
+  const sel=document.getElementById('enc-sel');
+  dbEncs.forEach(e=>{
+    const p1=plMap[e.player1_id]?.nickname||'?';
+    const p2=plMap[e.player2_id]?.nickname||'?';
+    const t=tourMap[e.tournament_id]?.name||'?';
+    const o=document.createElement('option');
+    o.value=e.id;
+    o.textContent=`${p1} vs ${p2}  [${t}]`;
+    sel.appendChild(o);
+  });
+}
+
+// --- KEY ---
+function saveKey(){
+  const k=document.getElementById('gemini-key').value.trim();
+  localStorage.setItem('gemini_key',k);
+  updateKeyStatus(k);
+}
+function updateKeyStatus(k){
+  const el=document.getElementById('key-status');
+  if(k&&k.length>10){el.style.color='#4ade80';el.textContent='✓ Ключ сохранён — бесплатно до 1500 запросов/день';}
+  else if(k){el.style.color='#f87171';el.textContent='Ключ слишком короткий, проверьте что скопировали полностью';}
+  else{el.style.color='var(--sub)';el.textContent='Зарегистрируйтесь на aistudio.google.com и создайте ключ — это бесплатно';}
+}
+
+// --- MATCH NUM ---
+function setMatchNum(n){
+  matchNum=n;
+  document.getElementById('mn-1').className='btn '+(n===1?'btn-y':'btn-g');
+  document.getElementById('mn-2').className='btn '+(n===2?'btn-y':'btn-g');
+}
+
+// --- FILE ---
+function onFile(e){
+  const f=e.target.files[0]; if(!f)return;
+  fileMime=f.type||'image/png';
+  const r=new FileReader();
+  r.onload=ev=>{
+    const url=ev.target.result;
+    document.getElementById('preview-img').src=url;
+    document.getElementById('preview-wrap').style.display='block';
+    fileB64=url.split(',')[1];
+  };
+  r.readAsDataURL(f);
+}
+
+// --- ANALYSIS ---
+async function runAnalysis(){
+  const key=localStorage.getItem('gemini_key')||'';
+  if(!key){alert('Введите и сохраните Gemini API ключ');return;}
+  if(!fileB64){alert('Выберите файл скриншота');return;}
+
+  const btn=document.getElementById('analyze-btn');
+  const status=document.getElementById('analyze-status');
+  btn.disabled=true;
+  btn.innerHTML='<span class="spinner"></span>Анализирую...';
+  status.textContent='';
+  document.getElementById('results').style.display='none';
+
+  try{
+    const result=await callGemini(key,fileB64,fileMime);
+    renderResults(result);
+    document.getElementById('results').style.display='block';
+    document.getElementById('results').scrollIntoView({behavior:'smooth',block:'start'});
+  }catch(e){
+    status.style.color='#f87171';
+    status.textContent='Ошибка анализа: '+e.message;
+    console.error(e);
+  }finally{
+    btn.disabled=false;
+    btn.textContent='Анализировать';
+  }
+}
+
+async function callGemini(key,b64,mime){
+  const prompt=`This is a completed draft screenshot from the Zenless Zone Zero tournament site shiyu.darte.gg.
+
+Return ONLY a JSON object with this structure (no markdown, no explanation):
+{
+  "left_player": "nickname",
+  "right_player": "nickname",
+  "left_timer": "M:SS",
+  "right_timer": "M:SS",
+  "left_restarts": 0,
+  "right_restarts": 0,
+  "left_picks": [
+    {"name": "character name", "mindscape": 0, "has_signature": false, "team": 1}
+  ],
+  "right_picks": [...],
+  "left_bans": ["name1", "name2", "name3"],
+  "right_bans": ["name1", "name2", "name3"]
+}
+
+Extraction rules:
+LEFT PLAYER = the large bold nickname at the top-left. RIGHT PLAYER = top-right.
+
+TIMERS: Find the two timers shown on red/highlighted backgrounds flanking the central circular room-number badge. The timer to the LEFT of the badge = left_timer. The timer to the RIGHT = right_timer. Format: M:SS (e.g. "2:03").
+
+RESTARTS: At the very top of the screen look for "P1 restarts" and "P2 restarts". P1 restarts = left_restarts (integer), P2 restarts = right_restarts.
+
+PICKS: In the BOTTOM section there are two groups of large character cards. Left group = left player, right group = right player. Each group has 6 characters in two rows of 3:
+- Top row (labeled "01 TEAM") → team: 1
+- Bottom row (labeled "02 TEAM") → team: 2
+For each character:
+  "name" = exact text label below the character portrait (e.g. "Burnice", "Ellen")
+  "mindscape" = integer from the M0-M6 badge near the character (e.g. M2 → 2, M0 → 0)
+  "has_signature" = true if the small weapon icon on the card appears golden/ornate/unique (signature quality). false if gray/generic or uncertain.
+
+BANS: In the upper draft grid, identify the 3 characters banned by each player from the character portrait icons. Left player banned characters are in grid positions 1, 4, 13. Right player banned characters are in positions 2, 3, 14. Use the character name as you can identify them visually.
+
+Return exactly 6 picks per player (3 team-1 and 3 team-2) and exactly 3 bans per player.`;
+
+  const res=await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${key}`,
+    {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        contents:[{parts:[{text:prompt},{inline_data:{mime_type:mime,data:b64}}]}],
+        generationConfig:{temperature:0.1}
+      })
+    }
+  );
+
+  if(!res.ok){
+    const err=await res.json().catch(()=>({}));
+    throw new Error(err?.error?.message||`HTTP ${res.status}`);
+  }
+
+  const data=await res.json();
+  let text=data?.candidates?.[0]?.content?.parts?.[0]?.text||'';
+  text=text.replace(/```json\s*/g,'').replace(/```\s*/g,'').trim();
+  return JSON.parse(text);
+}
+
+// --- RENDER RESULTS ---
+function findChar(name){
+  if(!name)return null;
+  const n=name.toLowerCase().trim();
+  let c=dbChars.find(x=>x.name.toLowerCase()===n);
+  if(c)return c;
+  // partial: name starts with first word of DB name or vice versa
+  c=dbChars.find(x=>{
+    const xn=x.name.toLowerCase();
+    return xn.includes(n)||n.includes(xn)||xn.split(' ')[0]===n.split(' ')[0];
+  });
+  return c||null;
+}
+
+function charOpts(){
+  return '<option value="">— не найден —</option>'+
+    dbChars.map(c=>`<option value="${c.id}">${c.name}</option>`).join('');
+}
+function msOpts(){
+  return Array.from({length:7},(_,i)=>`<option value="${i}">M${i}</option>`).join('');
+}
+function setSel(opts,val){
+  return val?opts.replace(`value="${val}"`,`value="${val}" selected`):opts;
+}
+
+function renderResults(a){
+  // Names
+  document.getElementById('left-name').textContent=a.left_player||'Левый';
+  document.getElementById('right-name').textContent=a.right_player||'Правый';
+  document.getElementById('left-picks-name').textContent=a.left_player||'Левый';
+  document.getElementById('right-picks-name').textContent=a.right_player||'Правый';
+  document.getElementById('left-bans-name').textContent=(a.left_player||'Левый')+' — баны';
+  document.getElementById('right-bans-name').textContent=(a.right_player||'Правый')+' — баны';
+
+  // Timers / restarts
+  document.getElementById('left-timer').value=a.left_timer||'';
+  document.getElementById('right-timer').value=a.right_timer||'';
+  document.getElementById('left-restarts').value=a.left_restarts??0;
+  document.getElementById('right-restarts').value=a.right_restarts??0;
+
+  // Auto-detect encounter
+  autoDetect(a.left_player,a.right_player);
+
+  // Picks
+  renderPickGroup('left',a.left_picks||[]);
+  renderPickGroup('right',a.right_picks||[]);
+
+  // Bans
+  renderBanGroup('left',a.left_bans||[]);
+  renderBanGroup('right',a.right_bans||[]);
+}
+
+function autoDetect(ln,rn){
+  const el=document.getElementById('autodetect');
+  const plMap={};dbPlayers.forEach(p=>plMap[p.id]=p);
+  const ln2=(ln||'').toLowerCase(), rn2=(rn||'').toLowerCase();
+  let best=null,score=0;
+  dbEncs.forEach(e=>{
+    const p1=(plMap[e.player1_id]?.nickname||'').toLowerCase();
+    const p2=(plMap[e.player2_id]?.nickname||'').toLowerCase();
+    let s=(p1===ln2||p1===rn2?1:0)+(p2===ln2||p2===rn2?1:0);
+    if(s>score){score=s;best=e;}
+  });
+  if(best&&score>=1){
+    const p1=plMap[best.player1_id]?.nickname||'?';
+    const p2=plMap[best.player2_id]?.nickname||'?';
+    el.style.color='#4ade80';
+    el.textContent=`✓ Автодетект: ${p1} vs ${p2}`;
+    document.getElementById('enc-sel').value=best.id;
+  }else{
+    el.style.color='var(--sub)';
+    el.textContent='Встреча не найдена — выберите вручную';
+  }
+}
+
+function renderPickGroup(side,picks){
+  const t1=picks.filter(p=>p.team===1);
+  const t2=picks.filter(p=>p.team===2);
+  document.getElementById(`${side}-t1`).innerHTML=pickRows(side,'t1',t1);
+  document.getElementById(`${side}-t2`).innerHTML=pickRows(side,'t2',t2);
+}
+
+function pickRows(side,team,list){
+  let html='';
+  for(let i=0;i<3;i++){
+    const p=list[i]||{};
+    const char=findChar(p.name||'');
+    const uid=`${side}-${team}-${i}`;
+    const unmatched=!char&&p.name?';border-color:#f87171;background:#1a0808':'';
+    html+=`<div class="row">
+      <select id="pc-${uid}" style="flex:1;font-size:12px;padding:4px 6px${unmatched}">
+        ${setSel(charOpts(),char?.id||'')}
+      </select>
+      <select id="pm-${uid}" style="font-size:12px;padding:4px 5px;width:58px">
+        ${setSel(msOpts(),String(p.mindscape??0))}
+      </select>
+      <label style="display:flex;align-items:center;gap:3px;font-size:11px;color:var(--sub);white-space:nowrap;cursor:pointer;margin:0">
+        <input type="checkbox" id="ps-${uid}" style="accent-color:var(--accent)" ${p.has_signature?'checked':''}> sig
+      </label>
+    </div>`;
+  }
+  return html;
+}
+
+function renderBanGroup(side,bans){
+  let html='';
+  for(let i=0;i<3;i++){
+    const name=bans[i]||'';
+    const char=findChar(name);
+    const uid=`${side}-ban-${i}`;
+    const unmatched=name&&!char?';border-color:#f87171;background:#1a0808':'';
+    html+=`<div class="row">
+      <select id="bn-${uid}" style="flex:1;font-size:12px;padding:4px 6px${unmatched}">
+        ${setSel(charOpts(),char?.id||'')}
+      </select>
+    </div>`;
+  }
+  document.getElementById(`${side}-bans`).innerHTML=html;
+}
+
+// --- HELPERS ---
+function gPick(side,team,i){
+  const uid=`${side}-${team}-${i}`;
+  return{
+    charId:document.getElementById(`pc-${uid}`)?.value||'',
+    ms:+document.getElementById(`pm-${uid}`)?.value||0,
+    sig:document.getElementById(`ps-${uid}`)?.checked||false,
+  };
+}
+function gBan(side,i){
+  return document.getElementById(`bn-${side}-ban-${i}`)?.value||'';
+}
+function parseSec(s){
+  if(!s)return null;
+  const p=s.split(':').map(Number);
+  if(p.length!==2||isNaN(p[0])||isNaN(p[1]))return null;
+  return p[0]*60+p[1];
+}
+
+// --- SAVE ---
+async function saveData(){
+  const encId=document.getElementById('enc-sel').value;
+  if(!encId){alert('Выберите встречу из списка');return;}
+
+  const enc=dbEncs.find(e=>e.id===encId);
+  if(!enc)return;
+
+  // In match 1: fp = player1, dbl = player2
+  // In match 2: fp = player2, dbl = player1
+  // Left side in screenshot = always the current fp player
+  const p1Id=enc.player1_id, p2Id=enc.player2_id;
+  const fpId=matchNum===1?p1Id:p2Id;
+  const dblId=matchNum===1?p2Id:p1Id;
+  const leftId=fpId, rightId=dblId;
+
+  const lt=parseSec(document.getElementById('left-timer').value);
+  const rt=parseSec(document.getElementById('right-timer').value);
+  const lr=+document.getElementById('left-restarts').value||0;
+  const rr=+document.getElementById('right-restarts').value||0;
+  const isDraw=document.getElementById('is-draw').checked;
+
+  let winnerId=null;
+  if(!isDraw&&lt!=null&&rt!=null){
+    winnerId=lt<=rt?leftId:rightId;
+  }
+
+  // Match DB columns use player1_id / player2_id order (from encounter definition)
+  const p1Timer=fpId===p1Id?lt:rt;
+  const p2Timer=fpId===p1Id?rt:lt;
+  const p1Rest=fpId===p1Id?lr:rr;
+  const p2Rest=fpId===p1Id?rr:lr;
+
+  const mData={
+    encounter_id:encId,
+    match_number:matchNum,
+    fp_player_id:fpId,
+    is_draw:isDraw,
+    winner_id:isDraw?null:(winnerId||null),
+    player1_timer_sec:p1Timer,
+    player2_timer_sec:p2Timer,
+    player1_restarts:p1Rest,
+    player2_restarts:p2Rest
+  };
+
+  const btn=document.getElementById('save-btn');
+  const status=document.getElementById('save-status');
+  btn.disabled=true; btn.textContent='Сохраняю...';
+  status.textContent='';
+
+  try{
+    // Upsert match
+    let mid;
+    const{data:ex}=await sb.from('matches').select('id')
+      .eq('encounter_id',encId).eq('match_number',matchNum).maybeSingle();
+    if(ex){
+      const{error}=await sb.from('matches').update(mData).eq('id',ex.id);
+      if(error)throw error;
+      mid=ex.id;
+    }else{
+      const{data,error}=await sb.from('matches').insert(mData).select().single();
+      if(error)throw error;
+      mid=data.id;
+    }
+
+    // Build picks
+    const picks=[];
+    const sides=[
+      [leftId,'left',FP_T1,FP_T2],
+      [rightId,'right',DBL_T1,DBL_T2]
+    ];
+    for(const[pid,side,t1slots,t2slots] of sides){
+      for(let i=0;i<3;i++){
+        const v1=gPick(side,'t1',i);
+        if(v1.charId){
+          const c=dbChars.find(x=>x.id===v1.charId);
+          picks.push({match_id:mid,player_id:pid,character_id:v1.charId,
+            mindscape:c?.rarity==='A'?6:v1.ms,team_slot:1,has_signature:v1.sig,
+            pick_order:t1slots[i],is_fp:pid===fpId,is_double:false});
+        }
+        const v2=gPick(side,'t2',i);
+        if(v2.charId){
+          const c=dbChars.find(x=>x.id===v2.charId);
+          picks.push({match_id:mid,player_id:pid,character_id:v2.charId,
+            mindscape:c?.rarity==='A'?6:v2.ms,team_slot:2,has_signature:v2.sig,
+            pick_order:t2slots[i],is_fp:pid===fpId,is_double:false});
+        }
+      }
+    }
+    // Mark double-picks
+    const cc={};picks.forEach(p=>cc[p.character_id]=(cc[p.character_id]||0)+1);
+    picks.forEach(p=>p.is_double=cc[p.character_id]>1);
+
+    // Build bans
+    const bans=[];
+    const banSides=[
+      [leftId,'left',FP_BANS],
+      [rightId,'right',DBL_BANS]
+    ];
+    for(const[pid,side,slots] of banSides){
+      for(let i=0;i<3;i++){
+        const charId=gBan(side,i);
+        if(charId)bans.push({match_id:mid,player_id:pid,character_id:charId,ban_order:slots[i]});
+      }
+    }
+
+    // Clear old data and insert new
+    await sb.from('match_picks').delete().eq('match_id',mid);
+    await sb.from('match_bans').delete().eq('match_id',mid);
+    if(picks.length){const{error}=await sb.from('match_picks').insert(picks);if(error)throw error;}
+    if(bans.length){const{error}=await sb.from('match_bans').insert(bans);if(error)throw error;}
+
+    // Update encounter winner by total timer
+    const{data:allMs}=await sb.from('matches').select('*').eq('encounter_id',encId);
+    if(allMs&&allMs.length>=2){
+      let p1T=0,p2T=0;
+      allMs.forEach(m=>{p1T+=m.player1_timer_sec||0;p2T+=m.player2_timer_sec||0;});
+      const encWin=p1T<=p2T?p1Id:p2Id;
+      await sb.from('encounters').update({winner_id:encWin}).eq('id',encId);
+    }
+
+    status.className='alert-ok';
+    status.textContent='✓ Матч сохранён! Готово к следующему скриншоту.';
+    // Reset upload for next screenshot
+    setTimeout(()=>{
+      document.getElementById('results').style.display='none';
+      document.getElementById('file-input').value='';
+      document.getElementById('preview-wrap').style.display='none';
+      fileB64=null;
+    },2500);
+  }catch(e){
+    status.className='alert-err';
+    status.textContent='Ошибка сохранения: '+e.message;
+    console.error(e);
+  }finally{
+    btn.disabled=false;
+    btn.textContent='Сохранить в базу';
+  }
+}
+</script>
+</body>
+</html>
