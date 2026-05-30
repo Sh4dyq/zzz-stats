@@ -1,1 +1,456 @@
-<h1>ZZZ Stats — в разработке</h1>
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ZZZ Tournament Stats</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script>tailwind.config={theme:{extend:{fontFamily:{raj:['Rajdhani','sans-serif'],mono:['JetBrains Mono','monospace']}}}}</script>
+<style>
+  :root{--bg:#08090d;--card:#0f1118;--border:#1c1f2e;--accent:#f5c842;--cyan:#3dd9d6;--text:#e8eaf0;--sub:#7b7f96}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font-family:'Rajdhani',sans-serif;min-height:100vh}
+  ::-webkit-scrollbar{width:5px;height:5px}
+  ::-webkit-scrollbar-track{background:var(--card)}
+  ::-webkit-scrollbar-thumb{background:#2a2d3e;border-radius:3px}
+  .tab-btn{border:none;background:none;border-bottom:2px solid transparent;padding:9px 18px;font-family:'Rajdhani',sans-serif;font-size:15px;font-weight:500;color:var(--sub);cursor:pointer;transition:.15s;letter-spacing:.03em}
+  .tab-btn:hover{color:var(--text)}
+  .tab-btn.active{color:var(--text);border-bottom-color:var(--accent)}
+  .tbl-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:8px}
+  table{border-collapse:collapse;font-size:12px;white-space:nowrap;width:100%;font-family:'JetBrains Mono',monospace}
+  th,td{padding:5px 10px;border:1px solid var(--border);text-align:right}
+  th{background:#0b0d14;font-size:11px;font-weight:500;color:var(--sub);cursor:pointer;user-select:none;font-family:'Rajdhani',sans-serif;letter-spacing:.04em}
+  th:hover{color:var(--text);background:#12141d}
+  .th-g{text-align:center!important;background:#09090f!important;color:var(--text)!important;font-size:11px;border-bottom:1px solid #2a2d3e!important}
+  td.nc{text-align:left;font-weight:600;color:var(--text);min-width:150px;font-family:'Rajdhani',sans-serif;font-size:13px}
+  th.nc{text-align:left}
+  .g{color:#4ade80;font-weight:600}.r{color:#f87171;font-weight:600}.m{color:var(--sub)}
+  .vrow{background:#0a0c12}.vrow td.nc{color:var(--sub);font-weight:400;padding-left:22px;font-size:12px}
+  .seg-btn{border:none;background:none;padding:5px 14px;font-size:13px;font-family:'Rajdhani',sans-serif;font-weight:500;color:var(--sub);cursor:pointer;border-radius:4px;transition:.15s}
+  .seg-btn.on{background:#1c1f2e;color:var(--text)}
+  .chev{font-size:10px;color:var(--sub);transition:transform .15s;display:inline-block}
+  .chev.open{transform:rotate(90deg)}
+  select,input[type=text],input[type=number]{background:#0f1118;border:1px solid var(--border);color:var(--text);border-radius:5px;padding:5px 10px;font-family:'Rajdhani',sans-serif;font-size:14px}
+  select{cursor:pointer}
+  .pic{width:22px;height:22px;border-radius:5px;display:inline-flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;flex-shrink:0;font-family:'Rajdhani',sans-serif}
+  .badge-s{font-size:9px;font-weight:700;padding:0 4px;border-radius:3px;background:#451a03;color:#fbbf24;font-family:'Rajdhani',sans-serif;letter-spacing:.05em}
+  .badge-a{font-size:9px;font-weight:700;padding:0 4px;border-radius:3px;background:#1c1f2e;color:var(--sub);font-family:'Rajdhani',sans-serif;letter-spacing:.05em}
+  .ms-tag{font-size:10px;padding:0 5px;border-radius:3px;background:#12141d;border:1px solid var(--border);color:var(--sub);font-family:'JetBrains Mono',monospace}
+  .hl-cell{background:#0d1b2e;color:#60a5fa;font-weight:700;font-size:14px!important;font-family:'Rajdhani',sans-serif}
+  .note{font-size:11px;color:var(--sub);margin-top:8px;font-family:'Rajdhani',sans-serif}
+  .empty{padding:40px 0;text-align:center;color:var(--sub);font-size:14px}
+  .spinner{width:20px;height:20px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;margin:0 auto}
+  @keyframes spin{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<div style="border-bottom:1px solid var(--border);padding:12px 24px;display:flex;align-items:center;justify-content:space-between;gap:16px">
+  <div style="display:flex;align-items:center;gap:16px">
+    <h1 style="font-size:20px;font-weight:700;color:var(--accent);letter-spacing:.06em">ZZZ STATS</h1>
+    <select id="tour-sel" style="min-width:180px">
+      <option value="">Загрузка...</option>
+    </select>
+  </div>
+  <a href="admin.html" style="font-size:12px;color:var(--sub);text-decoration:none;font-family:'Rajdhani',sans-serif;letter-spacing:.04em">Управление →</a>
+</div>
+
+<!-- Tabs -->
+<div style="border-bottom:1px solid var(--border);padding:0 24px;display:flex">
+  <button class="tab-btn active" data-tab="chars">Персонажи</button>
+  <button class="tab-btn" data-tab="players">Игроки</button>
+  <button class="tab-btn" data-tab="ext">Расширенная</button>
+</div>
+
+<!-- Content -->
+<div style="padding:20px 24px">
+  <div id="loading" style="padding:60px 0;text-align:center"><div class="spinner"></div></div>
+
+  <!-- CHARACTERS -->
+  <div id="tab-chars" class="tab-pane" style="display:none">
+    <p class="note" style="margin-bottom:12px">S-персонажи раскрываются по клику · клик по заголовку — сортировка · кост скрыт в режиме «Все турниры»</p>
+    <div class="tbl-wrap">
+      <table>
+        <thead id="chars-head"></thead>
+        <tbody id="chars-body"><tr><td class="empty" colspan="30">Нет данных</td></tr></tbody>
+      </table>
+    </div>
+    <p class="note">WR = (W + 0.5·D) / Σ · кост и кост сигны задаются вручную в настройках турнира</p>
+  </div>
+
+  <!-- PLAYERS -->
+  <div id="tab-players" class="tab-pane" style="display:none">
+    <div style="display:flex;gap:2px;border:1px solid var(--border);border-radius:6px;overflow:hidden;width:fit-content;margin-bottom:14px">
+      <button id="seg-v" class="seg-btn on" onclick="setView('v')">По встречам (Bo2)</button>
+      <button id="seg-m" class="seg-btn" onclick="setView('m')">По матчам</button>
+    </div>
+    <div id="players-area" class="tbl-wrap">
+      <table><tbody><tr><td class="empty" colspan="12">Нет данных</td></tr></tbody></table>
+    </div>
+  </div>
+
+  <!-- EXTENDED -->
+  <div id="tab-ext" class="tab-pane" style="display:none">
+    <div class="tbl-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th colspan="5" class="th-g">Драфты</th>
+            <th colspan="3" class="th-g">Таймер</th>
+            <th colspan="4" class="th-g">Рестарты</th>
+          </tr>
+          <tr>
+            <th>Σ игр</th><th>W fp</th><th>WR fp</th><th>W double</th><th>WR double</th>
+            <th>AVG</th><th>AVG W</th><th>AVG L</th>
+            <th>Σ</th><th>AVG / игра</th><th>AVG W</th><th>AVG L</th>
+          </tr>
+        </thead>
+        <tbody id="ext-body"><tr><td class="empty" colspan="12">Нет данных</td></tr></tbody>
+      </table>
+    </div>
+    <p class="note">«Σ игр» — по отдельным матчам · победитель = меньший центральный таймер · WR пол-очка за ничью</p>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+const SB_URL='https://zoavnckfbfiejxfjakue.supabase.co';
+const SB_KEY='sb_publishable_37RZBsmdp3O1i795EuEfeg_vFpdPTFZ';
+const sb=supabase.createClient(SB_URL,SB_KEY);
+
+const ROLES={atk:{bg:'#3b1010',fg:'#fca5a5'},stun:{bg:'#0f1f3b',fg:'#93c5fd'},rupt:{bg:'#2d1a00',fg:'#fcd34d'},sup:{bg:'#0a2218',fg:'#6ee7b7'},ano:{bg:'#1a0d3b',fg:'#c4b5fd'}};
+
+let S={tournaments:[],characters:[],players:[],encounters:[],matches:[],picks:[],bans:[],costs:{},rosters:{},prizes:{},tour:'__all__',view:'v',cSort:{k:'pk',asc:false}};
+
+const ALL='__all__';
+const f1=v=>typeof v==='number'?v.toFixed(1)+'%':v;
+const wr=(w,d,t)=>t?(w+0.5*d)/t*100:0;
+const wc=v=>v>55?'g':v<45?'r':'m';
+const pctT=(n,t)=>t?n/t*100:0;
+const fSec=s=>{if(!s&&s!==0)return'—';return`${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`};
+const avg=a=>a.length?Math.round(a.reduce((x,y)=>x+y,0)/a.length):null;
+const cid=s=>s.replace(/[^A-Za-z0-9]/g,'_');
+
+function pic(name,role){const r=ROLES[role]||{bg:'#1c1f2e',fg:S.sub};return`<span class="pic" style="background:${r.bg};color:${r.fg}">${name.slice(0,2).toUpperCase()}</span>`}
+
+async function loadAll(){
+  document.getElementById('loading').style.display='block';
+  document.querySelectorAll('.tab-pane').forEach(t=>t.style.display='none');
+
+  const[{data:chars},{data:pls}]=await Promise.all([
+    sb.from('characters').select('*'),
+    sb.from('players').select('*')
+  ]);
+  S.characters=chars||[];S.players=pls||[];
+  S.charMap={};S.characters.forEach(c=>S.charMap[c.id]=c);
+  S.playerMap={};S.players.forEach(p=>S.playerMap[p.id]=p);
+
+  let encQ=sb.from('encounters').select('*');
+  if(S.tour!==ALL)encQ=encQ.eq('tournament_id',S.tour);
+  const{data:encs}=await encQ;
+  S.encounters=encs||[];
+  const encIds=S.encounters.map(e=>e.id);
+  S.matchMap={};S.encMap={};
+  S.encounters.forEach(e=>S.encMap[e.id]=e);
+
+  if(encIds.length){
+    const{data:ms}=await sb.from('matches').select('*').in('encounter_id',encIds);
+    S.matches=ms||[];S.matches.forEach(m=>S.matchMap[m.id]=m);
+    const mIds=S.matches.map(m=>m.id);
+    if(mIds.length){
+      const[{data:pks},{data:bns}]=await Promise.all([
+        sb.from('match_picks').select('*').in('match_id',mIds),
+        sb.from('match_bans').select('*').in('match_id',mIds)
+      ]);
+      S.picks=pks||[];S.bans=bns||[];
+    }else{S.picks=[];S.bans=[];}
+  }else{S.matches=[];S.picks=[];S.bans=[];}
+
+  S.costs={};S.rosters={};S.prizes={};
+  if(S.tour!==ALL){
+    const[{data:cs},{data:rs},{data:pr}]=await Promise.all([
+      sb.from('tournament_costs').select('*').eq('tournament_id',S.tour),
+      sb.from('player_rosters').select('*').eq('tournament_id',S.tour),
+      sb.from('player_prizes').select('*').eq('tournament_id',S.tour)
+    ]);
+    (cs||[]).forEach(c=>{if(!S.costs[c.character_id])S.costs[c.character_id]={};S.costs[c.character_id][c.mindscape]=c;});
+    (rs||[]).forEach(r=>{if(!S.rosters[r.player_id])S.rosters[r.player_id]=[];S.rosters[r.player_id].push(r);});
+    (pr||[]).forEach(p=>S.prizes[p.player_id]=p.amount);
+  }
+
+  document.getElementById('loading').style.display='none';
+  renderAll();
+}
+
+function computeChars(){
+  const T=S.matches.length;
+  const statMap={};
+  const banCount={};
+
+  S.picks.forEach(pk=>{
+    const m=S.matchMap[pk.match_id];if(!m)return;
+    const key=pk.character_id+'_'+pk.mindscape;
+    if(!statMap[key])statMap[key]={cid:pk.character_id,ms:pk.mindscape,pk:0,pw:0,pd:0,fp:0,fw:0,fd:0,dp:0,dw:0,dd:0,sp:0,sw:0,sd:0};
+    const s=statMap[key];
+    s.pk++;
+    const isW=m.winner_id===pk.player_id,isD=m.is_draw;
+    if(isW)s.pw++;else if(isD)s.pd++;
+    if(pk.is_fp){s.fp++;if(isW)s.fw++;else if(isD)s.fd++;}
+    if(pk.is_double){s.dp++;if(isW)s.dw++;else if(isD)s.dd++;}
+    if(pk.has_signature){s.sp++;if(isW)s.sw++;else if(isD)s.sd++;}
+  });
+  S.bans.forEach(b=>{banCount[b.character_id]=(banCount[b.character_id]||0)+1;});
+
+  const rosterCount={};
+  Object.values(S.rosters).forEach(arr=>arr.forEach(r=>{const k=r.character_id+'_'+r.mindscape;rosterCount[k]=(rosterCount[k]||0)+1;}));
+  const totalPlayers=Object.keys(S.rosters).length||1;
+
+  // Group by character
+  const groups={};
+  S.characters.forEach(c=>groups[c.id]={char:c,variants:[]});
+
+  Object.values(statMap).forEach(s=>{
+    if(!groups[s.cid])return;
+    const bn=banCount[s.cid]||0;
+    const cost=S.costs[s.cid]?.[s.ms];
+    const rs=rosterCount[s.cid+'_'+s.ms]||0;
+    groups[s.cid].variants.push({
+      ms:s.ms,cost:cost?.cost??'—',sc:cost?.sig_cost??'—',
+      pk:s.pk,pw:s.pw,pd:s.pd,pl:s.pk-s.pw-s.pd,pwr:wr(s.pw,s.pd,s.pk),ppt:pctT(s.pk,T),
+      fp:s.fp,fw:s.fw,fd:s.fd,fl:s.fp-s.fw-s.fd,fwr:wr(s.fw,s.fd,s.fp),
+      dp:s.dp,dw:s.dw,dd:s.dd,dl:s.dp-s.dw-s.dd,dwr:wr(s.dw,s.dd,s.dp),
+      bn,bpt:pctT(bn,T),pbn:s.pk+bn,pbpt:pctT(s.pk+bn,T),
+      rs,rspt:pctT(rs,totalPlayers),
+      sp:s.sp,sw:s.sw,sd:s.sd,sl:s.sp-s.sw-s.sd,swr:wr(s.sw,s.sd,s.sp),spt:pctT(s.sp,T)
+    });
+  });
+
+  const result=[];
+  Object.values(groups).forEach(g=>{
+    if(!g.variants.length)return;
+    g.variants.sort((a,b)=>a.ms-b.ms);
+    const sum={pk:0,pw:0,pd:0,fp:0,fw:0,fd:0,dp:0,dw:0,dd:0,bn:0,rs:0,sp:0,sw:0,sd:0};
+    g.variants.forEach(v=>Object.keys(sum).forEach(k=>sum[k]+=typeof v[k]==='number'?v[k]:0));
+    const T2=S.matches.length,totalP=Object.keys(S.rosters).length||1;
+    const agg={...sum,
+      pl:sum.pk-sum.pw-sum.pd,fl:sum.fp-sum.fw-sum.fd,dl:sum.dp-sum.dw-sum.dd,sl:sum.sp-sum.sw-sum.sd,
+      pwr:wr(sum.pw,sum.pd,sum.pk),fwr:wr(sum.fw,sum.fd,sum.fp),dwr:wr(sum.dw,sum.dd,sum.dp),swr:wr(sum.sw,sum.sd,sum.sp),
+      ppt:pctT(sum.pk,T2),bpt:pctT(sum.bn,T2),pbn:sum.pk+sum.bn,pbpt:pctT(sum.pk+sum.bn,T2),
+      rspt:pctT(sum.rs,totalP),spt:pctT(sum.sp,T2)
+    };
+    const costs=[...new Set(g.variants.map(v=>v.cost).filter(c=>c!=='—'))].sort((a,b)=>a-b);
+    const scs=[...new Set(g.variants.map(v=>v.sc).filter(c=>c!=='—'))].sort((a,b)=>a-b);
+    agg.cost=costs.length===0?'—':costs.length===1?costs[0]:`${costs[0]}–${costs[costs.length-1]}`;
+    agg.sc=scs.length===0?'—':scs.length===1?scs[0]:`${scs[0]}–${scs[scs.length-1]}`;
+    result.push({char:g.char,agg,variants:g.variants});
+  });
+  return result;
+}
+
+function cellsHTML(d,isAll){
+  const c=v=>`<td class="${wc(v)}">${f1(v)}</td>`;
+  const co=isAll?'':`<td>${d.cost}</td>`;
+  const sco=isAll?'':`<td>${d.sc}</td>`;
+  return `${co}<td>${d.pk}</td><td>${d.pw}</td><td class="m">${d.pd}</td><td>${d.pl}</td>${c(d.pwr)}<td>${f1(d.ppt)}</td>`+
+    `<td>${d.fp}</td><td>${d.fw}</td><td class="m">${d.fd}</td><td>${d.fl}</td>${c(d.fwr)}`+
+    `<td>${d.dp}</td><td>${d.dw}</td><td class="m">${d.dd}</td><td>${d.dl}</td>${c(d.dwr)}`+
+    `<td>${d.bn}</td><td>${f1(d.bpt)}</td><td>${d.pbn}</td><td>${f1(d.pbpt)}</td><td>${d.rs}</td><td>${f1(d.rspt)}</td>`+
+    `${sco}<td>${d.sp}</td><td>${d.sw}</td><td class="m">${d.sd}</td><td>${d.sl}</td>${c(d.swr)}<td>${f1(d.spt)}</td>`;
+}
+
+function renderChars(data){
+  const isAll=S.tour===ALL;
+  const sig=isAll?6:7;
+  const co=isAll?'':'<th rowspan="2" class="nc" onclick="sortC(\'cost\')">Кост</th>';
+  const sco=isAll?'':`<th onclick="sortC('sc')">Кост</th>`;
+  document.getElementById('chars-head').innerHTML=`<tr>
+    <th rowspan="2" class="nc" onclick="sortC('name')">Персонаж</th>${co}
+    <th colspan="6" class="th-g">Пики</th><th colspan="5" class="th-g">Фп</th><th colspan="5" class="th-g">Дабл</th>
+    <th colspan="2" class="th-g">Баны</th><th colspan="2" class="th-g">Пики+баны</th><th colspan="2" class="th-g">В ростере</th>
+    <th colspan="${sig}" class="th-g" id="sg">Со своей сигной</th>
+  </tr><tr>
+    <th onclick="sortC('pk')">Σ</th><th onclick="sortC('pw')">W</th><th>D</th><th onclick="sortC('pl')">L</th><th onclick="sortC('pwr')">WR%</th><th onclick="sortC('ppt')">%T</th>
+    <th onclick="sortC('fp')">Σ</th><th onclick="sortC('fw')">W</th><th>D</th><th onclick="sortC('fl')">L</th><th onclick="sortC('fwr')">WR%</th>
+    <th onclick="sortC('dp')">Σ</th><th onclick="sortC('dw')">W</th><th>D</th><th onclick="sortC('dl')">L</th><th onclick="sortC('dwr')">WR%</th>
+    <th onclick="sortC('bn')">Σ</th><th onclick="sortC('bpt')">%T</th><th onclick="sortC('pbn')">Σ</th><th onclick="sortC('pbpt')">%T</th><th onclick="sortC('rs')">Σ</th><th onclick="sortC('rspt')">%T</th>
+    ${sco}<th onclick="sortC('sp')">Σ</th><th onclick="sortC('sw')">W</th><th>D</th><th onclick="sortC('sl')">L</th><th onclick="sortC('swr')">WR%</th><th onclick="sortC('spt')">%T</th>
+  </tr>`;
+
+  if(!data.length){document.getElementById('chars-body').innerHTML=`<tr><td class="empty" colspan="30">Нет данных для этого турнира</td></tr>`;return;}
+
+  const k=S.cSort.k,asc=S.cSort.asc;
+  data.sort((a,b)=>{
+    let va=k==='name'?a.char.name:(typeof a.agg[k]==='number'?a.agg[k]:parseFloat(a.agg[k])||0);
+    let vb=k==='name'?b.char.name:(typeof b.agg[k]==='number'?b.agg[k]:parseFloat(b.agg[k])||0);
+    return typeof va==='string'?(asc?va.localeCompare(vb):vb.localeCompare(va)):(asc?va-vb:vb-va);
+  });
+
+  let h='';
+  data.forEach(item=>{
+    const c=item.char,isS=c.rarity==='S',id=cid(c.name);
+    const nm=isS
+      ?`<div style="display:flex;align-items:center;gap:6px;cursor:pointer" onclick="toggleV('${id}')">`+
+        `<span class="chev" id="chev-${id}">▶</span>${pic(c.name,c.role)}<span>${c.name}</span><span class="badge-s">S</span></div>`
+      :`<div style="display:flex;align-items:center;gap:6px">${pic(c.name,c.role)}<span>${c.name}</span><span class="badge-a">A</span></div>`;
+    h+=`<tr><td class="nc">${nm}</td>${cellsHTML(item.agg,isAll)}</tr>`;
+    if(isS)item.variants.forEach(v=>{
+      h+=`<tr class="vrow" data-parent="${id}" style="display:none"><td class="nc"><span class="ms-tag">M${v.ms}</span> ${c.name}</td>${cellsHTML(v,isAll)}</tr>`;
+    });
+  });
+  document.getElementById('chars-body').innerHTML=h;
+}
+
+function toggleV(id){
+  document.querySelectorAll(`[data-parent="${id}"]`).forEach(r=>{r.style.display=r.style.display==='none'?'table-row':'none';});
+  const ch=document.getElementById('chev-'+id);if(ch)ch.textContent=ch.textContent==='▶'?'▼':'▶';
+  const o=document.getElementById('chev-'+id)?.classList;if(o)o.toggle('open');
+}
+function sortC(k){S.cSort.asc=S.cSort.k===k?!S.cSort.asc:false;S.cSort.k=k;renderAll();}
+
+function computePlayers(){
+  const mStats={},vStats={};
+  S.matches.forEach(m=>{
+    const enc=S.encMap[m.encounter_id];if(!enc)return;
+    [[enc.player1_id,m.player1_timer_sec,m.player1_restarts],[enc.player2_id,m.player2_timer_sec,m.player2_restarts]].forEach(([pid,timer,rests])=>{
+      if(!mStats[pid])mStats[pid]={m:0,w:0,d:0,l:0,fpm:0,fpw:0,fpd:0,dm:0,dw2:0,dd:0,rests:0,wtimers:[],ltimers:[]};
+      const s=mStats[pid];s.m++;
+      if(m.is_draw)s.d++;else if(m.winner_id===pid)s.w++;else s.l++;
+      s.rests+=rests||0;
+      const won=m.winner_id===pid;
+      if(timer){if(won)s.wtimers.push(timer);else if(!m.is_draw)s.ltimers.push(timer);}
+      if(m.fp_player_id===pid){s.fpm++;if(m.is_draw)s.fpd++;else if(won)s.fpw++;}
+      else{s.dm++;if(m.is_draw)s.dd++;else if(won)s.dw2++;}
+    });
+  });
+  S.encounters.forEach(enc=>{
+    [enc.player1_id,enc.player2_id].forEach(pid=>{
+      if(!vStats[pid])vStats[pid]={v:0,w:0,l:0,timers:[]};
+      const s=vStats[pid];s.v++;
+      if(enc.winner_id===pid)s.w++;else s.l++;
+      const ms=S.matches.filter(m=>m.encounter_id===enc.id);
+      let tot=0;
+      ms.forEach(m=>{const t=enc.player1_id===pid?m.player1_timer_sec:m.player2_timer_sec;if(t)tot+=t;});
+      if(tot)s.timers.push(tot);
+    });
+  });
+  return{mStats,vStats};
+}
+
+function rosterCols(pid){
+  const r=S.rosters[pid]||[];
+  if(!r.length)return'<td>—</td>'.repeat(5);
+  let atk=0,stun=0,rupt=0,sup=0,ano=0;
+  r.forEach(x=>{const c=S.charMap[x.character_id];if(!c)return;
+    if(c.role==='atk')atk++;else if(c.role==='stun')stun++;else if(c.role==='rupt')rupt++;else if(c.role==='sup')sup++;else if(c.role==='ano')ano++;
+  });
+  return`<td>${atk}</td><td>${stun}</td><td>${rupt}</td><td>${sup}</td><td>${ano}</td>`;
+}
+
+function renderPV(vStats,isAll){
+  const rcols=isAll?'':'<th>Атак</th><th>Стан</th><th>Разр</th><th>Сап</th><th>Аном</th>';
+  const head=`<thead><tr><th class="nc">Ник</th><th onclick="sortP(1)">Σ встреч</th><th onclick="sortP(2)">W</th><th onclick="sortP(3)">L</th><th onclick="sortP(4)">WR%</th><th onclick="sortP(5)">AVG таймер</th><th onclick="sortP(6)">Возраст</th><th onclick="sortP(7)">Призовые</th>${rcols}</tr></thead>`;
+  const activePl=S.players.filter(p=>vStats[p.id]);
+  if(!activePl.length){document.getElementById('players-area').innerHTML=`<table><tbody><tr><td class="empty" colspan="8">Нет данных</td></tr></tbody></table>`;return;}
+  const rows=activePl.map(p=>{
+    const s=vStats[p.id]||{v:0,w:0,l:0,timers:[]};
+    const wrPct=wr(s.w,0,s.v);
+    const avgT=fSec(avg(s.timers));
+    const pr=S.prizes[p.id];
+    return`<tr><td class="nc"><div style="display:flex;align-items:center;gap:6px">${pic(p.nickname,'')}<span>${p.nickname}</span></div></td><td>${s.v}</td><td>${s.w}</td><td>${s.l}</td><td class="${wc(wrPct)}">${f1(wrPct)}</td><td>${avgT}</td><td>${p.age??'—'}</td><td>${pr!=null?pr+'$':'—'}</td>${isAll?'':rosterCols(p.id)}</tr>`;
+  });
+  document.getElementById('players-area').innerHTML=`<table>${head}<tbody>${rows.join('')}</tbody></table>`;
+}
+
+function renderPM(mStats,isAll){
+  const rcols=isAll?'':'<th>Атак</th><th>Стан</th><th>Разр</th><th>Сап</th><th>Аном</th>';
+  const head=`<thead><tr><th class="nc">Ник</th><th onclick="sortP(1)">Σ матч</th><th onclick="sortP(2)">W</th><th>D</th><th onclick="sortP(4)">L</th><th onclick="sortP(5)">WR%</th><th onclick="sortP(6)">WR фп%</th><th onclick="sortP(7)">WR дабл%</th><th onclick="sortP(8)">Σ рест</th><th onclick="sortP(9)">AVG рест</th><th onclick="sortP(10)">AVG таймер</th><th onclick="sortP(11)">Возраст</th><th onclick="sortP(12)">Призовые</th>${rcols}</tr></thead>`;
+  const activePl=S.players.filter(p=>mStats[p.id]);
+  if(!activePl.length){document.getElementById('players-area').innerHTML=`<table><tbody><tr><td class="empty" colspan="13">Нет данных</td></tr></tbody></table>`;return;}
+  const rows=activePl.map(p=>{
+    const s=mStats[p.id]||{m:0,w:0,d:0,l:0,fpm:0,fpw:0,fpd:0,dm:0,dw2:0,dd:0,rests:0,wtimers:[],ltimers:[]};
+    const wrPct=wr(s.w,s.d,s.m),wrfp=wr(s.fpw,s.fpd,s.fpm),wrdbl=wr(s.dw2,s.dd,s.dm);
+    const allT=[...s.wtimers,...s.ltimers];
+    const pr=S.prizes[p.id];
+    return`<tr><td class="nc"><div style="display:flex;align-items:center;gap:6px">${pic(p.nickname,'')}<span>${p.nickname}</span></div></td><td>${s.m}</td><td>${s.w}</td><td class="m">${s.d}</td><td>${s.l}</td><td class="${wc(wrPct)}">${f1(wrPct)}</td><td class="${wc(wrfp)}">${f1(wrfp)}</td><td class="${wc(wrdbl)}">${f1(wrdbl)}</td><td>${s.rests}</td><td>${s.m?(s.rests/s.m).toFixed(2):'—'}</td><td>${fSec(avg(allT))}</td><td>${p.age??'—'}</td><td>${pr!=null?pr+'$':'—'}</td>${isAll?'':rosterCols(p.id)}</tr>`;
+  });
+  document.getElementById('players-area').innerHTML=`<table>${head}<tbody>${rows.join('')}</tbody></table>`;
+}
+
+function setView(v){
+  S.view=v;
+  document.getElementById('seg-v').className='seg-btn'+(v==='v'?' on':'');
+  document.getElementById('seg-m').className='seg-btn'+(v==='m'?' on':'');
+  const{mStats,vStats}=computePlayers();
+  const isAll=S.tour===ALL;
+  if(v==='v')renderPV(vStats,isAll);else renderPM(mStats,isAll);
+}
+
+function sortP(idx){/* basic sort - reload with sorted data */}
+
+function computeExt(){
+  if(!S.matches.length)return null;
+  let tot=0,fpW=0,fpD=0,dblW=0,dblD=0,wT=[],lT=[],rests=0,wR=0,lR=0,wN=0,lN=0;
+  S.matches.forEach(m=>{
+    tot++;const enc=S.encMap[m.encounter_id];if(!enc)return;
+    if(m.is_draw){fpD++;dblD++;}
+    else if(m.winner_id===m.fp_player_id)fpW++;
+    else dblW++;
+    const p1isWin=m.winner_id===enc.player1_id;
+    const wTimer=p1isWin?m.player1_timer_sec:m.player2_timer_sec;
+    const lTimer=p1isWin?m.player2_timer_sec:m.player1_timer_sec;
+    const wRst=(p1isWin?m.player1_restarts:m.player2_restarts)||0;
+    const lRst=(p1isWin?m.player2_restarts:m.player1_restarts)||0;
+    rests+=(m.player1_restarts||0)+(m.player2_restarts||0);
+    if(!m.is_draw){if(wTimer){wT.push(wTimer);wR+=wRst;wN++;}if(lTimer){lT.push(lTimer);lR+=lRst;lN++;}}
+  });
+  return{tot,fpW,fpWR:wr(fpW,fpD,tot),dblW,dblWR:wr(dblW,dblD,tot),
+    avgT:fSec(avg([...wT,...lT])),avgTW:fSec(avg(wT)),avgTL:fSec(avg(lT)),
+    rests,avgR:tot?(rests/tot).toFixed(2):'—',avgRW:wN?(wR/wN).toFixed(2):'—',avgRL:lN?(lR/lN).toFixed(2):'—'};
+}
+
+function renderExt(d){
+  if(!d){document.getElementById('ext-body').innerHTML=`<tr><td class="empty" colspan="12">Нет данных</td></tr>`;return;}
+  document.getElementById('ext-body').innerHTML=`<tr>
+    <td class="hl-cell">${d.tot}</td><td>${d.fpW}</td><td class="${wc(d.fpWR)}">${f1(d.fpWR)}</td><td>${d.dblW}</td><td class="${wc(d.dblWR)}">${f1(d.dblWR)}</td>
+    <td>${d.avgT}</td><td>${d.avgTW}</td><td>${d.avgTL}</td>
+    <td>${d.rests}</td><td>${d.avgR}</td><td>${d.avgRW}</td><td>${d.avgRL}</td>
+  </tr>`;
+}
+
+function renderAll(){
+  const isAll=S.tour===ALL;
+  const cd=computeChars();renderChars(cd);
+  const{mStats,vStats}=computePlayers();
+  if(S.view==='v')renderPV(vStats,isAll);else renderPM(mStats,isAll);
+  renderExt(computeExt());
+  const active=document.querySelector('.tab-btn.active')?.dataset.tab||'chars';
+  document.querySelectorAll('.tab-pane').forEach(t=>t.style.display='none');
+  const el=document.getElementById('tab-'+active);if(el)el.style.display='block';
+}
+
+// Init
+async function init(){
+  const{data:tours}=await sb.from('tournaments').select('*').order('created_at',{ascending:false});
+  const sel=document.getElementById('tour-sel');
+  sel.innerHTML=`<option value="${ALL}">Все турниры</option>`+(tours||[]).map(t=>`<option value="${t.id}">${t.name}</option>`).join('');
+  if(tours&&tours.length){sel.value=tours[0].id;S.tour=tours[0].id;}
+  sel.onchange=()=>{S.tour=sel.value;loadAll();};
+  loadAll();
+}
+
+document.querySelectorAll('.tab-btn').forEach(btn=>{
+  btn.onclick=()=>{
+    document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    document.querySelectorAll('.tab-pane').forEach(t=>t.style.display='none');
+    const el=document.getElementById('tab-'+btn.dataset.tab);if(el)el.style.display='block';
+  };
+});
+
+init();
+</script>
+</body>
+</html>

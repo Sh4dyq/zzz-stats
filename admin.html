@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ZZZ Stats — Управление</title>
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  :root{--bg:#08090d;--card:#0f1118;--border:#1c1f2e;--accent:#f5c842;--text:#e8eaf0;--sub:#7b7f96}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font-family:'Rajdhani',sans-serif;min-height:100vh;display:flex}
+  input[type=text],input[type=email],input[type=password],input[type=number],select,textarea{
+    background:#0d0f18;border:1px solid var(--border);color:var(--text);border-radius:6px;
+    padding:8px 12px;font-family:'Rajdhani',sans-serif;font-size:14px;width:100%;outline:none;
+  }
+  input:focus,select:focus{border-color:#3b4260;}
+  label{font-size:12px;color:var(--sub);display:block;margin-bottom:4px;letter-spacing:.04em}
+  .btn{border:none;border-radius:6px;padding:8px 18px;font-family:'Rajdhani',sans-serif;font-size:14px;font-weight:600;cursor:pointer;letter-spacing:.04em;transition:.15s}
+  .btn-y{background:var(--accent);color:#000}.btn-y:hover{background:#ffd235}
+  .btn-g{background:#1c1f2e;color:var(--text);border:1px solid var(--border)}.btn-g:hover{background:#252840}
+  .btn-r{background:none;color:#f87171;border:1px solid #4b1c1c;border-radius:4px;padding:4px 8px;font-size:12px;cursor:pointer}.btn-r:hover{background:#4b1c1c}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:20px}
+  .nav-a{display:block;padding:8px 12px;border-radius:6px;font-size:14px;color:var(--sub);text-decoration:none;cursor:pointer;font-weight:500;letter-spacing:.03em}
+  .nav-a:hover,.nav-a.on{background:#1c1f2e;color:var(--text)}
+  .row-item{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:12px 16px;display:flex;align-items:center;justify-content:space-between}
+  .badge-s{font-size:10px;font-weight:700;padding:1px 6px;border-radius:3px;background:#451a03;color:#fbbf24}
+  .badge-a{font-size:10px;font-weight:700;padding:1px 6px;border-radius:3px;background:#1c1f2e;color:var(--sub)}
+  .pick-row,.ban-row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;background:#0d0f18;border:1px solid var(--border);border-radius:6px;padding:8px 10px}
+  .pick-row select,.ban-row select{flex:1;min-width:140px}
+  .sm-sel{min-width:auto!important;width:auto!important;flex:none!important}
+  .cb-label{display:flex;align-items:center;gap:5px;font-size:12px;color:var(--sub);cursor:pointer;white-space:nowrap}
+  input[type=checkbox]{width:auto;accent-color:var(--accent)}
+  .spinner{width:18px;height:18px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;display:inline-block}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .alert{padding:10px 14px;border-radius:6px;font-size:13px;margin-bottom:12px}
+  .alert-ok{background:#052e16;color:#4ade80;border:1px solid #14532d}
+  .alert-err{background:#2b0a0a;color:#f87171;border:1px solid #7f1d1d}
+  h3{font-size:16px;font-weight:600;color:var(--text);margin-bottom:14px;letter-spacing:.04em}
+  h4{font-size:14px;font-weight:600;color:var(--text);margin:16px 0 10px;letter-spacing:.03em}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+  .space-y>*+*{margin-top:8px}
+</style>
+</head>
+<body>
+
+<!-- Sidebar -->
+<aside id="sidebar" style="display:none;width:200px;background:#0b0d14;border-right:1px solid var(--border);flex-direction:column;min-height:100vh">
+  <div style="padding:16px;border-bottom:1px solid var(--border)">
+    <div style="font-size:16px;font-weight:700;color:var(--accent);letter-spacing:.06em">ZZZ STATS</div>
+    <div style="font-size:11px;color:var(--sub);margin-top:2px" id="user-email"></div>
+  </div>
+  <nav style="padding:8px;flex:1">
+    <a class="nav-a" data-page="dashboard">📊 Дашборд</a>
+    <a class="nav-a" data-page="tournaments">🏆 Турниры</a>
+    <a class="nav-a" data-page="characters">🎮 Персонажи</a>
+    <a class="nav-a" data-page="signatures">⚙️ Амплификаторы</a>
+    <a class="nav-a" data-page="players">👤 Игроки</a>
+    <a class="nav-a" data-page="matches">⚔️ Матчи</a>
+  </nav>
+  <div style="padding:12px;border-top:1px solid var(--border)">
+    <button class="btn btn-g" style="width:100%;font-size:12px;padding:6px" onclick="signOut()">Выйти</button>
+    <a href="index.html" style="display:block;text-align:center;font-size:11px;color:var(--sub);text-decoration:none;margin-top:8px">← На сайт</a>
+  </div>
+</aside>
+
+<!-- Main -->
+<div style="flex:1;display:flex;flex-direction:column;overflow:hidden">
+
+  <!-- Login -->
+  <div id="login-screen" style="flex:1;display:flex;align-items:center;justify-content:center">
+    <div class="card" style="width:340px">
+      <div style="font-size:22px;font-weight:700;color:var(--accent);margin-bottom:20px;letter-spacing:.06em">ZZZ STATS</div>
+      <div id="auth-msg"></div>
+      <div style="margin-bottom:12px"><label>Email</label><input id="a-email" type="email" placeholder="your@email.com"></div>
+      <div style="margin-bottom:16px"><label>Пароль</label><input id="a-pass" type="password"></div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-y" style="flex:1" onclick="signIn()">Войти</button>
+        <button class="btn btn-g" style="flex:1" onclick="signUp()">Регистрация</button>
+      </div>
+      <p style="font-size:11px;color:var(--sub);margin-top:12px;text-align:center">После регистрации отключи публичные регистрации в Supabase → Authentication → Providers</p>
+    </div>
+  </div>
+
+  <!-- Admin area -->
+  <div id="admin-area" style="display:none;flex:1;overflow:auto;flex-direction:column">
+    <div style="border-bottom:1px solid var(--border);padding:12px 24px">
+      <span id="page-title" style="font-size:16px;font-weight:600;letter-spacing:.04em">Дашборд</span>
+    </div>
+    <div id="page-content" style="padding:24px;max-width:900px"></div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+const SB_URL='https://zoavnckfbfiejxfjakue.supabase.co';
+const SB_KEY='sb_publishable_37RZBsmdp3O1i795EuEfeg_vFpdPTFZ';
+const sb=supabase.createClient(SB_URL,SB_KEY);
+
+let D={tours:[],chars:[],players:[],sigs:[]};
+
+// --- AUTH ---
+async function signIn(){
+  const{error}=await sb.auth.signInWithPassword({email:v('a-email'),password:v('a-pass')});
+  if(error)authMsg(error.message,'err');
+}
+async function signUp(){
+  const{error}=await sb.auth.signUp({email:v('a-email'),password:v('a-pass')});
+  if(error)authMsg(error.message,'err');
+  else authMsg('Проверь почту для подтверждения!','ok');
+}
+async function signOut(){await sb.auth.signOut();location.reload();}
+function authMsg(t,type){const el=document.getElementById('auth-msg');el.className='alert alert-'+(type==='err'?'err':'ok');el.textContent=t;}
+
+sb.auth.onAuthStateChange((_,session)=>{
+  if(session){
+    document.getElementById('login-screen').style.display='none';
+    document.getElementById('admin-area').style.display='flex';
+    document.getElementById('sidebar').style.display='flex';
+    document.getElementById('user-email').textContent=session.user.email;
+    go('dashboard');
+  }else{
+    document.getElementById('login-screen').style.display='flex';
+    document.getElementById('admin-area').style.display='none';
+    document.getElementById('sidebar').style.display='none';
+  }
+});
+
+// --- NAV ---
+document.querySelectorAll('.nav-a[data-page]').forEach(a=>{
+  a.onclick=()=>{document.querySelectorAll('.nav-a').forEach(x=>x.classList.remove('on'));a.classList.add('on');go(a.dataset.page);};
+});
+
+async function go(page){
+  document.getElementById('page-title').textContent={dashboard:'Дашборд',tournaments:'Турниры',characters:'Персонажи',signatures:'Амплификаторы',players:'Игроки',matches:'Матчи'}[page]||page;
+  await refreshData();
+  const fn={dashboard:pgDashboard,tournaments:pgTournaments,characters:pgCharacters,signatures:pgSignatures,players:pgPlayers,matches:pgMatches}[page];
+  if(fn)await fn();
+}
+
+async function refreshData(){
+  const[{data:t},{data:c},{data:p},{data:s}]=await Promise.all([
+    sb.from('tournaments').select('*').order('created_at',{ascending:false}),
+    sb.from('characters').select('*').order('name'),
+    sb.from('players').select('*').order('nickname'),
+    sb.from('signatures').select('*').order('name'),
+  ]);
+  D.tours=t||[];D.chars=c||[];D.players=p||[];D.sigs=s||[];
+}
+
+// --- UTILS ---
+const v=id=>document.getElementById(id)?.value?.trim()||'';
+const vn=id=>+document.getElementById(id)?.value||null;
+const html=s=>document.getElementById('page-content').innerHTML=s;
+function toast(msg,type='ok'){
+  const el=document.createElement('div');
+  el.className='alert alert-'+(type==='err'?'err':'ok');el.textContent=msg;
+  el.style.cssText='position:fixed;bottom:20px;right:20px;z-index:999;min-width:220px';
+  document.body.appendChild(el);setTimeout(()=>el.remove(),3000);
+}
+function sel(id,arr,valF,labelF,blank=''){
+  return`<select id="${id}"><option value="">${blank||'— выбери —'}</option>${arr.map(x=>`<option value="${valF(x)}">${labelF(x)}</option>`).join('')}</select>`;
+}
+const msOpts=Array.from({length:7},(_,i)=>`<option value="${i}">M${i}</option>`).join('');
+
+// --- DASHBOARD ---
+function pgDashboard(){
+  html(`<div class="grid3" style="margin-bottom:20px">
+    <div class="card"><div style="font-size:12px;color:var(--sub)">Турниры</div><div style="font-size:28px;font-weight:700;color:var(--accent);margin-top:4px">${D.tours.length}</div></div>
+    <div class="card"><div style="font-size:12px;color:var(--sub)">Персонажи</div><div style="font-size:28px;font-weight:700;color:var(--accent);margin-top:4px">${D.chars.length}</div></div>
+    <div class="card"><div style="font-size:12px;color:var(--sub)">Игроки</div><div style="font-size:28px;font-weight:700;color:var(--accent);margin-top:4px">${D.players.length}</div></div>
+  </div>
+  <p style="color:var(--sub);font-size:14px">Используй меню слева. Порядок заполнения: Персонажи → Амплификаторы → Игроки → Турниры (+ косты + ростеры) → Матчи.</p>`);
+}
+
+// --- TOURNAMENTS ---
+async function pgTournaments(){
+  const list=D.tours.map(t=>`<div class="row-item"><div>
+    <div style="font-weight:600">${t.name}</div>
+    <div style="font-size:12px;color:var(--sub)">${new Date(t.created_at).toLocaleDateString('ru')}</div>
+  </div><div style="display:flex;gap:8px">
+    <button class="btn btn-g" style="font-size:12px;padding:5px 12px" onclick="openCosts('${t.id}','${t.name.replace(/'/g,"\\'")}')">Косты</button>
+    <button class="btn-r" onclick="delTour('${t.id}')">✕</button>
+  </div></div>`).join('');
+  html(`<div class="card" style="margin-bottom:16px">
+    <h3>Новый турнир</h3>
+    <div class="grid2"><div><label>Название</label><input id="t-name" type="text" placeholder="Shiyu Cup 05"></div></div>
+    <button class="btn btn-y" style="margin-top:12px" onclick="addTour()">Добавить</button>
+  </div>
+  <div class="space-y">${list||'<p style="color:var(--sub);font-size:14px">Турниров ещё нет</p>'}</div>`);
+}
+async function addTour(){const n=v('t-name');if(!n)return;await sb.from('tournaments').insert({name:n});toast('Турнир добавлен');pgTournaments();}
+async function delTour(id){if(!confirm('Удалить турнир?'))return;await sb.from('tournaments').delete().eq('id',id);pgTournaments();}
+
+async function openCosts(tourId,tourName){
+  document.getElementById('page-title').textContent=`Косты — ${tourName}`;
+  const{data:existing}=await sb.from('tournament_costs').select('*').eq('tournament_id',tourId);
+  const costMap={};(existing||[]).forEach(c=>{costMap[`${c.character_id}_${c.mindscape}`]=c;});
+  const charSigMap={};D.sigs.forEach(s=>{if(!charSigMap[s.character_id])charSigMap[s.character_id]=[];charSigMap[s.character_id].push(s);});
+  const rows=D.chars.map(c=>{
+    const sOpts=(charSigMap[c.id]||[]).map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
+    return[0,1,2,3,4,5,6].map(ms=>{
+      const ex=costMap[`${c.id}_${ms}`]||{};
+      return`<tr style="border-top:1px solid var(--border)">
+        <td style="padding:6px 10px;font-weight:500">${c.name}</td>
+        <td style="padding:6px 10px;color:var(--sub)">M${ms}</td>
+        <td style="padding:6px 10px"><input class="ci" data-c="${c.id}" data-m="${ms}" data-f="cost" type="number" min="0" placeholder="—" value="${ex.cost??''}" style="width:70px;padding:4px 8px;font-size:13px"></td>
+        <td style="padding:6px 10px"><input class="ci" data-c="${c.id}" data-m="${ms}" data-f="sig_cost" type="number" min="0" placeholder="—" value="${ex.sig_cost??''}" style="width:70px;padding:4px 8px;font-size:13px"></td>
+        <td style="padding:6px 10px"><select class="ci" data-c="${c.id}" data-m="${ms}" data-f="sig" style="width:auto;font-size:13px;padding:4px 8px"><option value="">—</option>${sOpts.replace(`value="${ex.sig_id||''}"`,`value="${ex.sig_id||''}" selected`)}</select></td>
+        <td style="padding:6px 10px;text-align:center"><input type="checkbox" class="ci" data-c="${c.id}" data-m="${ms}" data-f="allowed" ${ex.is_allowed!==false?'checked':''}></td>
+      </tr>`;
+    }).join('');
+  }).join('');
+  html(`<button class="btn btn-g" style="margin-bottom:16px" onclick="go('tournaments')">← Назад</button>
+  <div class="card" style="overflow-x:auto;padding:0">
+    <table style="width:100%;border-collapse:collapse;font-size:13px">
+      <thead><tr style="background:#0b0d14">
+        <th style="padding:8px 10px;text-align:left;color:var(--sub)">Персонаж</th>
+        <th style="padding:8px 10px;color:var(--sub)">М</th>
+        <th style="padding:8px 10px;color:var(--sub)">Кост</th>
+        <th style="padding:8px 10px;color:var(--sub)">Кост сигны</th>
+        <th style="padding:8px 10px;color:var(--sub)">Сигна</th>
+        <th style="padding:8px 10px;color:var(--sub)">Разрешён</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+  </div>
+  <button class="btn btn-y" style="margin-top:16px" onclick="saveCosts('${tourId}')">Сохранить все косты</button>`);
+}
+
+async function saveCosts(tourId){
+  const groups={};
+  document.querySelectorAll('.ci').forEach(el=>{
+    const k=`${el.dataset.c}_${el.dataset.m}`;
+    if(!groups[k])groups[k]={tournament_id:tourId,character_id:el.dataset.c,mindscape:+el.dataset.m};
+    if(el.dataset.f==='cost')groups[k].cost=el.value?+el.value:null;
+    if(el.dataset.f==='sig_cost')groups[k].sig_cost=el.value?+el.value:null;
+    if(el.dataset.f==='sig')groups[k].sig_id=el.value||null;
+    if(el.dataset.f==='allowed')groups[k].is_allowed=el.checked;
+  });
+  const valid=Object.values(groups).filter(r=>r.cost!=null);
+  if(valid.length)await sb.from('tournament_costs').upsert(valid,{onConflict:'tournament_id,character_id,mindscape'});
+  toast(`Сохранено ${valid.length} записей`);
+}
+
+// --- CHARACTERS ---
+async function pgCharacters(){
+  const list=D.chars.map(c=>`<div class="row-item">
+    <div style="display:flex;align-items:center;gap:10px">
+      <span class="${c.rarity==='S'?'badge-s':'badge-a'}">${c.rarity}</span>
+      <span style="font-weight:600">${c.name}</span>
+      <span style="font-size:12px;color:var(--sub)">${{atk:'Атакер',stun:'Станер',rupt:'Разруха',sup:'Сап/Оборона',ano:'Аномалик'}[c.role]||c.role}</span>
+    </div>
+    <button class="btn-r" onclick="delChar('${c.id}')">✕</button>
+  </div>`).join('');
+  html(`<div class="card" style="margin-bottom:16px">
+    <h3>Добавить персонажа</h3>
+    <div class="grid3">
+      <div><label>Имя (EN)</label><input id="c-name" type="text" placeholder="Ellen Joe"></div>
+      <div><label>Редкость</label><select id="c-rar"><option value="S">S (Limited)</option><option value="A">A</option></select></div>
+      <div><label>Роль</label><select id="c-role"><option value="atk">Атакер</option><option value="stun">Станер</option><option value="rupt">Разруха</option><option value="sup">Сап/Оборона</option><option value="ano">Аномалик</option></select></div>
+    </div>
+    <button class="btn btn-y" style="margin-top:12px" onclick="addChar()">Добавить</button>
+  </div>
+  <div class="space-y">${list||'<p style="color:var(--sub);font-size:14px">Персонажей ещё нет</p>'}</div>`);
+}
+async function addChar(){
+  const n=v('c-name');if(!n)return;
+  await sb.from('characters').insert({name:n,rarity:v('c-rar'),role:v('c-role')});
+  toast('Персонаж добавлен');pgCharacters();
+}
+async function delChar(id){if(!confirm('Удалить?'))return;await sb.from('characters').delete().eq('id',id);pgCharacters();}
+
+// --- SIGNATURES ---
+async function pgSignatures(){
+  const list=D.sigs.map(s=>{
+    const c=D.chars.find(x=>x.id===s.character_id);
+    return`<div class="row-item">
+      <div><span style="font-weight:600">${s.name}</span><span style="font-size:12px;color:var(--sub);margin-left:8px">→ ${c?.name||'?'}</span></div>
+      <button class="btn-r" onclick="delSig('${s.id}')">✕</button>
+    </div>`;
+  }).join('');
+  html(`<div class="card" style="margin-bottom:16px">
+    <h3>Добавить амплификатор (сигну)</h3>
+    <div class="grid2">
+      <div><label>Название</label><input id="s-name" type="text" placeholder="Deep Sea Visitor"></div>
+      <div><label>Персонаж</label>${sel('s-char',D.chars,x=>x.id,x=>x.name)}</div>
+    </div>
+    <button class="btn btn-y" style="margin-top:12px" onclick="addSig()">Добавить</button>
+  </div>
+  <div class="space-y">${list||'<p style="color:var(--sub);font-size:14px">Амплификаторов ещё нет</p>'}</div>`);
+}
+async function addSig(){
+  const n=v('s-name'),c=v('s-char');if(!n||!c)return;
+  await sb.from('signatures').insert({name:n,character_id:c});toast('Амплификатор добавлен');pgSignatures();
+}
+async function delSig(id){if(!confirm('Удалить?'))return;await sb.from('signatures').delete().eq('id',id);pgSignatures();}
+
+// --- PLAYERS ---
+async function pgPlayers(){
+  const list=D.players.map(p=>`<div class="row-item">
+    <div><div style="font-weight:600">${p.nickname}</div><div style="font-size:12px;color:var(--sub)">${p.age?p.age+' лет':'—'}</div></div>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-g" style="font-size:12px;padding:5px 12px" onclick="openRoster('${p.id}','${p.nickname.replace(/'/g,"\\'")}')">Ростер</button>
+      <button class="btn-r" onclick="delPlayer('${p.id}')">✕</button>
+    </div>
+  </div>`).join('');
+  html(`<div class="card" style="margin-bottom:16px">
+    <h3>Добавить игрока</h3>
+    <div class="grid2">
+      <div><label>Никнейм</label><input id="p-nick" type="text"></div>
+      <div><label>Возраст</label><input id="p-age" type="number" min="10" max="99"></div>
+    </div>
+    <button class="btn btn-y" style="margin-top:12px" onclick="addPlayer()">Добавить</button>
+  </div>
+  <div class="space-y">${list||'<p style="color:var(--sub);font-size:14px">Игроков ещё нет</p>'}</div>`);
+}
+async function addPlayer(){const n=v('p-nick');if(!n)return;await sb.from('players').insert({nickname:n,age:vn('p-age')});toast('Игрок добавлен');pgPlayers();}
+async function delPlayer(id){if(!confirm('Удалить?'))return;await sb.from('players').delete().eq('id',id);pgPlayers();}
+
+async function openRoster(pid,pnick){
+  document.getElementById('page-title').textContent=`Ростер — ${pnick}`;
+  const charOpts=D.chars.map(c=>`<option value="${c.id}">${c.name} (${c.rarity})</option>`).join('');
+  html(`<button class="btn btn-g" style="margin-bottom:16px" onclick="go('players')">← Назад</button>
+  <div class="card">
+    <h3>Ростер игрока на турнире</h3>
+    <div class="grid2" style="margin-bottom:12px">
+      <div><label>Турнир</label>${sel('r-tour',D.tours,x=>x.id,x=>x.name)}</div>
+      <div><label>Призовые ($)</label><input id="r-prize" type="number" min="0" placeholder="0"></div>
+    </div>
+    <h4>Персонажи ростера</h4>
+    <div id="r-list" class="space-y" style="margin-bottom:10px"></div>
+    <button class="btn btn-g" onclick="addRosterRow('${charOpts.replace(/'/g,"\\'")}')">+ Добавить персонажа</button>
+    <button class="btn btn-y" style="margin-left:8px" onclick="saveRoster('${pid}')">Сохранить ростер</button>
+  </div>`);
+}
+
+function addRosterRow(charOpts){
+  const div=document.createElement('div');
+  div.className='pick-row';
+  div.innerHTML=`<select class="r-char" style="flex:1">${charOpts}</select>
+    <select class="r-ms sm-sel">${msOpts}</select>
+    <button class="btn-r" onclick="this.closest('.pick-row').remove()">✕</button>`;
+  document.getElementById('r-list').appendChild(div);
+}
+
+async function saveRoster(pid){
+  const tourId=v('r-tour');if(!tourId)return;
+  const prize=document.getElementById('r-prize')?.value;
+  const rows=[...document.querySelectorAll('.pick-row')];
+  const chars=rows.map(r=>({tournament_id:tourId,player_id:pid,character_id:r.querySelector('.r-char').value,mindscape:+r.querySelector('.r-ms').value})).filter(x=>x.character_id);
+  await sb.from('player_rosters').delete().match({tournament_id:tourId,player_id:pid});
+  if(chars.length)await sb.from('player_rosters').insert(chars);
+  if(prize)await sb.from('player_prizes').upsert({tournament_id:tourId,player_id:pid,amount:+prize},{onConflict:'tournament_id,player_id'});
+  toast(`Ростер сохранён: ${chars.length} персонажей`);
+}
+
+// --- MATCHES ---
+async function pgMatches(){
+  const{data:encs}=await sb.from('encounters').select('*').order('created_at',{ascending:false});
+  const{data:ms}=encs?.length?await sb.from('matches').select('*').in('encounter_id',encs.map(e=>e.id)):{data:[]};
+  const mByEnc={};(ms||[]).forEach(m=>{if(!mByEnc[m.encounter_id])mByEnc[m.encounter_id]=[];mByEnc[m.encounter_id].push(m);});
+  const tourMap={};D.tours.forEach(t=>tourMap[t.id]=t);
+  const plMap={};D.players.forEach(p=>plMap[p.id]=p);
+
+  const list=(encs||[]).map(e=>{
+    const t=tourMap[e.tournament_id],p1=plMap[e.player1_id],p2=plMap[e.player2_id],win=plMap[e.winner_id];
+    const ems=mByEnc[e.id]||[];
+    const m1done=ems.find(m=>m.match_number===1)?.winner_id||ems.find(m=>m.match_number===1)?.is_draw;
+    const m2done=ems.find(m=>m.match_number===2)?.winner_id||ems.find(m=>m.match_number===2)?.is_draw;
+    return`<div class="card">
+      <div style="display:flex;justify-content:space-between;margin-bottom:8px">
+        <div><span style="font-weight:600">${p1?.nickname||'?'}</span><span style="color:var(--sub);margin:0 8px">vs</span><span style="font-weight:600">${p2?.nickname||'?'}</span></div>
+        <span style="font-size:12px;color:var(--sub)">${t?.name||'?'}</span>
+      </div>
+      ${win?`<div style="font-size:12px;margin-bottom:8px">Победитель встречи: <span style="color:var(--accent);font-weight:600">${win.nickname}</span></div>`:''}
+      <div style="display:flex;gap:8px">
+        <button class="btn ${m1done?'btn-g':'btn-y'}" style="font-size:12px;padding:5px 14px" onclick="openMatch('${e.id}',1,'${e.player1_id}','${e.player2_id}')">
+          ${m1done?'✓':''} Матч 1</button>
+        <button class="btn ${m2done?'btn-g':'btn-y'}" style="font-size:12px;padding:5px 14px" onclick="openMatch('${e.id}',2,'${e.player1_id}','${e.player2_id}')">
+          ${m2done?'✓':''} Матч 2</button>
+        <button class="btn-r" style="margin-left:auto" onclick="delEnc('${e.id}')">Удалить встречу</button>
+      </div>
+    </div>`;
+  }).join('');
+
+  const pOpts=D.players.map(p=>`<option value="${p.id}">${p.nickname}</option>`).join('');
+  html(`<div class="card" style="margin-bottom:16px">
+    <h3>Новая встреча (Bo2)</h3>
+    <div class="grid2" style="margin-bottom:12px">
+      <div><label>Турнир</label>${sel('e-tour',D.tours,x=>x.id,x=>x.name)}</div>
+      <div><label>Этап</label><input id="e-stage" type="text" placeholder="Групповой / Плей-офф / Финал"></div>
+      <div><label>Игрок 1 (фп в матче 1)</label><select id="e-p1">${pOpts}</select></div>
+      <div><label>Игрок 2 (фп в матче 2)</label><select id="e-p2">${pOpts}</select></div>
+    </div>
+    <button class="btn btn-y" onclick="addEnc()">Создать встречу</button>
+  </div>
+  <div class="space-y">${list||'<p style="color:var(--sub);font-size:14px">Встреч ещё нет</p>'}</div>`);
+}
+
+async function addEnc(){
+  const t=v('e-tour'),p1=v('e-p1'),p2=v('e-p2');
+  if(!t)return toast('Выбери турнир','err');
+  if(p1===p2)return toast('Выбери разных игроков','err');
+  await sb.from('encounters').insert({tournament_id:t,stage:v('e-stage'),player1_id:p1,player2_id:p2});
+  toast('Встреча создана');pgMatches();
+}
+async function delEnc(id){if(!confirm('Удалить встречу и все матчи?'))return;await sb.from('encounters').delete().eq('id',id);pgMatches();}
+
+async function openMatch(encId,num,p1Id,p2Id){
+  const fpId=num===1?p1Id:p2Id;
+  const dblId=num===1?p2Id:p1Id;
+  const fp=D.players.find(p=>p.id===fpId),dbl=D.players.find(p=>p.id===dblId);
+  const{data:match}=await sb.from('matches').select('*,picks:match_picks(*),bans:match_bans(*)').eq('encounter_id',encId).eq('match_number',num).maybeSingle();
+  const mid=match?.id||'';
+
+  const charOpts=D.chars.map(c=>`<option value="${c.id}">${c.name}</option>`).join('');
+  const pSec=s=>s?`${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`:'';
+
+  // timers: player1_timer_sec is for player1 (p1Id), player2 for p2Id
+  const fpTimer=pSec(fpId===p1Id?match?.player1_timer_sec:match?.player2_timer_sec);
+  const dblTimer=pSec(dblId===p1Id?match?.player1_timer_sec:match?.player2_timer_sec);
+  const fpR=fpId===p1Id?(match?.player1_restarts||0):(match?.player2_restarts||0);
+  const dblR=dblId===p1Id?(match?.player1_restarts||0):(match?.player2_restarts||0);
+
+  document.getElementById('page-title').textContent=`Матч ${num} — ${fp?.nickname} (фп) vs ${dbl?.nickname}`;
+
+  html(`<button class="btn btn-g" style="margin-bottom:16px" onclick="go('matches')">← Назад к встречам</button>
+  
+  <!-- Тайминги -->
+  <div class="card" style="margin-bottom:12px">
+    <h3>Результат матча</h3>
+    <div class="grid2" style="margin-bottom:12px">
+      <div>
+        <label>${fp?.nickname} (фп)</label>
+        <div style="display:flex;gap:8px">
+          <div style="flex:1"><label>Таймер (м:сс)</label><input id="t1" type="text" value="${fpTimer}" placeholder="3:28"></div>
+          <div><label>Рестарты</label><input id="r1" type="number" value="${fpR}" min="0" style="width:80px"></div>
+        </div>
+      </div>
+      <div>
+        <label>${dbl?.nickname}</label>
+        <div style="display:flex;gap:8px">
+          <div style="flex:1"><label>Таймер (м:сс)</label><input id="t2" type="text" value="${dblTimer}" placeholder="3:45"></div>
+          <div><label>Рестарты</label><input id="r2" type="number" value="${dblR}" min="0" style="width:80px"></div>
+        </div>
+      </div>
+    </div>
+    <div style="display:flex;gap:16px;align-items:center">
+      <label class="cb-label"><input type="checkbox" id="m-draw" ${match?.is_draw?'checked':''}>Ничья</label>
+      <div style="display:flex;align-items:center;gap:8px">
+        <label style="display:inline;margin:0;color:var(--sub)">Победитель (если не авто):</label>
+        <select id="m-winner" style="width:auto">
+          <option value="">— авто по таймеру —</option>
+          <option value="${fpId}" ${match?.winner_id===fpId?'selected':''}>${fp?.nickname}</option>
+          <option value="${dblId}" ${match?.winner_id===dblId?'selected':''}>${dbl?.nickname}</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <!-- Баны -->
+  <div class="card" style="margin-bottom:12px">
+    <h3>Баны</h3>
+    <div id="bans-list" class="space-y" style="margin-bottom:10px">
+      ${(match?.bans||[]).map(b=>`<div class="ban-row" data-player="${b.player_id}">
+        <span style="font-size:12px;color:var(--sub);min-width:80px">${b.player_id===fpId?fp?.nickname:dbl?.nickname}</span>
+        <select class="ban-char" style="flex:1"><option value="">—</option>${charOpts.replace(`value="${b.character_id}"`,`value="${b.character_id}" selected`)}</select>
+        <button class="btn-r" onclick="this.closest('.ban-row').remove()">✕</button>
+      </div>`).join('')}
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-g" onclick="addBanRow('${fpId}','${fp?.nickname}','${charOpts.replace(/'/g,"&apos;")}')">+ Бан ${fp?.nickname}</button>
+      <button class="btn btn-g" onclick="addBanRow('${dblId}','${dbl?.nickname}','${charOpts.replace(/'/g,"&apos;")}')">+ Бан ${dbl?.nickname}</button>
+    </div>
+  </div>
+
+  <!-- Пики -->
+  <div class="card" style="margin-bottom:16px">
+    <h3>Пики</h3>
+    <h4>${fp?.nickname} <span style="color:var(--sub);font-weight:400;font-size:12px">(фп в этом матче)</span></h4>
+    <div id="picks-fp" class="space-y" style="margin-bottom:10px">
+      ${(match?.picks||[]).filter(p=>p.player_id===fpId).map(p=>pickRowHTML(fpId,charOpts,p)).join('')}
+    </div>
+    <button class="btn btn-g" onclick="addPickRow('picks-fp','${fpId}','${charOpts.replace(/'/g,"&apos;")}')">+ Пик</button>
+
+    <h4 style="margin-top:20px">${dbl?.nickname}</h4>
+    <div id="picks-dbl" class="space-y" style="margin-bottom:10px">
+      ${(match?.picks||[]).filter(p=>p.player_id===dblId).map(p=>pickRowHTML(dblId,charOpts,p)).join('')}
+    </div>
+    <button class="btn btn-g" onclick="addPickRow('picks-dbl','${dblId}','${charOpts.replace(/'/g,"&apos;")}')">+ Пик</button>
+  </div>
+
+  <button class="btn btn-y" style="font-size:15px;padding:10px 28px" onclick="saveMatch('${encId}','${num}','${p1Id}','${p2Id}','${fpId}','${mid}')">
+    Сохранить матч
+  </button>`);
+}
+
+function pickRowHTML(playerId,charOpts,existing={}){
+  return`<div class="pick-row" data-player="${playerId}">
+    <select class="pr-char" style="flex:1"><option value="">— персонаж —</option>${charOpts.replace(`value="${existing.character_id||''}"`,`value="${existing.character_id||''}" selected`)}</select>
+    <select class="pr-ms sm-sel">${msOpts.replace(`value="${existing.mindscape||0}"`,`value="${existing.mindscape||0}" selected`)}</select>
+    <select class="pr-team sm-sel">
+      <option value="1" ${(existing.team_slot||1)===1?'selected':''}>Team 1</option>
+      <option value="2" ${existing.team_slot===2?'selected':''}>Team 2</option>
+    </select>
+    <label class="cb-label"><input type="checkbox" class="pr-sig" ${existing.has_signature?'checked':''}>сигна</label>
+    <label class="cb-label"><input type="checkbox" class="pr-fp" ${existing.is_fp?'checked':''}>фп</label>
+    <label class="cb-label"><input type="checkbox" class="pr-dbl" ${existing.is_double?'checked':''}>дабл</label>
+    <button class="btn-r" onclick="this.closest('.pick-row').remove()">✕</button>
+  </div>`;
+}
+
+function addPickRow(containerId,playerId,charOpts){
+  const div=document.createElement('div');
+  div.innerHTML=pickRowHTML(playerId,charOpts);
+  document.getElementById(containerId).appendChild(div.firstElementChild);
+}
+
+function addBanRow(playerId,playerName,charOpts){
+  const div=document.createElement('div');
+  div.className='ban-row';div.dataset.player=playerId;
+  div.innerHTML=`<span style="font-size:12px;color:var(--sub);min-width:80px">${playerName}</span>
+    <select class="ban-char" style="flex:1"><option value="">—</option>${charOpts}</select>
+    <button class="btn-r" onclick="this.closest('.ban-row').remove()">✕</button>`;
+  document.getElementById('bans-list').appendChild(div);
+}
+
+function parseSec(s){if(!s)return null;const p=s.split(':').map(Number);if(p.length!==2||isNaN(p[0])||isNaN(p[1]))return null;return p[0]*60+p[1];}
+
+async function saveMatch(encId,num,p1Id,p2Id,fpId,existingId){
+  const isDraw=document.getElementById('m-draw').checked;
+  const t1=parseSec(v('t1')),t2=parseSec(v('t2'));
+  const r1=+document.getElementById('r1')?.value||0;
+  const r2=+document.getElementById('r2')?.value||0;
+  const dblId=fpId===p1Id?p2Id:p1Id;
+
+  // timer1 = fp player's timer, timer2 = dbl player's timer
+  // player1_timer_sec = p1's timer
+  const p1Timer=fpId===p1Id?t1:t2;
+  const p2Timer=fpId===p1Id?t2:t1;
+  const p1R=fpId===p1Id?r1:r2;
+  const p2R=fpId===p1Id?r2:r1;
+
+  let winnerId=v('m-winner');
+  if(!winnerId&&!isDraw&&t1!=null&&t2!=null){
+    winnerId=t1<=t2?fpId:dblId;
+  }
+
+  const mData={encounter_id:encId,match_number:+num,fp_player_id:fpId,is_draw:isDraw,
+    winner_id:isDraw?null:(winnerId||null),
+    player1_timer_sec:p1Timer,player2_timer_sec:p2Timer,
+    player1_restarts:p1R,player2_restarts:p2R};
+
+  let mid=existingId;
+  if(mid){await sb.from('matches').update(mData).eq('id',mid);}
+  else{const{data}=await sb.from('matches').insert(mData).select().single();mid=data?.id;}
+  if(!mid)return toast('Ошибка сохранения матча','err');
+
+  // Bans
+  await sb.from('match_bans').delete().eq('match_id',mid);
+  const bans=[...document.querySelectorAll('.ban-row')].map((row,i)=>({
+    match_id:mid,player_id:row.dataset.player,
+    character_id:row.querySelector('.ban-char')?.value,ban_order:i+1
+  })).filter(b=>b.character_id);
+  if(bans.length)await sb.from('match_bans').insert(bans);
+
+  // Picks
+  await sb.from('match_picks').delete().eq('match_id',mid);
+  const picks=[...document.querySelectorAll('#picks-fp .pick-row, #picks-dbl .pick-row')].map((row,i)=>({
+    match_id:mid,player_id:row.dataset.player,
+    character_id:row.querySelector('.pr-char')?.value,
+    mindscape:+row.querySelector('.pr-ms')?.value||0,
+    has_signature:row.querySelector('.pr-sig')?.checked||false,
+    team_slot:+row.querySelector('.pr-team')?.value||1,
+    pick_order:i+1,
+    is_fp:row.querySelector('.pr-fp')?.checked||false,
+    is_double:row.querySelector('.pr-dbl')?.checked||false,
+  })).filter(p=>p.character_id);
+  if(picks.length)await sb.from('match_picks').insert(picks);
+
+  // Update encounter winner (by aggregate timer)
+  const{data:allMs}=await sb.from('matches').select('*').eq('encounter_id',encId);
+  if(allMs&&allMs.length>=2){
+    let p1T=0,p2T=0;
+    allMs.forEach(m=>{p1T+=m.player1_timer_sec||0;p2T+=m.player2_timer_sec||0;});
+    const encWin=p1T<=p2T?p1Id:p2Id;
+    await sb.from('encounters').update({winner_id:encWin}).eq('id',encId);
+  }
+
+  toast('Матч сохранён!');
+  setTimeout(()=>go('matches'),800);
+}
+
+sb.auth.getSession();
+</script>
+</body>
+</html>
