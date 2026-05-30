@@ -229,15 +229,25 @@ async function openCosts(tourId,tourName){
   const charSigMap={};D.sigs.forEach(s=>{if(!charSigMap[s.character_id])charSigMap[s.character_id]=[];charSigMap[s.character_id].push(s);});
   const rows=D.chars.map(c=>{
     const sOpts=(charSigMap[c.id]||[]).map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
-    return[0,1,2,3,4,5,6].map(ms=>{
+    // Сигна и кост сигны одинаковы для всех констов — берём из любой существующей записи
+    const anyEx=[0,1,2,3,4,5,6].map(ms=>costMap[`${c.id}_${ms}`]).find(x=>x)||{};
+    return[0,1,2,3,4,5,6].map((ms,idx)=>{
       const ex=costMap[`${c.id}_${ms}`]||{};
+      // Персонаж, кост сигны и сигна — только в первой строке (rowspan=7)
+      const charCells=idx===0?`
+        <td rowspan="7" style="padding:8px 10px;font-weight:500;vertical-align:middle;border-right:1px solid var(--border)">${c.name}</td>
+        <td rowspan="7" style="padding:6px 10px;vertical-align:middle;border-right:1px solid var(--border)">
+          <input class="ci-char" data-c="${c.id}" data-f="sig_cost" type="number" min="0" placeholder="—" value="${anyEx.sig_cost??''}" style="width:70px;padding:4px 8px;font-size:13px">
+        </td>
+        <td rowspan="7" style="padding:6px 10px;vertical-align:middle">
+          <select class="ci-char" data-c="${c.id}" data-f="sig" style="width:auto;font-size:13px;padding:4px 8px">
+            <option value="">—</option>${sOpts.replace(`value="${anyEx.sig_id||''}"`,`value="${anyEx.sig_id||''}" selected`)}
+          </select>
+        </td>`:'';
       return`<tr style="border-top:1px solid var(--border)">
-        <td style="padding:6px 10px;font-weight:500">${c.name}</td>
-        <td style="padding:6px 10px;color:var(--sub)">M${ms}</td>
-        <td style="padding:6px 10px"><input class="ci" data-c="${c.id}" data-m="${ms}" data-f="cost" type="number" min="0" placeholder="—" value="${ex.cost??''}" style="width:70px;padding:4px 8px;font-size:13px"></td>
-        <td style="padding:6px 10px"><input class="ci" data-c="${c.id}" data-m="${ms}" data-f="sig_cost" type="number" min="0" placeholder="—" value="${ex.sig_cost??''}" style="width:70px;padding:4px 8px;font-size:13px"></td>
-        <td style="padding:6px 10px"><select class="ci" data-c="${c.id}" data-m="${ms}" data-f="sig" style="width:auto;font-size:13px;padding:4px 8px"><option value="">—</option>${sOpts.replace(`value="${ex.sig_id||''}"`,`value="${ex.sig_id||''}" selected`)}</select></td>
-        <td style="padding:6px 10px;text-align:center"><input type="checkbox" class="ci" data-c="${c.id}" data-m="${ms}" data-f="allowed" ${ex.is_allowed!==false?'checked':''}></td>
+        ${charCells}
+        <td style="padding:6px 10px;color:var(--sub);text-align:center">М${ms}</td>
+        <td style="padding:6px 10px"><input class="ci-ms" data-c="${c.id}" data-m="${ms}" type="number" min="0" placeholder="—" value="${ex.cost??''}" style="width:70px;padding:4px 8px;font-size:13px"></td>
       </tr>`;
     }).join('');
   }).join('');
@@ -246,11 +256,10 @@ async function openCosts(tourId,tourName){
     <table style="width:100%;border-collapse:collapse;font-size:13px">
       <thead><tr style="background:#0b0d14">
         <th style="padding:8px 10px;text-align:left;color:var(--sub)">Персонаж</th>
-        <th style="padding:8px 10px;color:var(--sub)">М</th>
-        <th style="padding:8px 10px;color:var(--sub)">Кост</th>
-        <th style="padding:8px 10px;color:var(--sub)">Кост сигны</th>
+        <th style="padding:8px 10px;color:var(--sub)">Кост сигны R1</th>
         <th style="padding:8px 10px;color:var(--sub)">Сигна</th>
-        <th style="padding:8px 10px;color:var(--sub)">Разрешён</th>
+        <th style="padding:8px 10px;color:var(--sub)">Конста</th>
+        <th style="padding:8px 10px;color:var(--sub)">Кост</th>
       </tr></thead>
       <tbody>${rows}</tbody>
     </table>
@@ -259,16 +268,23 @@ async function openCosts(tourId,tourName){
 }
 
 async function saveCosts(tourId){
-  const groups={};
-  document.querySelectorAll('.ci').forEach(el=>{
-    const k=`${el.dataset.c}_${el.dataset.m}`;
-    if(!groups[k])groups[k]={tournament_id:tourId,character_id:el.dataset.c,mindscape:+el.dataset.m};
-    if(el.dataset.f==='cost')groups[k].cost=el.value?+el.value:null;
-    if(el.dataset.f==='sig_cost')groups[k].sig_cost=el.value?+el.value:null;
-    if(el.dataset.f==='sig')groups[k].sig_id=el.value||null;
-    if(el.dataset.f==='allowed')groups[k].is_allowed=el.checked;
+  // Сигна и кост сигны — одни на персонажа
+  const charLevel={};
+  document.querySelectorAll('.ci-char').forEach(el=>{
+    const c=el.dataset.c;
+    if(!charLevel[c])charLevel[c]={};
+    if(el.dataset.f==='sig_cost')charLevel[c].sig_cost=el.value?+el.value:null;
+    if(el.dataset.f==='sig')charLevel[c].sig_id=el.value||null;
   });
-  const valid=Object.values(groups).filter(r=>r.cost!=null);
+  // Кост — на персонажа × конста
+  const valid=[];
+  document.querySelectorAll('.ci-ms').forEach(el=>{
+    if(!el.value)return;
+    const c=el.dataset.c,ms=+el.dataset.m;
+    const cl=charLevel[c]||{};
+    valid.push({tournament_id:tourId,character_id:c,mindscape:ms,cost:+el.value,
+      sig_cost:cl.sig_cost??null,sig_id:cl.sig_id??null,is_allowed:true});
+  });
   if(valid.length){const{error}=await sb.from('tournament_costs').upsert(valid,{onConflict:'tournament_id,character_id,mindscape'});if(dbErr(error,'сохранение костов'))return;}
   toast(`Сохранено ${valid.length} записей`);
 }
