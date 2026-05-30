@@ -79,6 +79,7 @@
         <button class="btn btn-y" style="flex:1" onclick="signIn()">Войти</button>
         <button class="btn btn-g" style="flex:1" onclick="signUp()">Регистрация</button>
       </div>
+      <button class="btn btn-g" style="width:100%;margin-top:10px;font-size:13px" onclick="enableDevPreview()">Dev preview</button>
     </div>
   </div>
 
@@ -97,7 +98,7 @@ const SB_URL='https://zoavnckfbfiejxfjakue.supabase.co';
 const SB_KEY='sb_publishable_37RZBsmdp3O1i795EuEfeg_vFpdPTFZ';
 const sb=supabase.createClient(SB_URL,SB_KEY);
 
-let D={tours:[],chars:[],players:[],sigs:[]};
+let D={tours:[],chars:[],players:[],sigs:[],agents:[]};
 
 // --- AUTH ---
 async function signIn(){
@@ -119,7 +120,6 @@ sb.auth.onAuthStateChange((_,session)=>{
     document.getElementById('admin-area').style.display='flex';
     document.getElementById('sidebar').style.display='flex';
     document.getElementById('user-email').textContent=session.user.email;
-    // Supabase пересоздаёт событие при visibilitychange — не сбрасываем страницу повторно
     if(!wasActive){
       const saved=localStorage.getItem('zzz_page')||'dashboard';
       go(saved);
@@ -146,13 +146,14 @@ async function go(page){
 }
 
 async function refreshData(){
-  const[{data:t},{data:c},{data:p},{data:s}]=await Promise.all([
+  const[{data:t},{data:c},{data:p},{data:s},{data:ag}]=await Promise.all([
     sb.from('tournaments').select('*').order('created_at',{ascending:false}),
     sb.from('characters').select('*').order('name'),
     sb.from('players').select('*').order('nickname'),
     sb.from('signatures').select('*').order('name'),
+    sb.from('agents').select('*').order('name')
   ]);
-  D.tours=t||[];D.chars=c||[];D.players=p||[];D.sigs=s||[];
+  D.tours=t||[];D.chars=c||[];D.players=p||[];D.sigs=s||[];D.agents=ag||[];
 }
 
 // --- UTILS ---
@@ -835,6 +836,34 @@ async function saveMatch(encId,num,p1Id,p2Id,fpId,existingId){
 }
 
 sb.auth.getSession();
+</script>
+<script src="web/signatures.js"></script>
+<script>
+// Dev preview helper — can be invoked manually (button) or auto-enabled for file:// or ?dev=1
+function enableDevPreview(){
+  window.DEV_PREVIEW = true;
+  // sample data for UI testing
+  D.chars = [{id:'c1',name:'Abyssal Knight'},{id:'c2',name:'Ellen Joe'}];
+  D.agents = [{id:'ag1',name:'AgentX'},{id:'ag2',name:'AgentY'}];
+  D.sigs = [{id:'s1',name:'Deep Sea Visitor',character_id:'c1',agent_id:'ag1'},{id:'s2',name:'Simple Sig',character_id:'c2',agent_id:null}];
+  document.getElementById('login-screen').style.display='none';
+  document.getElementById('admin-area').style.display='flex';
+  document.getElementById('sidebar').style.display='flex';
+  document.getElementById('user-email').textContent='dev@local';
+  document.querySelectorAll('.nav-a').forEach(a=>a.classList.toggle('on',a.dataset.page==='signatures'));
+  document.getElementById('page-title').textContent='Амплификаторы (Dev)';
+  if(typeof pgSignatures==='function') pgSignatures();
+}
+// Auto-enable dev preview on file:// or ?dev=1 (deferred until DOM ready)
+if(document.readyState==='loading'){
+  document.addEventListener('DOMContentLoaded',()=>{
+    const isDev = location.search.includes('dev=1') || location.protocol==='file:' || location.hostname==='localhost';
+    if(isDev) setTimeout(enableDevPreview,100);
+  });
+} else {
+  const isDev = location.search.includes('dev=1') || location.protocol==='file:' || location.hostname==='localhost';
+  if(isDev) setTimeout(enableDevPreview,100);
+}
 </script>
 </body>
 </html>
