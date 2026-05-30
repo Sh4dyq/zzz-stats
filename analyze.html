@@ -355,7 +355,7 @@ BANS: In the upper draft grid, identify the 3 characters banned by each player f
 Return exactly 6 picks per player (3 team-1 and 3 team-2) and exactly 3 bans per player.`;
 
   const res=await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${key}`,
     {
       method:'POST',
       headers:{'Content-Type':'application/json'},
