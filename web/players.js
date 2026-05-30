@@ -73,26 +73,45 @@ async function openRoster(pid,pnick){
 
 function charPickClick(cid){
   const c=D.chars.find(x=>x.id===cid);if(!c)return;
-  document.getElementById('ms-cname').textContent=c.name;
+  const already=_RS.find(r=>r.character_id===cid);
+  if(already){
+    openMsPicker(cid,c.name);
+    return;
+  }
+  const defaultMs=c.rarity==='S'?0:6;
+  _RS.push({character_id:cid,mindscape:defaultMs});
+  renderSelected();
+}
+
+function openMsPicker(cid,cname){
+  document.getElementById('ms-cname').textContent=cname;
   document.getElementById('ms-btns').innerHTML=[0,1,2,3,4,5,6].map(ms=>
-    `<button class="btn btn-g" style="padding:5px 14px;font-size:13px" onclick="addToRoster('${cid}',${ms})">М${ms}</button>`
+    `<button class="btn btn-g" style="padding:5px 14px;font-size:13px" onclick="setMindscape('${cid}',${ms})">М${ms}</button>`
   ).join('');
   document.getElementById('ms-picker').style.display='block';
-  document.querySelectorAll('.cpb').forEach(b=>b.style.borderColor='var(--border)');
-  const btn=document.querySelector(`.cpb[data-id="${cid}"]`);
-  if(btn)btn.style.borderColor='var(--accent)';
+}
+
+function setMindscape(cid,ms){
+  const entry=_RS.find(r=>r.character_id===cid);
+  if(entry)entry.mindscape=ms;
+  document.getElementById('ms-picker').style.display='none';
+  renderSelected();
 }
 
 function addToRoster(cid,ms){
   _RS=_RS.filter(r=>r.character_id!==cid);
   _RS.push({character_id:cid,mindscape:ms});
   document.getElementById('ms-picker').style.display='none';
-  document.querySelectorAll('.cpb').forEach(b=>b.style.borderColor='var(--border)');
   renderSelected();
 }
 
 function removeFromRoster(cid){
   _RS=_RS.filter(r=>r.character_id!==cid);
+  if(document.getElementById('ms-picker').style.display!=='none'){
+    const shown=document.getElementById('ms-cname').textContent;
+    const c=D.chars.find(x=>x.id===cid);
+    if(c&&c.name===shown)document.getElementById('ms-picker').style.display='none';
+  }
   renderSelected();
 }
 
@@ -101,11 +120,12 @@ function renderSelected(){
   if(!_RS.length){el.innerHTML='<span style="color:var(--sub);font-size:13px;align-self:center">Ростер пуст</span>';return;}
   el.innerHTML=_RS.map(r=>{
     const c=D.chars.find(x=>x.id===r.character_id);if(!c)return'';
-    return`<div style="display:flex;align-items:center;gap:5px;background:#12141d;border:1px solid var(--border);border-radius:6px;padding:5px 10px">
+    return`<div style="display:flex;align-items:center;gap:5px;background:#12141d;border:1px solid var(--border);border-radius:6px;padding:5px 10px;cursor:pointer"
+      onclick="openMsPicker('${r.character_id}','${c.name.replace(/'/g,"\\'")}')">
       <span style="width:8px;height:8px;border-radius:50%;background:${RC[c.role]||'#7b7f96'}"></span>
       <span style="font-size:13px;font-weight:600">${c.name}</span>
       <span class="ms-tag">М${r.mindscape}</span>
-      <button onclick="removeFromRoster('${r.character_id}')" style="background:none;border:none;color:#f87171;cursor:pointer;font-size:16px;line-height:1;margin-left:2px;padding:0">×</button>
+      <button onclick="event.stopPropagation();removeFromRoster('${r.character_id}')" style="background:none;border:none;color:#f87171;cursor:pointer;font-size:16px;line-height:1;margin-left:2px;padding:0">×</button>
     </div>`;
   }).join('');
 }
