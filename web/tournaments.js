@@ -21,44 +21,74 @@ async function delTour(id){if(!confirm('Удалить турнир?'))return;co
 async function openCosts(tourId,tourName){
   document.getElementById('page-title').textContent=`Косты — ${tourName}`;
   const{data:existing}=await sb.from('tournament_costs').select('*').eq('tournament_id',tourId);
-  const costMap={};(existing||[]).forEach(c=>{costMap[`${c.character_id}_${c.mindscape}`]=c;});
+  renderCostsTable(tourId,tourName,existing||[]);
+}
+
+function renderCostsTable(tourId,tourName,existing){
+  const costMap={};existing.forEach(c=>{costMap[`${c.character_id}_${c.mindscape}`]=c;});
   const charSigMap={};D.sigs.forEach(s=>{if(!charSigMap[s.character_id])charSigMap[s.character_id]=[];charSigMap[s.character_id].push(s);});
+  const msCols=[0,1,2,3,4,5,6];
+  const msHeads=msCols.map(ms=>`<th style="padding:8px 6px;color:var(--sub);text-align:center;min-width:70px">М${ms}</th>`).join('');
   const rows=D.chars.map(c=>{
     const sOpts=(charSigMap[c.id]||[]).map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
-    const anyEx=[0,1,2,3,4,5,6].map(ms=>costMap[`${c.id}_${ms}`]).find(x=>x)||{};
-    return[0,1,2,3,4,5,6].map((ms,idx)=>{
+    const anyEx=msCols.map(ms=>costMap[`${c.id}_${ms}`]).find(x=>x)||{};
+    const sigSel=`<select class="ci-char" data-c="${c.id}" data-f="sig" style="width:auto;font-size:13px;padding:3px 6px">
+      <option value="">—</option>${sOpts.replace(`value="${anyEx.sig_id||''}"`,`value="${anyEx.sig_id||''}" selected`)}
+    </select>`;
+    const msCells=msCols.map(ms=>{
       const ex=costMap[`${c.id}_${ms}`]||{};
-      const charCells=idx===0?`
-        <td rowspan="7" style="padding:8px 10px;font-weight:500;vertical-align:middle;border-right:1px solid var(--border)">${c.name}</td>
-        <td rowspan="7" style="padding:6px 10px;vertical-align:middle;border-right:1px solid var(--border)">
-          <input class="ci-char" data-c="${c.id}" data-f="sig_cost" type="number" min="0" placeholder="—" value="${anyEx.sig_cost??''}" style="width:70px;padding:4px 8px;font-size:13px">
-        </td>
-        <td rowspan="7" style="padding:6px 10px;vertical-align:middle">
-          <select class="ci-char" data-c="${c.id}" data-f="sig" style="width:auto;font-size:13px;padding:4px 8px">
-            <option value="">—</option>${sOpts.replace(`value="${anyEx.sig_id||''}"`,`value="${anyEx.sig_id||''}" selected`)}
-          </select>
-        </td>`:'';
-      return`<tr style="border-top:1px solid var(--border)">
-        ${charCells}
-        <td style="padding:6px 10px;color:var(--sub);text-align:center">М${ms}</td>
-        <td style="padding:6px 10px"><input class="ci-ms" data-c="${c.id}" data-m="${ms}" type="number" min="0" placeholder="—" value="${ex.cost??''}" style="width:70px;padding:4px 8px;font-size:13px"></td>
-      </tr>`;
+      return`<td style="padding:6px 6px;text-align:center"><input class="ci-ms" data-c="${c.id}" data-m="${ms}" type="number" min="0" placeholder="—" value="${ex.cost??''}" style="width:65px;padding:3px 6px;font-size:13px;text-align:center"></td>`;
     }).join('');
+    return`<tr style="border-top:1px solid var(--border)">
+      <td style="padding:8px 10px;font-weight:500;white-space:nowrap">${c.name}</td>
+      <td style="padding:6px 8px;text-align:center"><input class="ci-char" data-c="${c.id}" data-f="sig_cost" type="number" min="0" placeholder="—" value="${anyEx.sig_cost??''}" style="width:65px;padding:3px 6px;font-size:13px;text-align:center"></td>
+      <td style="padding:6px 8px">${sigSel}</td>
+      ${msCells}
+    </tr>`;
   }).join('');
+
+  const otherTours=D.tours.filter(t=>t.id!==tourId);
+  const copySelect=otherTours.length?`<select id="copy-from-tour" style="font-size:13px;padding:5px 10px;margin-right:8px">
+    ${otherTours.map(t=>`<option value="${t.id}">${t.name}</option>`).join('')}
+  </select>
+  <button class="btn btn-g" style="font-size:12px;padding:5px 12px" onclick="copyCosts('${tourId}')">Скопировать косты</button>`:'<span style="color:var(--sub);font-size:13px">Нет других турниров для копирования</span>';
+
   html(`<button class="btn btn-g" style="margin-bottom:16px" onclick="go('tournaments')">← Назад</button>
+  <div class="card" style="margin-bottom:16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+    <span style="font-weight:600;font-size:14px">Скопировать косты из турнира:</span>
+    ${copySelect}
+  </div>
   <div class="card" style="overflow-x:auto;padding:0">
     <table style="width:100%;border-collapse:collapse;font-size:13px">
       <thead><tr style="background:#0b0d14">
         <th style="padding:8px 10px;text-align:left;color:var(--sub)">Персонаж</th>
-        <th style="padding:8px 10px;color:var(--sub)">Кост сигны R1</th>
-        <th style="padding:8px 10px;color:var(--sub)">Сигна</th>
-        <th style="padding:8px 10px;color:var(--sub)">Конста</th>
-        <th style="padding:8px 10px;color:var(--sub)">Кост</th>
+        <th style="padding:8px 6px;color:var(--sub);text-align:center">Кост сигны</th>
+        <th style="padding:8px 6px;color:var(--sub)">Сигна</th>
+        ${msHeads}
       </tr></thead>
       <tbody>${rows}</tbody>
     </table>
   </div>
   <button class="btn btn-y" style="margin-top:16px" onclick="saveCosts('${tourId}')">Сохранить все косты</button>`);
+}
+
+async function copyCosts(tourId){
+  const srcId=document.getElementById('copy-from-tour')?.value;
+  if(!srcId)return;
+  const srcTour=D.tours.find(t=>t.id===srcId);
+  if(!confirm(`Скопировать косты из «${srcTour?.name||srcId}»? Текущие незаполненные ячейки будут заполнены, заполненные — перезаписаны.`))return;
+  const{data:srcCosts,error}=await sb.from('tournament_costs').select('*').eq('tournament_id',srcId);
+  if(dbErr(error,'загрузка костов'))return;
+  (srcCosts||[]).forEach(sc=>{
+    const msEl=document.querySelector(`.ci-ms[data-c="${sc.character_id}"][data-m="${sc.mindscape}"]`);
+    if(msEl&&sc.cost!=null)msEl.value=sc.cost;
+    const sigCostEl=document.querySelector(`.ci-char[data-c="${sc.character_id}"][data-f="sig_cost"]`);
+    if(sigCostEl&&sc.sig_cost!=null)sigCostEl.value=sc.sig_cost;
+    const sigEl=document.querySelector(`.ci-char[data-c="${sc.character_id}"][data-f="sig"]`);
+    if(sigEl&&sc.sig_id)sigEl.value=sc.sig_id;
+  });
+  toast(`Скопировано из «${srcTour?.name||srcId}»`);
+}
 }
 
 async function saveCosts(tourId){
