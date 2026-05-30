@@ -156,7 +156,16 @@ function toast(msg,type='ok'){
   const el=document.createElement('div');
   el.className='alert alert-'+(type==='err'?'err':'ok');el.textContent=msg;
   el.style.cssText='position:fixed;bottom:20px;right:20px;z-index:999;min-width:220px';
-  document.body.appendChild(el);setTimeout(()=>el.remove(),3000);
+  document.body.appendChild(el);setTimeout(()=>el.remove(),6000);
+}
+// Проверка ответа Supabase: если есть error — показываем настоящую причину и логируем
+function dbErr(error,context){
+  if(error){
+    console.error('[Supabase]',context,error);
+    toast(`Ошибка — ${context}: ${error.message}`,'err');
+    return true;
+  }
+  return false;
 }
 function sel(id,arr,valF,labelF,blank=''){
   return`<select id="${id}"><option value="">${blank||'— выбери —'}</option>${arr.map(x=>`<option value="${valF(x)}">${labelF(x)}</option>`).join('')}</select>`;
@@ -164,13 +173,27 @@ function sel(id,arr,valF,labelF,blank=''){
 const msOpts=Array.from({length:7},(_,i)=>`<option value="${i}">M${i}</option>`).join('');
 
 // --- DASHBOARD ---
-function pgDashboard(){
+async function pgDashboard(){
   html(`<div class="grid3" style="margin-bottom:20px">
     <div class="card"><div style="font-size:12px;color:var(--sub)">Турниры</div><div style="font-size:28px;font-weight:700;color:var(--accent);margin-top:4px">${D.tours.length}</div></div>
     <div class="card"><div style="font-size:12px;color:var(--sub)">Персонажи</div><div style="font-size:28px;font-weight:700;color:var(--accent);margin-top:4px">${D.chars.length}</div></div>
     <div class="card"><div style="font-size:12px;color:var(--sub)">Игроки</div><div style="font-size:28px;font-weight:700;color:var(--accent);margin-top:4px">${D.players.length}</div></div>
   </div>
+  <div class="card" id="auth-diag" style="margin-bottom:16px"><div style="font-size:12px;color:var(--sub)">Статус авторизации</div><div style="margin-top:6px"><span class="spinner"></span></div></div>
   <p style="color:var(--sub);font-size:14px">Используй меню слева. Порядок заполнения: Персонажи → Амплификаторы → Игроки → Турниры (+ косты + ростеры) → Матчи.</p>`);
+  // Диагностика: реально ли сессия authenticated (от этого зависит запись через RLS)
+  const{data:{user}}=await sb.auth.getUser();
+  const{data:{session}}=await sb.auth.getSession();
+  const role=session?.user?.role||user?.role||'—';
+  const ok=role==='authenticated';
+  const confirmed=user?.email_confirmed_at||user?.confirmed_at;
+  const diag=document.getElementById('auth-diag');
+  if(diag)diag.innerHTML=`<div style="font-size:12px;color:var(--sub)">Статус авторизации</div>
+    <div style="margin-top:6px;font-size:14px">
+      <div>Email: <b>${user?.email||'нет'}</b></div>
+      <div>Роль: <b style="color:${ok?'#4ade80':'#f87171'}">${role}</b> ${ok?'✓ запись разрешена':'✕ запись через RLS будет заблокирована'}</div>
+      <div>Email подтверждён: <b style="color:${confirmed?'#4ade80':'#f87171'}">${confirmed?'да':'нет'}</b></div>
+    </div>`;
 }
 
 // --- TOURNAMENTS ---
@@ -189,8 +212,8 @@ async function pgTournaments(){
   </div>
   <div class="space-y">${list||'<p style="color:var(--sub);font-size:14px">Турниров ещё нет</p>'}</div>`);
 }
-async function addTour(){const n=v('t-name');if(!n)return;await sb.from('tournaments').insert({name:n});toast('Турнир добавлен');pgTournaments();}
-async function delTour(id){if(!confirm('Удалить турнир?'))return;await sb.from('tournaments').delete().eq('id',id);pgTournaments();}
+async function addTour(){const n=v('t-name');if(!n)return;const{error}=await sb.from('tournaments').insert({name:n});if(dbErr(error,'добавление турнира'))return;toast('Турнир добавлен');pgTournaments();}
+async function delTour(id){if(!confirm('Удалить турнир?'))return;const{error}=await sb.from('tournaments').delete().eq('id',id);if(dbErr(error,'удаление турнира'))return;pgTournaments();}
 
 async function openCosts(tourId,tourName){
   document.getElementById('page-title').textContent=`Косты — ${tourName}`;
@@ -239,7 +262,7 @@ async function saveCosts(tourId){
     if(el.dataset.f==='allowed')groups[k].is_allowed=el.checked;
   });
   const valid=Object.values(groups).filter(r=>r.cost!=null);
-  if(valid.length)await sb.from('tournament_costs').upsert(valid,{onConflict:'tournament_id,character_id,mindscape'});
+  if(valid.length){const{error}=await sb.from('tournament_costs').upsert(valid,{onConflict:'tournament_id,character_id,mindscape'});if(dbErr(error,'сохранение костов'))return;}
   toast(`Сохранено ${valid.length} записей`);
 }
 
@@ -266,10 +289,11 @@ async function pgCharacters(){
 }
 async function addChar(){
   const n=v('c-name');if(!n)return;
-  await sb.from('characters').insert({name:n,rarity:v('c-rar'),role:v('c-role')});
+  const{error}=await sb.from('characters').insert({name:n,rarity:v('c-rar'),role:v('c-role')});
+  if(dbErr(error,'добавление персонажа'))return;
   toast('Персонаж добавлен');pgCharacters();
 }
-async function delChar(id){if(!confirm('Удалить?'))return;await sb.from('characters').delete().eq('id',id);pgCharacters();}
+async function delChar(id){if(!confirm('Удалить?'))return;const{error}=await sb.from('characters').delete().eq('id',id);if(dbErr(error,'удаление персонажа'))return;pgCharacters();}
 
 // --- SIGNATURES ---
 async function pgSignatures(){
@@ -292,9 +316,9 @@ async function pgSignatures(){
 }
 async function addSig(){
   const n=v('s-name'),c=v('s-char');if(!n||!c)return;
-  await sb.from('signatures').insert({name:n,character_id:c});toast('Амплификатор добавлен');pgSignatures();
+  const{error}=await sb.from('signatures').insert({name:n,character_id:c});if(dbErr(error,'добавление амплификатора'))return;toast('Амплификатор добавлен');pgSignatures();
 }
-async function delSig(id){if(!confirm('Удалить?'))return;await sb.from('signatures').delete().eq('id',id);pgSignatures();}
+async function delSig(id){if(!confirm('Удалить?'))return;const{error}=await sb.from('signatures').delete().eq('id',id);if(dbErr(error,'удаление амплификатора'))return;pgSignatures();}
 
 // --- PLAYERS ---
 async function pgPlayers(){
@@ -315,8 +339,8 @@ async function pgPlayers(){
   </div>
   <div class="space-y">${list||'<p style="color:var(--sub);font-size:14px">Игроков ещё нет</p>'}</div>`);
 }
-async function addPlayer(){const n=v('p-nick');if(!n)return;await sb.from('players').insert({nickname:n,age:vn('p-age')});toast('Игрок добавлен');pgPlayers();}
-async function delPlayer(id){if(!confirm('Удалить?'))return;await sb.from('players').delete().eq('id',id);pgPlayers();}
+async function addPlayer(){const n=v('p-nick');if(!n)return;const{error}=await sb.from('players').insert({nickname:n,age:vn('p-age')});if(dbErr(error,'добавление игрока'))return;toast('Игрок добавлен');pgPlayers();}
+async function delPlayer(id){if(!confirm('Удалить?'))return;const{error}=await sb.from('players').delete().eq('id',id);if(dbErr(error,'удаление игрока'))return;pgPlayers();}
 
 async function openRoster(pid,pnick){
   document.getElementById('page-title').textContent=`Ростер — ${pnick}`;
@@ -349,9 +373,10 @@ async function saveRoster(pid){
   const prize=document.getElementById('r-prize')?.value;
   const rows=[...document.querySelectorAll('.pick-row')];
   const chars=rows.map(r=>({tournament_id:tourId,player_id:pid,character_id:r.querySelector('.r-char').value,mindscape:+r.querySelector('.r-ms').value})).filter(x=>x.character_id);
-  await sb.from('player_rosters').delete().match({tournament_id:tourId,player_id:pid});
-  if(chars.length)await sb.from('player_rosters').insert(chars);
-  if(prize)await sb.from('player_prizes').upsert({tournament_id:tourId,player_id:pid,amount:+prize},{onConflict:'tournament_id,player_id'});
+  const{error:dErr}=await sb.from('player_rosters').delete().match({tournament_id:tourId,player_id:pid});
+  if(dbErr(dErr,'очистка ростера'))return;
+  if(chars.length){const{error}=await sb.from('player_rosters').insert(chars);if(dbErr(error,'сохранение ростера'))return;}
+  if(prize){const{error}=await sb.from('player_prizes').upsert({tournament_id:tourId,player_id:pid,amount:+prize},{onConflict:'tournament_id,player_id'});if(dbErr(error,'сохранение призовых'))return;}
   toast(`Ростер сохранён: ${chars.length} персонажей`);
 }
 
@@ -401,10 +426,11 @@ async function addEnc(){
   const t=v('e-tour'),p1=v('e-p1'),p2=v('e-p2');
   if(!t)return toast('Выбери турнир','err');
   if(p1===p2)return toast('Выбери разных игроков','err');
-  await sb.from('encounters').insert({tournament_id:t,stage:v('e-stage'),player1_id:p1,player2_id:p2});
+  const{error}=await sb.from('encounters').insert({tournament_id:t,stage:v('e-stage'),player1_id:p1,player2_id:p2});
+  if(dbErr(error,'создание встречи'))return;
   toast('Встреча создана');pgMatches();
 }
-async function delEnc(id){if(!confirm('Удалить встречу и все матчи?'))return;await sb.from('encounters').delete().eq('id',id);pgMatches();}
+async function delEnc(id){if(!confirm('Удалить встречу и все матчи?'))return;const{error}=await sb.from('encounters').delete().eq('id',id);if(dbErr(error,'удаление встречи'))return;pgMatches();}
 
 async function openMatch(encId,num,p1Id,p2Id){
   const fpId=num===1?p1Id:p2Id;
@@ -552,20 +578,20 @@ async function saveMatch(encId,num,p1Id,p2Id,fpId,existingId){
     player1_restarts:p1R,player2_restarts:p2R};
 
   let mid=existingId;
-  if(mid){await sb.from('matches').update(mData).eq('id',mid);}
-  else{const{data}=await sb.from('matches').insert(mData).select().single();mid=data?.id;}
+  if(mid){const{error}=await sb.from('matches').update(mData).eq('id',mid);if(dbErr(error,'обновление матча'))return;}
+  else{const{data,error}=await sb.from('matches').insert(mData).select().single();if(dbErr(error,'создание матча'))return;mid=data?.id;}
   if(!mid)return toast('Ошибка сохранения матча','err');
 
   // Bans
-  await sb.from('match_bans').delete().eq('match_id',mid);
+  {const{error}=await sb.from('match_bans').delete().eq('match_id',mid);if(dbErr(error,'очистка банов'))return;}
   const bans=[...document.querySelectorAll('.ban-row')].map((row,i)=>({
     match_id:mid,player_id:row.dataset.player,
     character_id:row.querySelector('.ban-char')?.value,ban_order:i+1
   })).filter(b=>b.character_id);
-  if(bans.length)await sb.from('match_bans').insert(bans);
+  if(bans.length){const{error}=await sb.from('match_bans').insert(bans);if(dbErr(error,'сохранение банов'))return;}
 
   // Picks
-  await sb.from('match_picks').delete().eq('match_id',mid);
+  {const{error}=await sb.from('match_picks').delete().eq('match_id',mid);if(dbErr(error,'очистка пиков'))return;}
   const picks=[...document.querySelectorAll('#picks-fp .pick-row, #picks-dbl .pick-row')].map((row,i)=>({
     match_id:mid,player_id:row.dataset.player,
     character_id:row.querySelector('.pr-char')?.value,
@@ -576,7 +602,7 @@ async function saveMatch(encId,num,p1Id,p2Id,fpId,existingId){
     is_fp:row.querySelector('.pr-fp')?.checked||false,
     is_double:row.querySelector('.pr-dbl')?.checked||false,
   })).filter(p=>p.character_id);
-  if(picks.length)await sb.from('match_picks').insert(picks);
+  if(picks.length){const{error}=await sb.from('match_picks').insert(picks);if(dbErr(error,'сохранение пиков'))return;}
 
   // Update encounter winner (by aggregate timer)
   const{data:allMs}=await sb.from('matches').select('*').eq('encounter_id',encId);
@@ -584,7 +610,8 @@ async function saveMatch(encId,num,p1Id,p2Id,fpId,existingId){
     let p1T=0,p2T=0;
     allMs.forEach(m=>{p1T+=m.player1_timer_sec||0;p2T+=m.player2_timer_sec||0;});
     const encWin=p1T<=p2T?p1Id:p2Id;
-    await sb.from('encounters').update({winner_id:encWin}).eq('id',encId);
+    const{error}=await sb.from('encounters').update({winner_id:encWin}).eq('id',encId);
+    if(dbErr(error,'обновление победителя встречи'))return;
   }
 
   toast('Матч сохранён!');
