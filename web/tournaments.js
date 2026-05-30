@@ -89,7 +89,6 @@ async function copyCosts(tourId){
   });
   toast(`Скопировано из «${srcTour?.name||srcId}»`);
 }
-}
 
 async function saveCosts(tourId){
   const charLevel={};
