@@ -24,14 +24,13 @@ async function pgCharacters(){
   await ensureSchema();
   const list=D.chars.map(c=>{
     if(c.id===_editChar)return charEditRow(c);
-    const elBadge=c.element&&ELEMENTS[c.element]
-      ?`<span style="font-size:11px;color:${ELEM_C[c.element]||'var(--sub)'}">${ELEMENTS[c.element]}</span>`:'';
     return`<div class="row-item">
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-        <span class="${c.rarity==='S'?'badge-s':'badge-a'}">${c.rarity}</span>
+        ${iconChar(c,32)}
+        ${iconRarity(c.rarity,18)}
         <span style="font-weight:600">${c.name}</span>
-        ${elBadge}
-        <span style="font-size:12px;color:var(--sub)">${ROLE_LBL[c.role]||c.role}</span>
+        ${iconElement(c.element,18)}
+        ${iconRole(c.role,18)}
       </div>
       <div style="display:flex;gap:8px">
         <button class="btn btn-g" style="font-size:13px;padding:4px 11px" onclick="startEditChar('${c.id}')">✎</button>

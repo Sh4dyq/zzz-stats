@@ -914,20 +914,29 @@ function setEngine(e){
 }
 
 // --- ZONES (fractions of image W/H; survive any resolution) ---
+// Defaults baked from a real user calibration (1920-wide shiyu.darte.gg draft).
+// Coords are fractions, so they hold across resolutions; fine-tune via Калибровка.
 const DEFAULT_ZONES={
-  p1_restarts:{x:0.165,y:0.030,w:0.052,h:0.030},
-  p2_restarts:{x:0.712,y:0.030,w:0.052,h:0.030},
-  left_name:  {x:0.240,y:0.090,w:0.180,h:0.040},
-  right_name: {x:0.578,y:0.090,w:0.180,h:0.040},
-  left_timer: {x:0.423,y:0.108,w:0.060,h:0.034},
-  right_timer:{x:0.524,y:0.108,w:0.060,h:0.034},
+  p1_restarts:{x:0.1753448275862069,y:0.032040621114051586,w:0.019816091954022987,h:0.032040621114051586},
+  p2_restarts:{x:0.7165977011494252,y:0.032040621114051586,w:0.02211494252873563,h:0.03408124222810318},
+  left_name:  {x:0.24459770114942528,y:0.09,w:0.09494252873563216,h:0.03591875777189682},
+  right_name: {x:0.6688045977011493,y:0.0879593788859484,w:0.08919540229885056,h:0.03795937888594841},
+  left_timer: {x:0.44713793103448274,y:0.108,w:0.019770114942528734,h:0.034},
+  right_timer:{x:0.5331954022988505,y:0.108,w:0.020919540229885056,h:0.034},
   // pick footers — TIGHT on the name + "Lv.60 Mx" TEXT only (NO amplifier icon:
-  // that gets its own zone + pHash in Этап 2). Mixing icon art into the OCR crop
-  // produces garbage. L/R groups, T1 row then T2 row.
-  L_T1_0:{x:0.110,y:0.694,w:0.082,h:0.054}, L_T1_1:{x:0.230,y:0.694,w:0.082,h:0.054}, L_T1_2:{x:0.350,y:0.694,w:0.082,h:0.054},
-  L_T2_0:{x:0.110,y:0.898,w:0.082,h:0.054}, L_T2_1:{x:0.230,y:0.898,w:0.082,h:0.054}, L_T2_2:{x:0.350,y:0.898,w:0.082,h:0.054},
-  R_T1_0:{x:0.530,y:0.694,w:0.082,h:0.054}, R_T1_1:{x:0.650,y:0.694,w:0.082,h:0.054}, R_T1_2:{x:0.770,y:0.694,w:0.082,h:0.054},
-  R_T2_0:{x:0.530,y:0.898,w:0.082,h:0.054}, R_T2_1:{x:0.650,y:0.898,w:0.082,h:0.054}, R_T2_2:{x:0.770,y:0.898,w:0.082,h:0.054}
+  // that gets its own zone + pHash in Этап 2). L/R groups, T1 row then T2 row.
+  L_T1_0:{x:0.1628735632183908,y:0.6715531677454325,w:0.052114942528735636,h:0.05195937888594841},
+  L_T1_1:{x:0.27827586206896554,y:0.6715531677454325,w:0.04981609195402299,h:0.04991875777189682},
+  L_T1_2:{x:0.39137931034482754,y:0.6715531677454325,w:0.04866666666666667,h:0.04787813665784523},
+  L_T2_0:{x:0.18356321839080458,y:0.8857562733156905,w:0.04981609195402299,h:0.05195937888594841},
+  L_T2_1:{x:0.2966666666666667,y:0.8877968944297421,w:0.050965517241379314,h:0.04991875777189682},
+  L_T2_2:{x:0.4097701149425287,y:0.8857562733156905,w:0.04981609195402299,h:0.04991875777189682},
+  R_T1_0:{x:0.5403448275862069,y:0.6735937888594841,w:0.05326436781609196,h:0.04991875777189682},
+  R_T1_1:{x:0.656896551724138,y:0.6695125466313809,w:0.0555632183908046,h:0.054},
+  R_T1_2:{x:0.7711494252873563,y:0.6695125466313809,w:0.04981609195402299,h:0.05195937888594841},
+  R_T2_0:{x:0.5254022988505748,y:0.883715652201639,w:0.04981609195402299,h:0.054},
+  R_T2_1:{x:0.6385057471264368,y:0.8877968944297421,w:0.052114942528735636,h:0.04991875777189682},
+  R_T2_2:{x:0.7504597701149426,y:0.8877968944297421,w:0.05326436781609196,h:0.04787813665784523}
 };
 function getZones(){
   try{const s=JSON.parse(localStorage.getItem('zzz_zones'));if(s)return {...structuredClone(DEFAULT_ZONES),...s};}catch(e){}
@@ -1025,6 +1034,55 @@ async function ocrZone(img,zoneKey,whitelist,psm){
   return txt;
 }
 
+// --- pHash icon engine (Этап 2 foundation) ---
+// aHash 16x16 = 256-bit perceptual hash, returned as 64-char hex.
+// Same-source icons (draft grid crops) compare with very small Hamming distance.
+function hashIcon(img,z){
+  const N=16;
+  const cv=document.createElement('canvas');cv.width=N;cv.height=N;
+  const ctx=cv.getContext('2d');
+  const sx=z.x*img.naturalWidth, sy=z.y*img.naturalHeight;
+  const sw=Math.max(1,z.w*img.naturalWidth), sh=Math.max(1,z.h*img.naturalHeight);
+  ctx.drawImage(img,sx,sy,sw,sh,0,0,N,N);
+  const d=ctx.getImageData(0,0,N,N).data;
+  const g=new Array(N*N); let sum=0;
+  for(let i=0,j=0;i<d.length;i+=4,j++){const v=0.299*d[i]+0.587*d[i+1]+0.114*d[i+2];g[j]=v;sum+=v;}
+  const mean=sum/g.length;
+  let hex='';
+  for(let i=0;i<g.length;i+=4){
+    let nib=0; for(let k=0;k<4;k++)if(g[i+k]>mean)nib|=(1<<(3-k));
+    hex+=nib.toString(16);
+  }
+  return hex;
+}
+function hamming(a,b){
+  if(!a||!b||a.length!==b.length)return 999;
+  let dist=0;
+  for(let i=0;i<a.length;i++){let x=parseInt(a[i],16)^parseInt(b[i],16);while(x){dist+=x&1;x>>=1;}}
+  return dist;
+}
+// refs: [{character_id, hash}], returns {character_id, dist} best match within threshold
+function matchIcon(hash,refs,maxDist){
+  let best=null,bd=999;
+  for(const r of refs){const d=hamming(hash,r.hash);if(d<bd){bd=d;best=r;}}
+  return (best&&bd<=(maxDist??40))?{character_id:best.character_id,dist:bd}:null;
+}
+// Detect a red ban frame: sample the border ring of the icon zone, count reddish pixels.
+function hasRedFrame(img,z){
+  const cv=document.createElement('canvas'),N=24;cv.width=N;cv.height=N;
+  const ctx=cv.getContext('2d');
+  ctx.drawImage(img,z.x*img.naturalWidth,z.y*img.naturalHeight,z.w*img.naturalWidth,z.h*img.naturalHeight,0,0,N,N);
+  const d=ctx.getImageData(0,0,N,N).data;
+  let red=0,tot=0;
+  const isBorder=(x,y)=>x<2||y<2||x>=N-2||y>=N-2;
+  for(let y=0;y<N;y++)for(let x=0;x<N;x++){
+    if(!isBorder(x,y))continue;
+    const i=(y*N+x)*4, r=d[i],g=d[i+1],b=d[i+2];
+    tot++; if(r>120&&r-g>50&&r-b>50)red++;
+  }
+  return tot? red/tot>0.30 : false;
+}
+
 // --- Parsers ---
 const W_NICK='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-';
 const W_NAME='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 .-';
@@ -1032,8 +1090,17 @@ const W_TIME='0123456789:';
 const W_DIG='0123456789';
 function cleanNick(s){return (s||'').replace(/\s+/g,' ').trim();}
 function parseTimer(s){
-  const m=(s||'').replace(/[^\d:]/g,'').match(/(\d{1,2}):(\d{2})/);
-  return m?`${+m[1]}:${m[2]}`:'';
+  s=s||'';
+  // 1) clean "M:SS" with a real colon
+  const m=s.match(/(\d{1,2}):(\d{2})/);
+  if(m)return `${+m[1]}:${m[2]}`;
+  // 2) colon dropped/misread → reconstruct from digits.
+  //    Draft timers are always 1-digit minutes + 2-digit seconds.
+  let d=s.replace(/\D/g,'');
+  if(d.length>=4)d=d[0]+d.slice(-2);      // drop spurious middle digit (misread colon)
+  if(d.length===3)return `${+d[0]}:${d.slice(1)}`;
+  if(d.length===2)return `0:${d}`;
+  return '';
 }
 function parseInt0(s){const m=(s||'').match(/\d+/);return m?+m[0]:0;}
 function parsePick(raw){

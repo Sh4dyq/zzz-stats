@@ -114,6 +114,7 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="web/icons.js"></script>
 <script>
 const SB_URL='https://zoavnckfbfiejxfjakue.supabase.co';
 const SB_KEY='sb_publishable_37RZBsmdp3O1i795EuEfeg_vFpdPTFZ';
@@ -132,7 +133,7 @@ const fSec=s=>{if(!s&&s!==0)return'—';return`${Math.floor(s/60)}:${String(s%60
 const avg=a=>a.length?Math.round(a.reduce((x,y)=>x+y,0)/a.length):null;
 const cid=s=>s.replace(/[^A-Za-z0-9]/g,'_');
 
-function pic(name,role){const r=ROLES[role]||{bg:'#1c1f2e',fg:S.sub};return`<span class="pic" style="background:${r.bg};color:${r.fg}">${name.slice(0,2).toUpperCase()}</span>`}
+function pic(name,role){const c=(S.characters||[]).find(x=>x.name===name)||{name,role};return iconChar(c,28);}
 
 async function loadAll(){
   document.getElementById('loading').style.display='block';
@@ -289,8 +290,8 @@ function renderChars(data){
     const c=item.char,isS=c.rarity==='S',id=cid(c.name);
     const nm=isS
       ?`<div style="display:flex;align-items:center;gap:6px;cursor:pointer" onclick="toggleV('${id}')">`+
-        `<span class="chev" id="chev-${id}">▶</span>${pic(c.name,c.role)}<span>${c.name}</span><span class="badge-s">S</span></div>`
-      :`<div style="display:flex;align-items:center;gap:6px">${pic(c.name,c.role)}<span>${c.name}</span><span class="badge-a">A</span></div>`;
+        `<span class="chev" id="chev-${id}">▶</span>${pic(c.name,c.role)}<span>${c.name}</span>${iconRarity(c.rarity,16)}${iconRole(c.role,16)}${iconElement(c.element,16)}</div>`
+      :`<div style="display:flex;align-items:center;gap:6px">${pic(c.name,c.role)}<span>${c.name}</span>${iconRarity(c.rarity,16)}${iconRole(c.role,16)}${iconElement(c.element,16)}</div>`;
     h+=`<tr><td class="nc">${nm}</td>${cellsHTML(item.agg,isAll)}</tr>`;
     if(isS)item.variants.forEach(v=>{
       h+=`<tr class="vrow" data-parent="${id}" style="display:none"><td class="nc"><span class="ms-tag">M${v.ms}</span> ${c.name}</td>${cellsHTML(v,isAll)}</tr>`;

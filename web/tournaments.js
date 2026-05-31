@@ -39,9 +39,9 @@ function renderCostsTable(tourId,tourName,existing){
       const ex=costMap[`${c.id}_${ms}`]||{};
       return`<td style="padding:6px 6px;text-align:center"><input class="ci-ms" data-c="${c.id}" data-m="${ms}" type="number" min="0" placeholder="—" value="${ex.cost??''}" style="width:65px;padding:3px 6px;font-size:13px;text-align:center"></td>`;
     }).join('');
-    const avatarPh=`<div style="width:32px;height:32px;border-radius:6px;background:var(--border);flex-shrink:0"></div>`;
-    const rarityPh=`<div style="width:20px;height:20px;border-radius:4px;background:var(--border);flex-shrink:0"></div>`;
-    const elemPh=`<div style="width:20px;height:20px;border-radius:50%;background:var(--border);flex-shrink:0"></div>`;
+    const avatarPh=iconChar(c,32);
+    const rarityPh=iconRarity(c.rarity,20);
+    const elemPh=iconElement(c.element,20);
     return`<tr style="border-top:1px solid var(--border)">
       <td style="padding:8px 10px;white-space:nowrap">
         <div style="display:flex;align-items:center;gap:8px">
