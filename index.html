@@ -3,6 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>ZZZ Tournament Stats</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -50,6 +53,8 @@
   .vrow td.nc{background:#0a0c12}
   .gb{border-left:2px solid #2a2d3e!important}
   tbody td.gb{font-weight:600;color:var(--text)}
+  td.ic,th.ic{text-align:center}
+  td.ic img{vertical-align:middle}
   @keyframes spin{to{transform:rotate(360deg)}}
 </style>
 </head>
@@ -82,7 +87,7 @@
     <div class="tbl-wrap">
       <table>
         <thead id="chars-head"></thead>
-        <tbody id="chars-body"><tr><td class="empty" colspan="30">Нет данных</td></tr></tbody>
+        <tbody id="chars-body"><tr><td class="empty" colspan="40">Нет данных</td></tr></tbody>
       </table>
     </div>
   </div>
@@ -92,6 +97,7 @@
     <div style="display:flex;gap:2px;border:1px solid var(--border);border-radius:6px;overflow:hidden;width:fit-content;margin-bottom:14px">
       <button id="seg-v" class="seg-btn on" onclick="setView('v')">По встречам (Bo2)</button>
       <button id="seg-m" class="seg-btn" onclick="setView('m')">По матчам</button>
+      <button id="seg-r" class="seg-btn" onclick="setView('r')">Ростеры</button>
     </div>
     <div id="players-area" class="tbl-wrap">
       <table><tbody><tr><td class="empty" colspan="12">Нет данных</td></tr></tbody></table>
@@ -122,7 +128,7 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="web/icons.js"></script>
+<script>document.write('<script src="web/icons.js?v='+Date.now()+'"><\/script>');</script>
 <script>
 const SB_URL='https://zoavnckfbfiejxfjakue.supabase.co';
 const SB_KEY='sb_publishable_37RZBsmdp3O1i795EuEfeg_vFpdPTFZ';
@@ -185,6 +191,10 @@ async function loadAll(){
     (cs||[]).forEach(c=>{if(!S.costs[c.character_id])S.costs[c.character_id]={};S.costs[c.character_id][c.mindscape]=c;});
     (rs||[]).forEach(r=>{if(!S.rosters[r.player_id])S.rosters[r.player_id]=[];S.rosters[r.player_id].push(r);});
   }
+
+  // все ростеры по всем турнирам — для вкладки «Ростеры» (среднее по турнирам)
+  const{data:allRs}=await sb.from('player_rosters').select('*');
+  S.rostersRaw=allRs||[];
 
   document.getElementById('loading').style.display='none';
   renderAll();
@@ -290,7 +300,10 @@ function renderChars(data){
   const sco=isAll?'':`<th class="gb" onclick="sortC('sc')" title="Стоимость сигны">Кост</th>`;
   const TS='Всего',TW='Победы',TD='Ничьи',TL='Поражения',TWR='Винрейт (ничья = ½)',TPT='Доля от всех матчей';
   document.getElementById('chars-head').innerHTML=`<tr>
-    <th rowspan="2" class="nc" onclick="sortC('name')">Персонаж</th>${co}
+    <th rowspan="2" class="nc" onclick="sortC('name')">Имя</th>
+    <th rowspan="2" class="ic" onclick="sortC('rarity')" title="Редкость">Редк.</th>
+    <th rowspan="2" class="ic" onclick="sortC('role')" title="Роль">Роль</th>
+    <th rowspan="2" class="ic" onclick="sortC('element')" title="Атрибут">Атр.</th>${co}
     <th colspan="6" class="th-g gb">Пики</th><th colspan="5" class="th-g gb">Фп</th><th colspan="5" class="th-g gb">Дабл</th>
     <th colspan="2" class="th-g gb">Баны</th><th colspan="2" class="th-g gb">Пики+баны</th><th colspan="2" class="th-g gb">В ростере</th>
     <th colspan="${sig}" class="th-g gb" id="sg">Со своей сигной</th>
@@ -302,12 +315,13 @@ function renderChars(data){
     ${sco}<th class="${isAll?'gb':''}" onclick="sortC('sp')" title="${TS}">Σ</th><th onclick="sortC('sw')" title="${TW}">W</th><th title="${TD}">D</th><th onclick="sortC('sl')" title="${TL}">L</th><th onclick="sortC('swr')" title="${TWR}">WR%</th><th onclick="sortC('spt')" title="${TPT}">%T</th>
   </tr>`;
 
-  if(!data.length){document.getElementById('chars-body').innerHTML=`<tr><td class="empty" colspan="30">Нет данных для этого турнира</td></tr>`;return;}
+  if(!data.length){document.getElementById('chars-body').innerHTML=`<tr><td class="empty" colspan="40">Нет данных для этого турнира</td></tr>`;return;}
 
   const k=S.cSort.k,asc=S.cSort.asc;
+  const charKeys={name:'name',rarity:'rarity',role:'role',element:'element'};
   data.sort((a,b)=>{
-    let va=k==='name'?a.char.name:(typeof a.agg[k]==='number'?a.agg[k]:parseFloat(a.agg[k])||0);
-    let vb=k==='name'?b.char.name:(typeof b.agg[k]==='number'?b.agg[k]:parseFloat(b.agg[k])||0);
+    let va=charKeys[k]?(a.char[charKeys[k]]||''):(typeof a.agg[k]==='number'?a.agg[k]:parseFloat(a.agg[k])||0);
+    let vb=charKeys[k]?(b.char[charKeys[k]]||''):(typeof b.agg[k]==='number'?b.agg[k]:parseFloat(b.agg[k])||0);
     return typeof va==='string'?(asc?va.localeCompare(vb):vb.localeCompare(va)):(asc?va-vb:vb-va);
   });
 
@@ -316,11 +330,12 @@ function renderChars(data){
     const c=item.char,isS=c.rarity==='S',id=cid(c.name);
     const nm=isS
       ?`<div style="display:flex;align-items:center;gap:6px;cursor:pointer" onclick="toggleV('${id}')">`+
-        `<span class="chev" id="chev-${id}">▶</span>${pic(c.name,c.role)}<span>${c.name}</span>${iconRarity(c.rarity,16)}${iconRole(c.role,16)}${iconElement(c.element,16)}</div>`
-      :`<div style="display:flex;align-items:center;gap:6px">${pic(c.name,c.role)}<span>${c.name}</span>${iconRarity(c.rarity,16)}${iconRole(c.role,16)}${iconElement(c.element,16)}</div>`;
-    h+=`<tr><td class="nc">${nm}</td>${cellsHTML(item.agg,isAll)}</tr>`;
+        `<span class="chev" id="chev-${id}">▶</span><span>${c.name}</span></div>`
+      :`<div style="display:flex;align-items:center;gap:6px"><span>${c.name}</span></div>`;
+    const idCols=`<td class="ic">${iconRarity(c.rarity,18)}</td><td class="ic">${iconRole(c.role,18)}</td><td class="ic">${iconElement(c.element,18)}</td>`;
+    h+=`<tr><td class="nc">${nm}</td>${idCols}${cellsHTML(item.agg,isAll)}</tr>`;
     if(isS)item.variants.forEach(v=>{
-      h+=`<tr class="vrow" data-parent="${id}" style="display:none"><td class="nc"><span class="ms-tag">M${v.ms}</span> ${c.name}</td>${cellsHTML(v,isAll)}</tr>`;
+      h+=`<tr class="vrow" data-parent="${id}" style="display:none"><td class="nc"><span class="ms-tag">M${v.ms}</span> ${c.name}</td><td></td><td></td><td></td>${cellsHTML(v,isAll)}</tr>`;
     });
   });
   document.getElementById('chars-body').innerHTML=h;
@@ -373,8 +388,7 @@ function rosterCols(pid){
 }
 
 function renderPV(vStats,isAll){
-  const rcols=isAll?'':'<th>Атак</th><th>Стан</th><th>Разр</th><th>Сап/Деф</th><th>Аном</th>';
-  const head=`<thead><tr><th class="nc">Ник</th><th onclick="sortP(1)">Σ встреч</th><th onclick="sortP(2)">W</th><th onclick="sortP(3)">L</th><th onclick="sortP(4)">WR%</th><th onclick="sortP(5)">AVG таймер</th><th onclick="sortP(6)">Возраст</th><th onclick="sortP(7)">Призовые</th>${rcols}</tr></thead>`;
+  const head=`<thead><tr><th class="nc">Ник</th><th onclick="sortP(1)">Σ встреч</th><th onclick="sortP(2)">W</th><th onclick="sortP(3)">L</th><th onclick="sortP(4)">WR%</th><th onclick="sortP(5)">AVG таймер</th><th onclick="sortP(6)">Возраст</th><th onclick="sortP(7)">Призовые</th></tr></thead>`;
   const activePl=S.players.filter(p=>vStats[p.id]);
   if(!activePl.length){document.getElementById('players-area').innerHTML=`<table><tbody><tr><td class="empty" colspan="8">Нет данных</td></tr></tbody></table>`;return;}
   const rows=activePl.map(p=>{
@@ -382,14 +396,13 @@ function renderPV(vStats,isAll){
     const wrPct=wr(s.w,0,s.v);
     const avgT=fSec(avg(s.timers));
     const pr=S.playerMap[p.id]?.prize;
-    return`<tr><td class="nc"><div style="display:flex;align-items:center;gap:6px">${pic(p.nickname,'')}<span>${p.nickname}</span></div></td><td>${s.v}</td><td>${s.w}</td><td>${s.l}</td><td class="${wc(wrPct)}">${f1(wrPct)}</td><td>${avgT}</td><td>${p.age??'—'}</td><td>${pr!=null?pr+'$':'—'}</td>${isAll?'':rosterCols(p.id)}</tr>`;
+    return`<tr><td class="nc"><div style="display:flex;align-items:center;gap:6px">${pic(p.nickname,'')}<span>${p.nickname}</span></div></td><td>${s.v}</td><td>${s.w}</td><td>${s.l}</td><td class="${wc(wrPct)}">${f1(wrPct)}</td><td>${avgT}</td><td>${p.age??'—'}</td><td>${pr!=null?pr+'$':'—'}</td></tr>`;
   });
   document.getElementById('players-area').innerHTML=`<table>${head}<tbody>${rows.join('')}</tbody></table>`;
 }
 
 function renderPM(mStats,isAll){
-  const rcols=isAll?'':'<th>Атак</th><th>Стан</th><th>Разр</th><th>Сап/Деф</th><th>Аном</th>';
-  const head=`<thead><tr><th class="nc">Ник</th><th onclick="sortP(1)">Σ матч</th><th onclick="sortP(2)">W</th><th>D</th><th onclick="sortP(4)">L</th><th onclick="sortP(5)">WR%</th><th onclick="sortP(6)">WR фп%</th><th onclick="sortP(7)">WR дабл%</th><th onclick="sortP(8)">Σ рест</th><th onclick="sortP(9)">AVG рест</th><th onclick="sortP(10)">AVG таймер</th><th onclick="sortP(11)">Возраст</th><th onclick="sortP(12)">Призовые</th>${rcols}</tr></thead>`;
+  const head=`<thead><tr><th class="nc">Ник</th><th onclick="sortP(1)">Σ матч</th><th onclick="sortP(2)">W</th><th>D</th><th onclick="sortP(4)">L</th><th onclick="sortP(5)">WR%</th><th onclick="sortP(6)">WR фп%</th><th onclick="sortP(7)">WR дабл%</th><th onclick="sortP(8)">Σ рест</th><th onclick="sortP(9)">AVG рест</th><th onclick="sortP(10)">AVG таймер</th><th onclick="sortP(11)">Возраст</th><th onclick="sortP(12)">Призовые</th></tr></thead>`;
   const activePl=S.players.filter(p=>mStats[p.id]);
   if(!activePl.length){document.getElementById('players-area').innerHTML=`<table><tbody><tr><td class="empty" colspan="13">Нет данных</td></tr></tbody></table>`;return;}
   const rows=activePl.map(p=>{
@@ -397,7 +410,7 @@ function renderPM(mStats,isAll){
     const wrPct=wr(s.w,s.d,s.m),wrfp=wr(s.fpw,s.fpd,s.fpm),wrdbl=wr(s.dw2,s.dd,s.dm);
     const allT=[...s.wtimers,...s.ltimers];
     const pr=S.playerMap[p.id]?.prize;
-    return`<tr><td class="nc"><div style="display:flex;align-items:center;gap:6px">${pic(p.nickname,'')}<span>${p.nickname}</span></div></td><td>${s.m}</td><td>${s.w}</td><td class="m">${s.d}</td><td>${s.l}</td><td class="${wc(wrPct)}">${f1(wrPct)}</td><td class="${wc(wrfp)}">${f1(wrfp)}</td><td class="${wc(wrdbl)}">${f1(wrdbl)}</td><td>${s.rests}</td><td>${s.m?(s.rests/s.m).toFixed(2):'—'}</td><td>${fSec(avg(allT))}</td><td>${p.age??'—'}</td><td>${pr!=null?pr+'$':'—'}</td>${isAll?'':rosterCols(p.id)}</tr>`;
+    return`<tr><td class="nc"><div style="display:flex;align-items:center;gap:6px">${pic(p.nickname,'')}<span>${p.nickname}</span></div></td><td>${s.m}</td><td>${s.w}</td><td class="m">${s.d}</td><td>${s.l}</td><td class="${wc(wrPct)}">${f1(wrPct)}</td><td class="${wc(wrfp)}">${f1(wrfp)}</td><td class="${wc(wrdbl)}">${f1(wrdbl)}</td><td>${s.rests}</td><td>${s.m?(s.rests/s.m).toFixed(2):'—'}</td><td>${fSec(avg(allT))}</td><td>${p.age??'—'}</td><td>${pr!=null?pr+'$':'—'}</td></tr>`;
   });
   document.getElementById('players-area').innerHTML=`<table>${head}<tbody>${rows.join('')}</tbody></table>`;
 }
@@ -406,9 +419,56 @@ function setView(v){
   S.view=v;
   document.getElementById('seg-v').className='seg-btn'+(v==='v'?' on':'');
   document.getElementById('seg-m').className='seg-btn'+(v==='m'?' on':'');
-  const{mStats,vStats}=computePlayers();
+  document.getElementById('seg-r').className='seg-btn'+(v==='r'?' on':'');
   const isAll=S.tour===ALL;
+  if(v==='r'){renderRosters(isAll);return;}
+  const{mStats,vStats}=computePlayers();
   if(v==='v')renderPV(vStats,isAll);else renderPM(mStats,isAll);
+}
+
+// Ростеры: для конкретного турнира — счётчики ролей; для «Все турниры» —
+// среднее число персонажей каждой роли по турнирам, где игрок присутствовал.
+const RBUCK={atk:'atk',stun:'stun',rupt:'rupt',sup:'sd',def:'sd',ano:'ano'};
+function computeRosters(isAll){
+  const raw=S.rostersRaw||[];
+  const map={}; // map[pid][tid] = {atk,stun,rupt,sd,ano}
+  raw.forEach(r=>{
+    if(!isAll && r.tournament_id!==S.tour)return;
+    const c=S.charMap[r.character_id];if(!c)return;
+    const b=RBUCK[c.role];if(!b)return;
+    (map[r.player_id]=map[r.player_id]||{});
+    (map[r.player_id][r.tournament_id]=map[r.player_id][r.tournament_id]||{atk:0,stun:0,rupt:0,sd:0,ano:0});
+    map[r.player_id][r.tournament_id][b]++;
+  });
+  const out={};
+  Object.entries(map).forEach(([pid,tours])=>{
+    const tids=Object.keys(tours);
+    const agg={atk:0,stun:0,rupt:0,sd:0,ano:0};
+    tids.forEach(tid=>['atk','stun','rupt','sd','ano'].forEach(k=>agg[k]+=tours[tid][k]));
+    if(isAll){const n=tids.length||1;['atk','stun','rupt','sd','ano'].forEach(k=>agg[k]=agg[k]/n);}
+    out[pid]={agg,n:tids.length};
+  });
+  return out;
+}
+function renderRosters(isAll){
+  const data=computeRosters(isAll);
+  const fmt=v=>isAll?v.toFixed(1):String(v);
+  const head=`<thead><tr><th class="nc">Ник</th>`+
+    `<th class="ic" title="Атака">${iconRole('atk',18)}</th>`+
+    `<th class="ic" title="Стан">${iconRole('stun',18)}</th>`+
+    `<th class="ic" title="Разрыв">${iconRole('rupt',18)}</th>`+
+    `<th class="ic" title="Саппорт / Защита">${iconRole('sup',18)}${iconRole('def',18)}</th>`+
+    `<th class="ic" title="Аномалия">${iconRole('ano',18)}</th>`+
+    `${isAll?'<th class="ic" title="Турниров с ростером">Σ турн.</th>':''}</tr></thead>`;
+  const activePl=S.players.filter(p=>data[p.id]);
+  if(!activePl.length){document.getElementById('players-area').innerHTML=`<table>${head}<tbody><tr><td class="empty" colspan="7">Нет данных по ростерам</td></tr></tbody></table>`;return;}
+  const rows=activePl.map(p=>{
+    const a=data[p.id].agg;
+    return`<tr><td class="nc"><span>${p.nickname}</span></td>`+
+      `<td class="ic">${fmt(a.atk)}</td><td class="ic">${fmt(a.stun)}</td><td class="ic">${fmt(a.rupt)}</td><td class="ic">${fmt(a.sd)}</td><td class="ic">${fmt(a.ano)}</td>`+
+      `${isAll?`<td class="ic">${data[p.id].n}</td>`:''}</tr>`;
+  });
+  document.getElementById('players-area').innerHTML=`<table>${head}<tbody>${rows.join('')}</tbody></table>`;
 }
 
 function sortP(idx){/* basic sort - reload with sorted data */}
@@ -446,8 +506,8 @@ function renderExt(d){
 function renderAll(){
   const isAll=S.tour===ALL;
   const cd=computeChars();renderChars(cd);
-  const{mStats,vStats}=computePlayers();
-  if(S.view==='v')renderPV(vStats,isAll);else renderPM(mStats,isAll);
+  if(S.view==='r'){renderRosters(isAll);}
+  else{const{mStats,vStats}=computePlayers();if(S.view==='v')renderPV(vStats,isAll);else renderPM(mStats,isAll);}
   renderExt(computeExt());
   const active=document.querySelector('.tab-btn.active')?.dataset.tab||'chars';
   document.querySelectorAll('.tab-pane').forEach(t=>t.style.display='none');
@@ -459,7 +519,7 @@ async function init(){
   const{data:tours}=await sb.from('tournaments').select('*').order('created_at',{ascending:false});
   const sel=document.getElementById('tour-sel');
   sel.innerHTML=`<option value="${ALL}">Все турниры</option>`+(tours||[]).map(t=>`<option value="${t.id}">${t.name}</option>`).join('');
-  if(tours&&tours.length){sel.value=tours[0].id;S.tour=tours[0].id;}
+  sel.value=ALL;S.tour=ALL;
   sel.onchange=()=>{S.tour=sel.value;loadAll();};
   loadAll();
 }

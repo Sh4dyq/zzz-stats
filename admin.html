@@ -3,6 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>ZZZ Stats — Управление</title>
 <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdn.tailwindcss.com"></script>
@@ -105,13 +108,12 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="web/icons.js"></script>
-<script src="web/core.js"></script>
-<script src="web/characters.js"></script>
-<script src="web/signatures.js"></script>
-<script src="web/players.js"></script>
-<script src="web/tournaments.js"></script>
-<script src="web/matches.js"></script>
+<script>
+// cache-busting: всегда грузим свежие web/*.js (без необходимости хард-рефреша).
+// document.write сохраняет порядок и синхронность загрузки.
+['web/icons.js','web/core.js','web/characters.js','web/signatures.js','web/players.js','web/tournaments.js','web/matches.js']
+  .forEach(function(s){document.write('<script src="'+s+'?v='+Date.now()+'"><\/script>');});
+</script>
 <script>
 function enableDevPreview(){
   window.DEV_PREVIEW=true;
