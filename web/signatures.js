@@ -1,10 +1,40 @@
 // --- SIGNATURES ---
+async function ensureSigSchema(){
+  if(D.hasSigImg!==undefined)return;
+  const{error}=await sb.from('signatures').select('image_url').limit(1);
+  D.hasSigImg=!error; // колонка image_url (Этап B)
+}
+
+// Мини-картинка амплификатора (image_url) либо пустой слот.
+function sigImg(s,sz){
+  sz=sz||28;
+  if(s&&s.image_url)return`<img src="${escapeHtml(s.image_url)}" alt="${escapeHtml(s.name||'')}" width="${sz}" height="${sz}" loading="lazy" style="width:${sz}px;height:${sz}px;object-fit:cover;border-radius:6px;flex-shrink:0;vertical-align:middle">`;
+  return`<span style="display:inline-block;width:${sz}px;height:${sz}px;border-radius:6px;background:#1c1f2e;flex-shrink:0"></span>`;
+}
+
+// Загрузка картинки амплификатора в Storage и запись url. Путь: amplifiers/{id}.webp.
+async function uploadSigImg(id,input){
+  const f=input.files&&input.files[0];if(!f)return;
+  const url=await uploadStorageImage(f,`amplifiers/${id}.webp`);
+  input.value='';
+  if(!url)return;
+  const{error}=await sb.from('signatures').update({image_url:url}).eq('id',id);
+  if(dbErr(error,'сохранение картинки амплификатора'))return;
+  await refreshData();toast('Картинка обновлена');pgSignatures();
+}
+
 async function pgSignatures(){
+  await ensureSigSchema();
   const list=D.sigs.map(s=>{
     const c=D.chars.find(x=>x.id===s.character_id);
+    const thumb=D.hasSigImg?`<label title="Загрузить картинку амплификатора" style="cursor:pointer;display:inline-flex">
+          ${sigImg(s,28)}
+          <input type="file" accept="image/*" style="display:none" onchange="uploadSigImg('${s.id}',this)">
+        </label>`:'';
     return`<div class="row-item" id="sig-row-${s.id}">
       <div>
         <div style="display:flex;align-items:center;gap:8px">
+          ${thumb}
           <div style="flex:1"><span style="font-weight:600">${s.name}</span><span style="font-size:12px;color:var(--sub);margin-left:8px">→ ${c?.name||'?'}</span></div>
         </div>
       </div>

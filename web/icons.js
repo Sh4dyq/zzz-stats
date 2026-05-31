@@ -62,8 +62,14 @@ function iconChar(c,size){
   // Никаких 2-буквенных надписей.
   const fb=`<span class="pic" style="display:inline-block;`+
     `width:${s}px;height:${s}px;border-radius:6px;background:#1c1f2e;flex-shrink:0"></span>`;
-  if(c&&c.icon_url){
-    return `<img src="${_icEsc(c.icon_url)}" alt="${_icEsc(name)}" width="${s}" height="${s}" loading="lazy" `+
+  // Одна картинка на персонажа. Источник:
+  //  1) icon_url/portrait_url из БД (если задан вручную/через Storage),
+  //  2) иначе статикой из репо по имени: web/icons/characters/<name>.webp (файлы названы как name в БД).
+  // Для иконок картинка просто уменьшается через CSS. Нет файла → onerror → пустой слот.
+  const url=(c&&(c.icon_url||c.portrait_url))||
+    (name?IC_BASE+'characters/'+encodeURIComponent(name)+IC_EXT:'');
+  if(url){
+    return `<img src="${_icEsc(url)}" alt="${_icEsc(name)}" width="${s}" height="${s}" loading="lazy" `+
       `style="width:${s}px;height:${s}px;object-fit:cover;border-radius:6px;flex-shrink:0;vertical-align:middle" `+
       `data-fb="${_icEsc(fb)}" onerror="this.outerHTML=this.getAttribute('data-fb')">`;
   }

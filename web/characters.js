@@ -8,6 +8,20 @@ async function ensureSchema(){
   if(D.hasElement!==undefined)return;
   const{error}=await sb.from('characters').select('element').limit(1);
   D.hasElement=!error;
+  const{error:e2}=await sb.from('characters').select('portrait_url,icon_url').limit(1);
+  D.hasImages=!e2; // колонки portrait_url/icon_url (Этап B)
+}
+
+// Загрузка одной картинки персонажа в Storage и запись url в БД.
+// Одно изображение служит и иконкой (уменьшается через CSS), и портретом. Путь: characters/{id}.webp.
+async function uploadCharImg(id,input){
+  const f=input.files&&input.files[0];if(!f)return;
+  const url=await uploadStorageImage(f,`characters/${id}.webp`);
+  input.value='';
+  if(!url)return;
+  const{error}=await sb.from('characters').update({icon_url:url}).eq('id',id);
+  if(dbErr(error,'сохранение картинки персонажа'))return;
+  await refreshData();toast('Картинка обновлена');pgCharacters();
 }
 function charPayload(o){
   const p={name:o.name,rarity:o.rarity,role:o.role};
@@ -24,8 +38,13 @@ async function pgCharacters(){
   await ensureSchema();
   const list=D.chars.map(c=>{
     if(c.id===_editChar)return charEditRow(c);
+    const thumb=D.hasImages?`<label title="Загрузить картинку персонажа" style="cursor:pointer;display:inline-flex">
+        ${iconChar(c,28)}
+        <input type="file" accept="image/*" style="display:none" onchange="uploadCharImg('${c.id}',this)">
+      </label>`:'';
     return`<div class="row-item">
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        ${thumb}
         ${iconRarity(c.rarity,18)}
         <span style="font-weight:600">${c.name}</span>
         ${iconElement(c.element,18)}

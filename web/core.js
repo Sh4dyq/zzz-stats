@@ -79,6 +79,16 @@ function dbErr(error,context){
   }
   return false;
 }
+// Загрузка картинки в Supabase Storage (бакет icons), upsert. Возвращает public URL
+// с cache-busting ?v=… (имя файла фиксированное, поэтому без версии браузер кэширует старое).
+// Требует логина (RLS на storage.objects); у dev-превью записи нет.
+async function uploadStorageImage(file,path){
+  const{error}=await sb.storage.from('icons').upload(path,file,{upsert:true,contentType:file.type||'image/webp'});
+  if(dbErr(error,'загрузка изображения'))return null;
+  const{data}=sb.storage.from('icons').getPublicUrl(path);
+  return data.publicUrl+'?v='+Date.now();
+}
+
 function sel(id,arr,valF,labelF,blank=''){
   return`<select id="${id}"><option value="">${blank||'— выбери —'}</option>${arr.map(x=>`<option value="${valF(x)}">${labelF(x)}</option>`).join('')}</select>`;
 }
