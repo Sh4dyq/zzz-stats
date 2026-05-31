@@ -756,6 +756,9 @@ async function saveData(){
       await sb.from('encounters').update({winner_id:encWin}).eq('id',encId);
     }
 
+    // Самообучение pHash: запоминаем иконки подтверждённых банов как эталоны.
+    await learnBanIcons();
+
     status.className='alert-ok';
     status.textContent='✓ Матч сохранён! Готово к следующему скриншоту.';
     // Reset upload for next screenshot
@@ -805,8 +808,17 @@ const DEFAULT_ZONES={
   R_T1_2:{x:0.7711494252873563,y:0.6695125466313809,w:0.04981609195402299,h:0.05195937888594841},
   R_T2_0:{x:0.5254022988505748,y:0.883715652201639,w:0.04981609195402299,h:0.054},
   R_T2_1:{x:0.6385057471264368,y:0.8877968944297421,w:0.052114942528735636,h:0.04991875777189682},
-  R_T2_2:{x:0.7504597701149426,y:0.8877968944297421,w:0.05326436781609196,h:0.04787813665784523}
+  R_T2_2:{x:0.7504597701149426,y:0.8877968944297421,w:0.05326436781609196,h:0.04787813665784523},
+  // ban icons in the upper draft grid (Этап 2, pHash). ПЛЕЙСХОЛДЕРНЫЕ координаты —
+  // откалибруйте под реальную сетку через «⚙ Калибровка зон». left=1,4,13; right=2,3,14.
+  L_BAN_0:{x:0.300,y:0.250,w:0.050,h:0.090},
+  L_BAN_1:{x:0.360,y:0.250,w:0.050,h:0.090},
+  L_BAN_2:{x:0.420,y:0.250,w:0.050,h:0.090},
+  R_BAN_0:{x:0.530,y:0.250,w:0.050,h:0.090},
+  R_BAN_1:{x:0.590,y:0.250,w:0.050,h:0.090},
+  R_BAN_2:{x:0.650,y:0.250,w:0.050,h:0.090}
 };
+const BAN_ZONE_KEYS={left:['L_BAN_0','L_BAN_1','L_BAN_2'],right:['R_BAN_0','R_BAN_1','R_BAN_2']};
 function getZones(){
   try{const s=JSON.parse(localStorage.getItem('zzz_zones'));if(s)return {...structuredClone(DEFAULT_ZONES),...s};}catch(e){}
   return structuredClone(DEFAULT_ZONES);
@@ -984,6 +996,51 @@ function parsePick(raw){
   return {name,mindscape:ms};
 }
 
+// Эталоны иконок банов из Supabase (растущая база, пополняется из подтверждений).
+// Таблица icon_hashes может ещё не существовать → возвращаем [] без падения.
+async function loadBanRefs(){
+  try{
+    const{data,error}=await sb.from('icon_hashes').select('character_id,hash').eq('kind','ban');
+    if(error)return[];
+    return (data||[]).filter(r=>r.character_id&&r.hash);
+  }catch(e){return[];}
+}
+
+// Распознать баны по pHash (имена для совместимости с renderBanGroup/JSON-контрактом).
+function recognizeBans(img,refs){
+  const out={left:[],right:[]};
+  if(!refs.length)return out;             // база эталонов пуста — баны проставит пользователь
+  const Z=getZones();
+  for(const side of['left','right']){
+    for(const k of BAN_ZONE_KEYS[side]){
+      const z=Z[k];
+      if(!z){out[side].push('');continue;}
+      const m=matchIcon(hashIcon(img,z),refs,12);   // один источник → малый порог Хэмминга
+      const c=m&&dbChars.find(x=>x.id===m.character_id);
+      out[side].push(c?c.name:'');
+    }
+  }
+  return out;
+}
+
+// Самообучение: хэшируем иконки подтверждённых банов из текущего скрина и
+// дописываем в icon_hashes (kind='ban'). Best-effort: при отсутствии таблицы/картинки молча выходим.
+async function learnBanIcons(){
+  if(!fullImg||!fullImg.naturalWidth)return;
+  const Z=getZones(), rows=[];
+  for(const side of['left','right']){
+    BAN_ZONE_KEYS[side].forEach((k,i)=>{
+      const charId=gBan(side,i), z=Z[k];
+      if(charId&&z)rows.push({character_id:charId,kind:'ban',hash:hashIcon(fullImg,z)});
+    });
+  }
+  if(!rows.length)return;
+  try{
+    const{error}=await sb.from('icon_hashes').insert(rows);
+    if(error)console.warn('learnBanIcons:',error.message);
+  }catch(e){console.warn('learnBanIcons:',e);}
+}
+
 // --- Orchestrator: returns the object consumed by renderResults/saveData ---
 async function runLocalAnalysis(progress){
   const img=fullImg;
@@ -1009,10 +1066,13 @@ async function runLocalAnalysis(progress){
     }
   }
 
+  progress&&progress('Распознаю баны (pHash)...');
+  const bans=recognizeBans(img,await loadBanRefs());
+
   return {
     left_player,right_player,left_timer,right_timer,left_restarts,right_restarts,
     left_picks:picks.left,right_picks:picks.right,
-    left_bans:[],right_bans:[]   // Этап 2: pHash icon matching
+    left_bans:bans.left,right_bans:bans.right
   };
 }
 
