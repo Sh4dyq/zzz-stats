@@ -58,10 +58,10 @@ function iconElement(element,size){
 function iconChar(c,size){
   const s=size||32;
   const name=(c&&c.name)||'';
-  const r=IC_ROLE_C[c&&c.role]||{bg:'#1c1f2e',fg:'#9aa3b2'};
-  const fb=`<span class="pic" style="display:inline-flex;align-items:center;justify-content:center;`+
-    `width:${s}px;height:${s}px;border-radius:6px;font-size:${Math.round(s*0.4)}px;`+
-    `background:${r.bg};color:${r.fg};flex-shrink:0">${_icEsc(name.slice(0,2).toUpperCase())}</span>`;
+  // fallback — нейтральный пустой слот под мини-фото (реальное фото подставится на Этапе B).
+  // Никаких 2-буквенных надписей.
+  const fb=`<span class="pic" style="display:inline-block;`+
+    `width:${s}px;height:${s}px;border-radius:6px;background:#1c1f2e;flex-shrink:0"></span>`;
   if(c&&c.icon_url){
     return `<img src="${_icEsc(c.icon_url)}" alt="${_icEsc(name)}" width="${s}" height="${s}" loading="lazy" `+
       `style="width:${s}px;height:${s}px;object-fit:cover;border-radius:6px;flex-shrink:0;vertical-align:middle" `+

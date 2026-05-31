@@ -23,7 +23,7 @@
   .tab-btn.active{color:var(--text);border-bottom-color:var(--accent)}
   .tbl-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:8px}
   table{border-collapse:collapse;font-size:12px;white-space:nowrap;width:100%;font-family:'JetBrains Mono',monospace}
-  th,td{padding:5px 10px;border:1px solid var(--border);text-align:right}
+  th,td{padding:5px 10px;border:1px solid var(--border);text-align:center}
   th{background:#0b0d14;font-size:11px;font-weight:500;color:var(--sub);cursor:pointer;user-select:none;font-family:'Rajdhani',sans-serif;letter-spacing:.04em}
   th:hover{color:var(--text);background:#12141d}
   .th-g{text-align:center!important;background:#09090f!important;color:var(--text)!important;font-size:11px;border-bottom:1px solid #2a2d3e!important}
@@ -33,8 +33,7 @@
   .vrow{background:#0a0c12}.vrow td.nc{color:var(--sub);font-weight:400;padding-left:22px;font-size:12px}
   .seg-btn{border:none;background:none;padding:5px 14px;font-size:13px;font-family:'Rajdhani',sans-serif;font-weight:500;color:var(--sub);cursor:pointer;border-radius:4px;transition:.15s}
   .seg-btn.on{background:#1c1f2e;color:var(--text)}
-  .chev{font-size:10px;color:var(--sub);transition:transform .15s;display:inline-block}
-  .chev.open{transform:rotate(90deg)}
+  .chev{font-size:8px;color:#3a3f52;display:inline-block;margin-left:4px}
   select,input[type=text],input[type=number]{background:#0f1118;border:1px solid var(--border);color:var(--text);border-radius:5px;padding:5px 10px;font-family:'Rajdhani',sans-serif;font-size:14px}
   select{cursor:pointer}
   .pic{width:22px;height:22px;border-radius:5px;display:inline-flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;flex-shrink:0;font-family:'Rajdhani',sans-serif}
@@ -328,10 +327,11 @@ function renderChars(data){
   let h='';
   data.forEach(item=>{
     const c=item.char,isS=c.rarity==='S',id=cid(c.name);
+    const photo=iconChar(c,24);
     const nm=isS
       ?`<div style="display:flex;align-items:center;gap:6px;cursor:pointer" onclick="toggleV('${id}')">`+
-        `<span class="chev" id="chev-${id}">▶</span><span>${c.name}</span></div>`
-      :`<div style="display:flex;align-items:center;gap:6px"><span>${c.name}</span></div>`;
+        `${photo}<span>${c.name}</span><span class="chev" id="chev-${id}">▾</span></div>`
+      :`<div style="display:flex;align-items:center;gap:6px">${photo}<span>${c.name}</span></div>`;
     const idCols=`<td class="ic">${iconRarity(c.rarity,18)}</td><td class="ic">${iconRole(c.role,18)}</td><td class="ic">${iconElement(c.element,18)}</td>`;
     h+=`<tr><td class="nc">${nm}</td>${idCols}${cellsHTML(item.agg,isAll)}</tr>`;
     if(isS)item.variants.forEach(v=>{
@@ -342,9 +342,9 @@ function renderChars(data){
 }
 
 function toggleV(id){
-  document.querySelectorAll(`[data-parent="${id}"]`).forEach(r=>{r.style.display=r.style.display==='none'?'table-row':'none';});
-  const ch=document.getElementById('chev-'+id);if(ch)ch.textContent=ch.textContent==='▶'?'▼':'▶';
-  const o=document.getElementById('chev-'+id)?.classList;if(o)o.toggle('open');
+  let shown=false;
+  document.querySelectorAll(`[data-parent="${id}"]`).forEach(r=>{const hid=r.style.display==='none';r.style.display=hid?'table-row':'none';shown=hid;});
+  const ch=document.getElementById('chev-'+id);if(ch)ch.textContent=shown?'▴':'▾';
 }
 function sortC(k){S.cSort.asc=S.cSort.k===k?!S.cSort.asc:false;S.cSort.k=k;renderAll();}
 
@@ -457,7 +457,7 @@ function renderRosters(isAll){
     `<th class="ic" title="Атака">${iconRole('atk',18)}</th>`+
     `<th class="ic" title="Стан">${iconRole('stun',18)}</th>`+
     `<th class="ic" title="Разрыв">${iconRole('rupt',18)}</th>`+
-    `<th class="ic" title="Саппорт / Защита">${iconRole('sup',18)}${iconRole('def',18)}</th>`+
+    `<th class="ic" title="Саппорт / Защита"><span style="display:inline-flex;align-items:center;justify-content:center;gap:3px">${iconRole('sup',18)}<span style="color:var(--sub)">/</span>${iconRole('def',18)}</span></th>`+
     `<th class="ic" title="Аномалия">${iconRole('ano',18)}</th>`+
     `${isAll?'<th class="ic" title="Турниров с ростером">Σ турн.</th>':''}</tr></thead>`;
   const activePl=S.players.filter(p=>data[p.id]);
