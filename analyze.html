@@ -74,14 +74,14 @@ h3{font-size:16px;font-weight:600;margin-bottom:14px;letter-spacing:.04em}
     </div>
     <div id="key-status" style="font-size:12px;color:var(--sub);margin-top:6px"></div>
     <div style="margin-top:12px">
-      <label>Модель (если одна не работает — попробуй другую)</label>
-      <select id="or-model" style="width:100%;max-width:420px">
-        <option value="google/gemini-2.0-flash-exp:free">google/gemini-2.0-flash-exp:free</option>
-        <option value="google/gemini-2.5-flash-preview:free">google/gemini-2.5-flash-preview:free</option>
-        <option value="meta-llama/llama-4-scout:free">meta-llama/llama-4-scout:free</option>
-        <option value="qwen/qwen2.5-vl-72b-instruct:free">qwen/qwen2.5-vl-72b-instruct:free</option>
-        <option value="mistralai/mistral-small-3.1-24b-instruct:free">mistralai/mistral-small-3.1-24b-instruct:free</option>
-      </select>
+      <label>Модель с поддержкой изображений</label>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <select id="or-model" style="flex:1;min-width:260px;max-width:500px">
+          <option value="">— нажми «Найти модели» →</option>
+        </select>
+        <button class="btn btn-g" id="find-btn" onclick="findModels()" style="white-space:nowrap">Найти модели</button>
+      </div>
+      <div id="model-status" style="font-size:12px;color:var(--sub);margin-top:4px"></div>
     </div>
   </div>
 
@@ -262,6 +262,51 @@ async function init(){
     o.textContent=`${p1} vs ${p2}  [${t}]`;
     sel.appendChild(o);
   });
+}
+
+// --- FIND MODELS ---
+async function findModels(){
+  const key=localStorage.getItem('gemini_key')||'';
+  if(!key){alert('Сначала введите и сохраните ключ');return;}
+  const btn=document.getElementById('find-btn');
+  const status=document.getElementById('model-status');
+  btn.disabled=true; btn.innerHTML='<span class="spinner"></span>';
+  status.textContent='Запрашиваю список моделей...'; status.style.color='var(--sub)';
+  try{
+    const res=await fetch('https://openrouter.ai/api/v1/models',{
+      headers:{'Authorization':`Bearer ${key}`}
+    });
+    const data=await res.json();
+    const free=(data.data||[]).filter(m=>{
+      const isFree=m.pricing?.prompt==='0'||parseFloat(m.pricing?.prompt||'1')===0;
+      const hasVision=m.architecture?.modality&&(
+        m.architecture.modality.includes('image')||
+        m.architecture.modality.includes('vision')||
+        m.architecture.input_modalities?.includes('image')
+      );
+      return isFree&&hasVision;
+    });
+    const sel=document.getElementById('or-model');
+    if(free.length===0){
+      status.style.color='#f87171';
+      status.textContent='Бесплатных моделей с поддержкой изображений не найдено. Попробуй пополнить баланс на $1.';
+      // Show all free models anyway
+      const allFree=(data.data||[]).filter(m=>
+        m.pricing?.prompt==='0'||parseFloat(m.pricing?.prompt||'1')===0
+      );
+      sel.innerHTML='<option value="">— нет бесплатных vision-моделей —</option>'+
+        allFree.slice(0,10).map(m=>`<option value="${m.id}">${m.id}</option>`).join('');
+    }else{
+      sel.innerHTML=free.map(m=>`<option value="${m.id}">${m.id}</option>`).join('');
+      status.style.color='#4ade80';
+      status.textContent=`✓ Найдено ${free.length} бесплатных моделей с vision. Первая выбрана автоматически.`;
+    }
+  }catch(e){
+    status.style.color='#f87171';
+    status.textContent='Ошибка: '+e.message;
+  }finally{
+    btn.disabled=false; btn.textContent='Найти модели';
+  }
 }
 
 // --- KEY ---
