@@ -5,11 +5,16 @@ async function ensureSigSchema(){
   D.hasSigImg=!error; // колонка image_url (Этап B)
 }
 
-// Мини-картинка амплификатора (image_url) либо пустой слот.
+// Мини-картинка амплификатора. Источник: image_url из БД (опц. переопределение)
+// ИЛИ статикой из репо по имени: web/icons/amplifiers/<name>.webp (файлы названы как signatures.name).
+// Нет файла → onerror → пустой слот.
 function sigImg(s,sz){
   sz=sz||28;
-  if(s&&s.image_url)return`<img src="${escapeHtml(s.image_url)}" alt="${escapeHtml(s.name||'')}" width="${sz}" height="${sz}" loading="lazy" style="width:${sz}px;height:${sz}px;object-fit:cover;border-radius:6px;flex-shrink:0;vertical-align:middle">`;
-  return`<span style="display:inline-block;width:${sz}px;height:${sz}px;border-radius:6px;background:#1c1f2e;flex-shrink:0"></span>`;
+  const name=(s&&s.name)||'';
+  const fb=`<span style="display:inline-block;width:${sz}px;height:${sz}px;border-radius:6px;background:#1c1f2e;flex-shrink:0"></span>`;
+  const url=(s&&s.image_url)||(name?'web/icons/amplifiers/'+encodeURIComponent(name)+'.webp':'');
+  if(!url)return fb;
+  return`<img src="${escapeHtml(url)}" alt="${escapeHtml(name)}" width="${sz}" height="${sz}" loading="lazy" style="width:${sz}px;height:${sz}px;object-fit:cover;border-radius:6px;flex-shrink:0;vertical-align:middle" data-fb="${escapeHtml(fb)}" onerror="this.outerHTML=this.getAttribute('data-fb')">`;
 }
 
 // Загрузка картинки амплификатора в Storage и запись url. Путь: amplifiers/{id}.webp.
