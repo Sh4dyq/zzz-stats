@@ -33,7 +33,7 @@
   .vrow{background:#0a0c12}.vrow td.nc{color:var(--sub);font-weight:400;padding-left:22px;font-size:12px}
   .seg-btn{border:none;background:none;padding:5px 14px;font-size:13px;font-family:'Rajdhani',sans-serif;font-weight:500;color:var(--sub);cursor:pointer;border-radius:4px;transition:.15s}
   .seg-btn.on{background:#1c1f2e;color:var(--text)}
-  .chev{font-size:8px;color:#3a3f52;display:inline-block;margin-left:4px}
+  .chev{font-size:16px;color:var(--sub);display:inline-block;margin-left:5px}
   select,input[type=text],input[type=number]{background:#0f1118;border:1px solid var(--border);color:var(--text);border-radius:5px;padding:5px 10px;font-family:'Rajdhani',sans-serif;font-size:14px}
   select{cursor:pointer}
   .pic{width:22px;height:22px;border-radius:5px;display:inline-flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;flex-shrink:0;font-family:'Rajdhani',sans-serif}
@@ -53,7 +53,9 @@
   .gb{border-left:2px solid #2a2d3e!important}
   tbody td.gb{font-weight:600;color:var(--text)}
   td.ic,th.ic{text-align:center}
-  td.ic img{vertical-align:middle}
+  /* надёжное горизонтальное центрирование одиночных иконок (text-align не всегда центрирует img в ячейке) */
+  td.ic>img:only-child,th.ic>img:only-child{display:block;margin:0 auto}
+  td.ic img,th.ic img{vertical-align:middle}
   @keyframes spin{to{transform:rotate(360deg)}}
 </style>
 </head>
