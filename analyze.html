@@ -869,19 +869,27 @@ async function getWorker(){
   return _worker;
 }
 function cropCanvas(img,z,scale){
-  scale=scale||3;
+  scale=scale||4;
   const sx=z.x*img.naturalWidth, sy=z.y*img.naturalHeight;
   const sw=Math.max(1,z.w*img.naturalWidth), sh=Math.max(1,z.h*img.naturalHeight);
   const cv=document.createElement('canvas');
   cv.width=Math.round(sw*scale); cv.height=Math.round(sh*scale);
   const ctx=cv.getContext('2d');
   ctx.drawImage(img,sx,sy,sw,sh,0,0,cv.width,cv.height);
-  // grayscale + invert (light text on dark UI -> dark text on light) + soft threshold
+  // grayscale + invert (light text on dark UI -> dark text on light),
+  // then min-max contrast stretch. Leave binarization to Tesseract's Otsu —
+  // a hard manual threshold shreds thin/italic glyphs.
   const id=ctx.getImageData(0,0,cv.width,cv.height), d=id.data;
-  for(let i=0;i<d.length;i+=4){
-    let g=255-(0.299*d[i]+0.587*d[i+1]+0.114*d[i+2]);
-    g=g>150?255:(g<95?0:g);
-    d[i]=d[i+1]=d[i+2]=g;
+  const g=new Float32Array(d.length/4);
+  let mn=255,mx=0;
+  for(let i=0,j=0;i<d.length;i+=4,j++){
+    const v=255-(0.299*d[i]+0.587*d[i+1]+0.114*d[i+2]);
+    g[j]=v; if(v<mn)mn=v; if(v>mx)mx=v;
+  }
+  const rng=Math.max(1,mx-mn);
+  for(let i=0,j=0;i<d.length;i+=4,j++){
+    const v=(g[j]-mn)/rng*255;
+    d[i]=d[i+1]=d[i+2]=v;
   }
   ctx.putImageData(id,0,0);
   return cv;
@@ -890,7 +898,9 @@ async function ocrZone(img,zoneKey,whitelist,psm){
   const w=await getWorker();
   await w.setParameters({tessedit_char_whitelist:whitelist,tessedit_pageseg_mode:psm||'7'});
   const{data}=await w.recognize(cropCanvas(img,getZones()[zoneKey]));
-  return (data.text||'').trim();
+  const txt=(data.text||'').trim();
+  console.log(`[OCR ${zoneKey}] "${txt.replace(/\n/g,' / ')}"`);
+  return txt;
 }
 
 // --- Parsers ---
@@ -936,7 +946,7 @@ async function runLocalAnalysis(progress){
   for(const[side,team,prefix] of map){
     for(let i=0;i<3;i++){
       progress&&progress(`Распознаю пики (${prefix} ${i+1}/3)...`);
-      const p=parsePick(await ocrZone(img,`${prefix}_${i}`,W_NAME,'7'));
+      const p=parsePick(await ocrZone(img,`${prefix}_${i}`,W_NAME,'6'));
       if(p.name)picks[side].push({name:p.name,mindscape:p.mindscape,has_signature:false,team});
     }
   }
