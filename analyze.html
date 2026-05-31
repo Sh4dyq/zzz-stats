@@ -886,79 +886,81 @@ let _lastAlign=null;                     // {s,dx,dy} последнего пр�
 function AZ(){return curZones||getZones();}            // зоны для кропа/хэша
 function autoAlign(){return localStorage.getItem('zzz_autoalign')!=='0';}  // по умолчанию вкл.
 function setAutoAlign(on){localStorage.setItem('zzz_autoalign',on?'1':'0');}
-// Якоря валидны только если обе точки в верхней шапке (y<0.25) и разнесены по X —
-// иначе это мусор/стэйл от старого детекта (садился в драфт-сетку): отбрасываем.
-function validAnchors(a){
-  return !!(a&&a.L&&a.R&&a.L.y<0.25&&a.R.y<0.25&&Math.abs(a.R.x-a.L.x)>0.03&&
-    [a.L.x,a.L.y,a.R.x,a.R.y].every(v=>v>=0&&v<=1));
+// Якорь = центральный бейдж номера комнаты {cx,cy,d}: cx/cy — центр (доли), d — диаметр (доля высоты).
+// Валиден, если центр в верхней половине и диаметр осмысленный.
+function validAnchor(a){
+  return !!(a&&typeof a.cx==='number'&&a.cy<0.55&&a.d>0.015&&a.d<0.5&&
+    [a.cx,a.cy].every(v=>v>=0&&v<=1));
 }
-function getRefAnchors(){try{const a=JSON.parse(localStorage.getItem('zzz_ref_anchors'));return validAnchors(a)?a:null;}catch(e){return null;}}
-function ctr(z){return {x:z.x+z.w/2,y:z.y+z.h/2};}
+function getRefAnchor(){try{const a=JSON.parse(localStorage.getItem('zzz_ref_anchors'));return validAnchor(a)?a:null;}catch(e){return null;}}
 
-// Найти центроиды левой/правой красных плашек таймеров. Возвращает {L,R} в долях или null.
-function detectAnchors(img){
+// Найти центральный бейдж комнаты как САМЫЙ КРУПНЫЙ «тёплый» (оранжево-красный) связный
+// блоб в верхне-центральной области. Связность изолирует бейдж от красных часов/полосы костов/
+// огненных иконок (они отдельные, меньшие блобы или вне окна). Возвращает {cx,cy,d} или null.
+function detectAnchor(img){
   if(!img||!img.naturalWidth)return null;
   const W=240, H=Math.max(1,Math.round(W*img.naturalHeight/img.naturalWidth));
   const cv=document.createElement('canvas');cv.width=W;cv.height=H;
   cv.getContext('2d').drawImage(img,0,0,W,H);
   const d=cv.getContext('2d').getImageData(0,0,W,H).data;
-  const isRed=i=>{const r=d[i],g=d[i+1],b=d[i+2];return r>110&&r-g>45&&r-b>45;};
-  // ВАЖНО: ищем только в верхней ШАПКЕ (выше драфт-сетки) и в ЦЕНТРАЛЬНОЙ полосе по X —
-  // плашки таймеров жмутся к центру у бейджа. Иначе детект цепляет красные иконки сетки/пиков.
-  const yMax=Math.round(H*0.20);          // шапка с таймерами; сетка банов/пики ниже — игнорим
-  const xMin=Math.round(W*0.30), xMax=Math.round(W*0.70);  // центр; угловые счётчики рестартов вне
-  // строка с максимумом красного в этой области = строка плашек таймеров
-  let py=0,pc=-1;
-  for(let y=0;y<yMax;y++){let c=0;for(let x=xMin;x<xMax;x++)if(isRed((y*W+x)*4))c++;if(c>pc){pc=c;py=y;}}
-  if(pc<4)return null;                     // слишком мало красного — плашки не найдены
-  const band=Math.max(2,Math.round(H*0.03)), y0=Math.max(0,py-band), y1=Math.min(yMax,py+band+1);
-  const xMid=Math.round(W*0.5);
-  let lsx=0,lsy=0,ln=0,rsx=0,rsy=0,rn=0;
-  for(let y=y0;y<y1;y++)for(let x=xMin;x<xMax;x++){
-    if(!isRed((y*W+x)*4))continue;
-    if(x<xMid){lsx+=x;lsy+=y;ln++;}else{rsx+=x;rsy+=y;rn++;}
+  const warm=(x,y)=>{const i=(y*W+x)*4,r=d[i],g=d[i+1],b=d[i+2];return r>120&&r-b>40&&g<r-12;};
+  const x0=Math.round(W*0.38), x1=Math.round(W*0.62);   // центр; часы/рестарты по краям вне окна
+  const y1=Math.round(H*0.48);                          // выше драфт-сетки/пиков
+  const seen=new Uint8Array(W*H);
+  let best=null;                                        // {n,minx,maxx,miny,maxy}
+  const stack=[];
+  for(let sy=0;sy<y1;sy++)for(let sx=x0;sx<x1;sx++){
+    const s0=sy*W+sx;
+    if(seen[s0]||!warm(sx,sy))continue;
+    // BFS связной компоненты в пределах окна
+    let n=0,mnx=sx,mxx=sx,mny=sy,mxy=sy;
+    stack.length=0;stack.push(s0);seen[s0]=1;
+    while(stack.length){
+      const p=stack.pop(),px=p%W,py=(p/W)|0;
+      n++;if(px<mnx)mnx=px;if(px>mxx)mxx=px;if(py<mny)mny=py;if(py>mxy)mxy=py;
+      const nb=[[px-1,py],[px+1,py],[px,py-1],[px,py+1]];
+      for(const[nx,ny] of nb){
+        if(nx<x0||nx>=x1||ny<0||ny>=y1)continue;
+        const q=ny*W+nx;
+        if(!seen[q]&&warm(nx,ny)){seen[q]=1;stack.push(q);}
+      }
+    }
+    if(!best||n>best.n)best={n,mnx,mxx,mny,mxy};
   }
-  if(ln<2||rn<2)return null;               // нет уверенного кластера с одной из сторон
-  return {L:{x:(lsx/ln)/W,y:(lsy/ln)/H}, R:{x:(rsx/rn)/W,y:(rsy/rn)/H}};
+  if(!best||best.n<20)return null;                      // бейдж не найден / слишком мелкий блоб
+  const cx=((best.mnx+best.mxx)/2)/W, cy=((best.mny+best.mxy)/2)/H, dia=(best.mxy-best.mny)/H;
+  if(cx<0.42||cx>0.58||dia<0.02)return null;            // должен быть по центру
+  return {cx, cy, d:dia};
 }
 
-// Эталонные позиции якорей. Приоритет — сохранённые (zzz_ref_anchors); иначе прокси
-// из центров калиброванных зон таймеров (плашка ≈ текст таймера).
-function refAnchors(rawZones){
-  const saved=getRefAnchors();
-  if(saved&&saved.L&&saved.R)return saved;
-  return {L:ctr(rawZones.left_timer), R:ctr(rawZones.right_timer)};
-}
-
-// Вернуть зоны, выровненные по якорям текущего изображения (или сырые, если выключено/не найдено).
+// Вернуть зоны, выровненные по якорю-бейджу (или сырые, если выключено/нет эталона/не найден).
 function alignedZones(img){
   _lastAlign=null;
   const raw=getZones();
   if(!autoAlign())return raw;
-  const cur=detectAnchors(img);
+  const ref=getRefAnchor();                  // нужен сохранённый эталон (кнопка «Запомнить якоря»)
+  if(!ref)return raw;
+  const cur=detectAnchor(img);
   if(!cur)return raw;
-  const ref=refAnchors(raw);
-  const refCx=(ref.L.x+ref.R.x)/2, refCy=(ref.L.y+ref.R.y)/2, refSep=Math.abs(ref.R.x-ref.L.x)||1e-6;
-  const curCx=(cur.L.x+cur.R.x)/2, curCy=(cur.L.y+cur.R.y)/2, curSep=Math.abs(cur.R.x-cur.L.x);
-  const s=curSep/refSep;
+  const s=cur.d/ref.d;
   if(!isFinite(s)||s<0.3||s>3)return raw;     // защита от мусорного детекта
   const out={};
   for(const k in raw){const z=raw[k];
-    out[k]={x:curCx+(z.x-refCx)*s, y:curCy+(z.y-refCy)*s, w:z.w*s, h:z.h*s};
+    out[k]={x:cur.cx+(z.x-ref.cx)*s, y:cur.cy+(z.y-ref.cy)*s, w:z.w*s, h:z.h*s};
   }
-  _lastAlign={s,dx:curCx-refCx,dy:curCy-refCy};
+  _lastAlign={s,dx:cur.cx-ref.cx,dy:cur.cy-ref.cy};
   return out;
 }
 
-// Запомнить якоря текущего скрина как эталон (нажимать на скрине, где зоны откалиброваны).
+// Запомнить якорь-бейдж текущего скрина как эталон (нажимать на скрине, где зоны откалиброваны).
 function rememberAnchors(){
   const st=document.getElementById('calib-status');
   if(!fullImg){st.textContent='Сначала выберите скриншот';return;}
-  const a=detectAnchors(fullImg);
-  if(!a){st.style.color='#f87171';st.textContent='Красные плашки таймеров не найдены — проверьте скрин';return;}
+  const a=detectAnchor(fullImg);
+  if(!a){st.style.color='#f87171';st.textContent='Центральный бейдж не найден — проверьте скрин';return;}
   localStorage.setItem('zzz_ref_anchors',JSON.stringify(a));
   st.style.color='#4ade80';
-  st.textContent=`Якоря запомнены (L ${(a.L.x*100|0)}%, R ${(a.R.x*100|0)}%)`;
+  st.textContent=`Якорь запомнен (центр ${(a.cx*100|0)}%/${(a.cy*100|0)}%, Ø ${(a.d*100).toFixed(1)}%)`;
   if(calibOn)drawZoneOverlay();
 }
 
@@ -989,17 +991,18 @@ function drawZoneOverlay(){
     makeDraggable(d,hz,k);
     ov.appendChild(d);
   });
-  // маркеры якорей: сохранённый эталон (зелёный) и детект на текущем скрине (голубой)
-  const mark=(p,color,title)=>{
-    if(!p)return;
+  // маркеры якоря-бейджа: эталон (зелёный) и детект на текущем скрине (голубой).
+  // Кружок размером с диаметр бейджа — видно, попал ли детект на бейдж.
+  const mark=(a,color,title)=>{
+    if(!a)return;
+    const dia=a.d*100; // % высоты overlay; overlay квадратно по картинке, конвертим в px при рендере браузером
     const m=document.createElement('div');
     m.title=title;
-    m.style.cssText=`position:absolute;left:${p.x*100}%;top:${p.y*100}%;width:11px;height:11px;margin:-6px 0 0 -6px;border-radius:50%;border:2px solid ${color};background:rgba(0,0,0,.4);box-shadow:0 0 4px ${color}`;
+    m.style.cssText=`position:absolute;left:${a.cx*100}%;top:${a.cy*100}%;height:${dia}%;aspect-ratio:1;transform:translate(-50%,-50%);border-radius:50%;border:2px solid ${color};box-shadow:0 0 5px ${color};pointer-events:none`;
     ov.appendChild(m);
   };
-  const ref=getRefAnchors();
-  if(ref){mark(ref.L,'#4ade80','эталон L');mark(ref.R,'#4ade80','эталон R');}
-  if(fullImg){const cur=detectAnchors(fullImg);if(cur){mark(cur.L,'#38bdf8','детект L');mark(cur.R,'#38bdf8','детект R');}}
+  mark(getRefAnchor(),'#4ade80','эталон (бейдж)');
+  if(fullImg)mark(detectAnchor(fullImg),'#38bdf8','детект (бейдж)');
 }
 function makeDraggable(d,handle,key){
   const stage=document.getElementById('preview-stage');
