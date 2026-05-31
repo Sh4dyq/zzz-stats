@@ -88,6 +88,15 @@ h3{font-size:16px;font-weight:600;margin-bottom:14px;letter-spacing:.04em}
   <!-- Upload -->
   <div class="card" style="margin-bottom:16px">
     <h3>Скриншот завершённого драфта</h3>
+    <div style="margin-bottom:12px">
+      <label>Движок распознавания</label>
+      <div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center">
+        <button id="eng-local" class="btn btn-y" style="padding:6px 16px" onclick="setEngine('local')">Локальный (OCR)</button>
+        <button id="eng-neural" class="btn btn-g" style="padding:6px 16px" onclick="setEngine('neural')">Нейросеть</button>
+        <button id="calib-btn" class="btn btn-g" style="padding:6px 16px;margin-left:8px" onclick="toggleCalib()">⚙ Калибровка зон</button>
+        <span id="eng-hint" style="font-size:11px;color:var(--sub);margin-left:8px"></span>
+      </div>
+    </div>
     <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:12px">
       <div>
         <label>Номер матча в Bo2</label>
@@ -102,7 +111,19 @@ h3{font-size:16px;font-weight:600;margin-bottom:14px;letter-spacing:.04em}
       </div>
     </div>
     <div id="preview-wrap" style="margin-bottom:12px;display:none">
-      <img id="preview-img" style="max-width:100%;max-height:180px;border-radius:6px;border:1px solid var(--border)">
+      <div id="preview-stage" style="position:relative;display:inline-block;max-width:100%">
+        <img id="preview-img" style="max-width:100%;display:block;border-radius:6px;border:1px solid var(--border)">
+        <div id="zone-overlay" style="position:absolute;inset:0;pointer-events:none;display:none"></div>
+      </div>
+    </div>
+    <div id="calib-panel" style="display:none;margin-bottom:12px;border:1px solid var(--border);border-radius:8px;padding:12px;background:#0b0d14">
+      <div style="font-size:12px;color:var(--sub);margin-bottom:8px">
+        Перетаскивайте рамки по скриншоту, чтобы зоны точно легли на текст. Сохраняется в браузере и работает для любого размера скрина (координаты в %).
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-g" style="padding:5px 12px;font-size:12px" onclick="resetZones()">Сбросить к стандартным</button>
+        <span id="calib-status" style="font-size:11px;color:var(--sub);align-self:center"></span>
+      </div>
     </div>
     <button id="analyze-btn" class="btn btn-y" style="min-width:150px" onclick="runAnalysis()">Анализировать</button>
     <div id="analyze-status" style="margin-top:8px;font-size:13px"></div>
@@ -194,6 +215,7 @@ h3{font-size:16px;font-weight:600;margin-bottom:14px;letter-spacing:.04em}
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <script>
 const SB_URL='https://zoavnckfbfiejxfjakue.supabase.co';
 const SB_KEY='sb_publishable_37RZBsmdp3O1i795EuEfeg_vFpdPTFZ';
@@ -330,6 +352,7 @@ function setMatchNum(n){
 }
 
 // --- FILE ---
+let fullImg=null;
 function onFile(e){
   const f=e.target.files[0]; if(!f)return;
   fileMime=f.type||'image/png';
@@ -339,28 +362,35 @@ function onFile(e){
     document.getElementById('preview-img').src=url;
     document.getElementById('preview-wrap').style.display='block';
     fileB64=url.split(',')[1];
+    fullImg=new Image();
+    fullImg.onload=()=>{ if(calibOn)drawZoneOverlay(); };
+    fullImg.src=url;
   };
   r.readAsDataURL(f);
 }
 
 // --- ANALYSIS ---
 async function runAnalysis(){
-  const key=localStorage.getItem('gemini_key')||'';
-  if(!key){alert('Введите и сохраните Gemini API ключ');return;}
   if(!fileB64){alert('Выберите файл скриншота');return;}
+  const key=localStorage.getItem('gemini_key')||'';
+  if(engine==='neural'&&!key){alert('Для нейросети введите и сохраните API ключ');return;}
 
   const btn=document.getElementById('analyze-btn');
   const status=document.getElementById('analyze-status');
   btn.disabled=true;
   btn.innerHTML='<span class="spinner"></span>Анализирую...';
-  status.textContent='';
+  status.style.color='var(--sub)';
+  status.textContent=engine==='local'?'Локальное распознавание (OCR)...':'';
   document.getElementById('results').style.display='none';
 
   try{
-    const result=await callGemini(key,fileB64,fileMime);
+    const result=engine==='local'
+      ? await runLocalAnalysis(s=>{status.textContent=s;})
+      : await callGemini(key,fileB64,fileMime);
     renderResults(result);
     document.getElementById('results').style.display='block';
     document.getElementById('results').scrollIntoView({behavior:'smooth',block:'start'});
+    if(engine==='local'){status.style.color='#4ade80';status.textContent='✓ Распознано локально. Проверьте и поправьте при необходимости.';}
   }catch(e){
     status.style.color='#f87171';
     status.textContent='Ошибка анализа: '+e.message;
@@ -441,17 +471,45 @@ Return exactly 6 picks per player (3 team-1 and 3 team-2) and exactly 3 bans per
 }
 
 // --- RENDER RESULTS ---
+function levenshtein(a,b){
+  const m=a.length,n=b.length;
+  if(!m)return n; if(!n)return m;
+  let prev=Array.from({length:n+1},(_,i)=>i);
+  for(let i=1;i<=m;i++){
+    let cur=[i];
+    for(let j=1;j<=n;j++){
+      cur[j]=Math.min(prev[j]+1,cur[j-1]+1,prev[j-1]+(a[i-1]===b[j-1]?0:1));
+    }
+    prev=cur;
+  }
+  return prev[n];
+}
+function normName(s){return (s||'').toLowerCase().replace(/[^a-z0-9 ]/g,'').replace(/\s+/g,' ').trim();}
+
+// Returns best matching character or null. Tolerant to OCR noise and partial names.
 function findChar(name){
-  if(!name)return null;
-  const n=name.toLowerCase().trim();
-  let c=dbChars.find(x=>x.name.toLowerCase()===n);
+  const n=normName(name);
+  if(!n)return null;
+  // 1. exact
+  let c=dbChars.find(x=>normName(x.name)===n);
   if(c)return c;
-  // partial: name starts with first word of DB name or vice versa
+  // 2. one name is contained in the other, or first tokens equal (Astra <-> Astra Yao)
   c=dbChars.find(x=>{
-    const xn=x.name.toLowerCase();
+    const xn=normName(x.name);
+    if(!xn)return false;
     return xn.includes(n)||n.includes(xn)||xn.split(' ')[0]===n.split(' ')[0];
   });
-  return c||null;
+  if(c)return c;
+  // 3. fuzzy: smallest Levenshtein distance, normalised by length, with a threshold
+  let best=null,bestScore=1;
+  dbChars.forEach(x=>{
+    const xn=normName(x.name);
+    if(!xn)return;
+    const d=levenshtein(n,xn);
+    const score=d/Math.max(n.length,xn.length);
+    if(score<bestScore){bestScore=score;best=x;}
+  });
+  return bestScore<=0.34?best:null;
 }
 
 function charOpts(){
@@ -718,6 +776,180 @@ async function saveData(){
     btn.textContent='Сохранить в базу';
   }
 }
+
+// =====================================================================
+// LOCAL ENGINE (Tesseract OCR + zone cropping) — Этап 1
+// Produces the SAME JSON shape as callGemini(), so renderResults/saveData
+// are reused unchanged. Bans are left empty here (Этап 2 = pHash icons).
+// =====================================================================
+let engine='local', calibOn=false;
+
+function setEngine(e){
+  engine=e;
+  document.getElementById('eng-local').className='btn '+(e==='local'?'btn-y':'btn-g');
+  document.getElementById('eng-neural').className='btn '+(e==='neural'?'btn-y':'btn-g');
+  document.getElementById('eng-hint').textContent = e==='local'
+    ? 'Бесплатно, офлайн, без ключа. Баны пока проставляются вручную.'
+    : 'Требует API-ключ OpenRouter.';
+}
+
+// --- ZONES (fractions of image W/H; survive any resolution) ---
+const DEFAULT_ZONES={
+  p1_restarts:{x:0.165,y:0.030,w:0.052,h:0.030},
+  p2_restarts:{x:0.712,y:0.030,w:0.052,h:0.030},
+  left_name:  {x:0.240,y:0.090,w:0.180,h:0.040},
+  right_name: {x:0.578,y:0.090,w:0.180,h:0.040},
+  left_timer: {x:0.423,y:0.108,w:0.060,h:0.034},
+  right_timer:{x:0.524,y:0.108,w:0.060,h:0.034},
+  // pick footers (name + "Lv.60 Mx" strip). L/R groups, T1 row then T2 row.
+  L_T1_0:{x:0.108,y:0.672,w:0.108,h:0.078}, L_T1_1:{x:0.228,y:0.672,w:0.108,h:0.078}, L_T1_2:{x:0.348,y:0.672,w:0.108,h:0.078},
+  L_T2_0:{x:0.108,y:0.876,w:0.108,h:0.078}, L_T2_1:{x:0.228,y:0.876,w:0.108,h:0.078}, L_T2_2:{x:0.348,y:0.876,w:0.108,h:0.078},
+  R_T1_0:{x:0.528,y:0.672,w:0.108,h:0.078}, R_T1_1:{x:0.648,y:0.672,w:0.108,h:0.078}, R_T1_2:{x:0.768,y:0.672,w:0.108,h:0.078},
+  R_T2_0:{x:0.528,y:0.876,w:0.108,h:0.078}, R_T2_1:{x:0.648,y:0.876,w:0.108,h:0.078}, R_T2_2:{x:0.768,y:0.876,w:0.108,h:0.078}
+};
+function getZones(){
+  try{const s=JSON.parse(localStorage.getItem('zzz_zones'));if(s)return {...structuredClone(DEFAULT_ZONES),...s};}catch(e){}
+  return structuredClone(DEFAULT_ZONES);
+}
+function saveZones(z){localStorage.setItem('zzz_zones',JSON.stringify(z));}
+function resetZones(){localStorage.removeItem('zzz_zones');drawZoneOverlay();document.getElementById('calib-status').textContent='Сброшено';}
+
+// --- Calibration overlay ---
+function toggleCalib(){
+  calibOn=!calibOn;
+  document.getElementById('calib-btn').className='btn '+(calibOn?'btn-y':'btn-g');
+  document.getElementById('calib-panel').style.display=calibOn?'block':'none';
+  if(calibOn){ if(!fullImg){alert('Сначала выберите скриншот');calibOn=false;document.getElementById('calib-btn').className='btn btn-g';document.getElementById('calib-panel').style.display='none';return;} drawZoneOverlay(); }
+  else document.getElementById('zone-overlay').style.display='none';
+}
+function clamp01(v){return Math.max(0,Math.min(0.999,v));}
+function drawZoneOverlay(){
+  const ov=document.getElementById('zone-overlay');
+  ov.style.display='block'; ov.innerHTML='';
+  const Z=getZones();
+  Object.keys(Z).forEach(k=>{
+    const z=Z[k];
+    const d=document.createElement('div');
+    d.id='zd-'+k;
+    d.style.cssText=`position:absolute;left:${z.x*100}%;top:${z.y*100}%;width:${z.w*100}%;height:${z.h*100}%;border:1px solid #f5c842;background:rgba(245,200,66,.12);pointer-events:auto;cursor:move;box-sizing:border-box`;
+    const lbl=document.createElement('span');
+    lbl.textContent=k; lbl.style.cssText='position:absolute;top:-11px;left:0;font-size:8px;line-height:1;color:#f5c842;white-space:nowrap;text-shadow:0 0 2px #000';
+    d.appendChild(lbl);
+    const hz=document.createElement('div');
+    hz.style.cssText='position:absolute;right:-4px;bottom:-4px;width:9px;height:9px;background:#f5c842;cursor:nwse-resize;pointer-events:auto';
+    d.appendChild(hz);
+    makeDraggable(d,hz,k);
+    ov.appendChild(d);
+  });
+}
+function makeDraggable(d,handle,key){
+  const stage=document.getElementById('preview-stage');
+  let mode=null,sx,sy,orig;
+  const mv=e=>{
+    const r=stage.getBoundingClientRect();
+    const dx=(e.clientX-sx)/r.width, dy=(e.clientY-sy)/r.height;
+    const Z=getZones();
+    if(mode==='move')Z[key]={...orig,x:clamp01(orig.x+dx),y:clamp01(orig.y+dy)};
+    else Z[key]={...orig,w:Math.max(0.01,orig.w+dx),h:Math.max(0.01,orig.h+dy)};
+    saveZones(Z);
+    const el=document.getElementById('zd-'+key),zz=Z[key];
+    el.style.left=zz.x*100+'%';el.style.top=zz.y*100+'%';el.style.width=zz.w*100+'%';el.style.height=zz.h*100+'%';
+  };
+  const up=()=>{document.removeEventListener('mousemove',mv);document.removeEventListener('mouseup',up);document.getElementById('calib-status').textContent='Сохранено ✓';};
+  const down=(e,m)=>{e.preventDefault();e.stopPropagation();mode=m;sx=e.clientX;sy=e.clientY;orig={...getZones()[key]};document.addEventListener('mousemove',mv);document.addEventListener('mouseup',up);};
+  d.addEventListener('mousedown',e=>{if(e.target===handle)return;down(e,'move');});
+  handle.addEventListener('mousedown',e=>down(e,'resize'));
+}
+
+// --- OCR primitives ---
+let _worker=null;
+async function getWorker(){
+  if(_worker)return _worker;
+  _worker=await Tesseract.createWorker('eng');
+  return _worker;
+}
+function cropCanvas(img,z,scale){
+  scale=scale||3;
+  const sx=z.x*img.naturalWidth, sy=z.y*img.naturalHeight;
+  const sw=Math.max(1,z.w*img.naturalWidth), sh=Math.max(1,z.h*img.naturalHeight);
+  const cv=document.createElement('canvas');
+  cv.width=Math.round(sw*scale); cv.height=Math.round(sh*scale);
+  const ctx=cv.getContext('2d');
+  ctx.drawImage(img,sx,sy,sw,sh,0,0,cv.width,cv.height);
+  // grayscale + invert (light text on dark UI -> dark text on light) + soft threshold
+  const id=ctx.getImageData(0,0,cv.width,cv.height), d=id.data;
+  for(let i=0;i<d.length;i+=4){
+    let g=255-(0.299*d[i]+0.587*d[i+1]+0.114*d[i+2]);
+    g=g>150?255:(g<95?0:g);
+    d[i]=d[i+1]=d[i+2]=g;
+  }
+  ctx.putImageData(id,0,0);
+  return cv;
+}
+async function ocrZone(img,zoneKey,whitelist,psm){
+  const w=await getWorker();
+  await w.setParameters({tessedit_char_whitelist:whitelist,tessedit_pageseg_mode:psm||'7'});
+  const{data}=await w.recognize(cropCanvas(img,getZones()[zoneKey]));
+  return (data.text||'').trim();
+}
+
+// --- Parsers ---
+const W_NICK='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-';
+const W_NAME='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 .-';
+const W_TIME='0123456789:';
+const W_DIG='0123456789';
+function cleanNick(s){return (s||'').replace(/\s+/g,' ').trim();}
+function parseTimer(s){
+  const m=(s||'').replace(/[^\d:]/g,'').match(/(\d{1,2}):(\d{2})/);
+  return m?`${+m[1]}:${m[2]}`:'';
+}
+function parseInt0(s){const m=(s||'').match(/\d+/);return m?+m[0]:0;}
+function parsePick(raw){
+  let t=(raw||'').replace(/\n/g,' ').replace(/\s+/g,' ').trim();
+  let ms=0; const mm=t.match(/\bM\s?([0-6])\b/i); if(mm)ms=+mm[1];
+  // name = text before the level marker ("Lv.60" — OCR may garble/drop the L and the dot)
+  let name=t.split(/[LI1]?v\.?\s?\d/i)[0];
+  if(name===t) name=t.replace(/\b[mrp]\s?\d+\b/gi,''); // no Lv found: strip stat tokens
+  name=name.replace(/\bR\s?\d\b/gi,'')            // rarity badge
+           .replace(/[^A-Za-z '\-]/g,' ')
+           .replace(/\s+/g,' ').trim();
+  return {name,mindscape:ms};
+}
+
+// --- Orchestrator: returns callGemini-compatible object ---
+async function runLocalAnalysis(progress){
+  const img=fullImg;
+  if(!img||!img.naturalWidth)throw new Error('Изображение не загружено');
+  progress&&progress('Загрузка OCR-движка (один раз)...');
+  await getWorker();
+
+  progress&&progress('Распознаю шапку...');
+  const left_player=cleanNick(await ocrZone(img,'left_name',W_NICK,'7'));
+  const right_player=cleanNick(await ocrZone(img,'right_name',W_NICK,'7'));
+  const left_timer=parseTimer(await ocrZone(img,'left_timer',W_TIME,'7'));
+  const right_timer=parseTimer(await ocrZone(img,'right_timer',W_TIME,'7'));
+  const left_restarts=parseInt0(await ocrZone(img,'p1_restarts',W_DIG,'7'));
+  const right_restarts=parseInt0(await ocrZone(img,'p2_restarts',W_DIG,'7'));
+
+  const picks={left:[],right:[]};
+  const map=[['left',1,'L_T1'],['left',2,'L_T2'],['right',1,'R_T1'],['right',2,'R_T2']];
+  for(const[side,team,prefix] of map){
+    for(let i=0;i<3;i++){
+      progress&&progress(`Распознаю пики (${prefix} ${i+1}/3)...`);
+      const p=parsePick(await ocrZone(img,`${prefix}_${i}`,W_NAME,'7'));
+      if(p.name)picks[side].push({name:p.name,mindscape:p.mindscape,has_signature:false,team});
+    }
+  }
+
+  return {
+    left_player,right_player,left_timer,right_timer,left_restarts,right_restarts,
+    left_picks:picks.left,right_picks:picks.right,
+    left_bans:[],right_bans:[]   // Этап 2: pHash icon matching
+  };
+}
+
+// init engine button state
+setEngine('local');
 </script>
 </body>
 </html>
