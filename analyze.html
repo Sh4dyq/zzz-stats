@@ -142,6 +142,37 @@ h3{font-size:16px;font-weight:600;margin-bottom:14px;letter-spacing:.04em}
         </div>
         <div id="autodetect" style="font-size:13px;padding-bottom:8px;color:var(--sub)"></div>
       </div>
+
+      <div style="margin-top:14px;border-top:1px solid var(--border);padding-top:12px">
+        <button id="new-enc-toggle" class="btn btn-g" style="font-size:12px;padding:5px 14px" onclick="toggleNewEnc()">➕ Создать новую встречу</button>
+        <div id="new-enc" style="display:none;margin-top:12px">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+            <div style="grid-column:1/-1">
+              <label>Турнир</label>
+              <select id="ne-tour" style="width:100%"></select>
+              <input id="ne-tour-new" type="text" placeholder="…или впишите новый турнир" style="width:100%;margin-top:6px">
+            </div>
+            <div>
+              <label>Игрок 1 (фп в матче 1)</label>
+              <select id="ne-p1" style="width:100%"></select>
+              <input id="ne-p1-new" type="text" placeholder="…или новый ник" style="width:100%;margin-top:6px">
+            </div>
+            <div>
+              <label>Игрок 2 (фп в матче 2)</label>
+              <select id="ne-p2" style="width:100%"></select>
+              <input id="ne-p2-new" type="text" placeholder="…или новый ник" style="width:100%;margin-top:6px">
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;margin-top:10px;align-items:center;flex-wrap:wrap">
+            <button class="btn btn-y" style="padding:6px 16px" onclick="createEncounter()">Создать и выбрать</button>
+            <button class="btn btn-g" style="padding:6px 12px" onclick="prefillFromOCR()">Подставить распознанные ники</button>
+            <span id="ne-status" style="font-size:12px"></span>
+          </div>
+          <p style="font-size:11px;color:var(--sub);margin-top:6px">
+            Заполненные данные матча НЕ сбросятся. Если игрока или турнира нет в базе — создам автоматически по вписанному имени.
+          </p>
+        </div>
+      </div>
     </div>
 
     <!-- Match result -->
@@ -231,7 +262,8 @@ const DBL_T1=[6,7,10], DBL_T2=[11,15,18];
 const FP_BANS=[1,4,13], DBL_BANS=[2,3,14];
 
 let matchNum=1, fileB64=null, fileMime='image/png';
-let dbChars=[], dbPlayers=[], dbEncs=[];
+let dbChars=[], dbPlayers=[], dbEncs=[], dbTours=[];
+let lastResult=null;
 
 // --- AUTH ---
 async function signIn(){
@@ -269,21 +301,25 @@ async function init(){
     sb.from('encounters').select('*').order('created_at',{ascending:false}),
     sb.from('tournaments').select('*')
   ]);
-  dbChars=ch||[]; dbPlayers=pl||[]; dbEncs=en||[];
+  dbChars=ch||[]; dbPlayers=pl||[]; dbEncs=en||[]; dbTours=to||[];
+  refreshEncSelect();
+  populateNewEncSelects();
+}
 
-  const tourMap={};(to||[]).forEach(t=>tourMap[t.id]=t);
+function encLabel(e){
   const plMap={};dbPlayers.forEach(p=>plMap[p.id]=p);
-
+  const tourMap={};dbTours.forEach(t=>tourMap[t.id]=t);
+  const p1=plMap[e.player1_id]?.nickname||'?';
+  const p2=plMap[e.player2_id]?.nickname||'?';
+  const t=tourMap[e.tournament_id]?.name||'?';
+  return `${p1} vs ${p2}  [${t}]`;
+}
+function refreshEncSelect(keepId){
   const sel=document.getElementById('enc-sel');
-  dbEncs.forEach(e=>{
-    const p1=plMap[e.player1_id]?.nickname||'?';
-    const p2=plMap[e.player2_id]?.nickname||'?';
-    const t=tourMap[e.tournament_id]?.name||'?';
-    const o=document.createElement('option');
-    o.value=e.id;
-    o.textContent=`${p1} vs ${p2}  [${t}]`;
-    sel.appendChild(o);
-  });
+  const cur=keepId||sel.value;
+  sel.innerHTML='<option value="">— выбери —</option>'+
+    dbEncs.map(e=>`<option value="${e.id}">${encLabel(e)}</option>`).join('');
+  if(cur)sel.value=cur;
 }
 
 // --- FIND MODELS ---
@@ -524,6 +560,7 @@ function setSel(opts,val){
 }
 
 function renderResults(a){
+  lastResult=a;
   // Names
   document.getElementById('left-name').textContent=a.left_player||'Левый';
   document.getElementById('right-name').textContent=a.right_player||'Правый';
@@ -570,6 +607,89 @@ function autoDetect(ln,rn){
   }else{
     el.style.color='var(--sub)';
     el.textContent='Встреча не найдена — выберите вручную';
+  }
+}
+
+// --- NEW ENCOUNTER (create players / tournament / encounter inline) ---
+function optsFrom(list,labelFn,placeholder){
+  return `<option value="">${placeholder}</option>`+
+    list.map(x=>`<option value="${x.id}">${labelFn(x)}</option>`).join('');
+}
+function populateNewEncSelects(){
+  const t=document.getElementById('ne-tour'); if(t)t.innerHTML=optsFrom(dbTours,x=>x.name,'— выбери турнир —');
+  const p1=document.getElementById('ne-p1'); if(p1)p1.innerHTML=optsFrom(dbPlayers,x=>x.nickname,'— выбери игрока —');
+  const p2=document.getElementById('ne-p2'); if(p2)p2.innerHTML=optsFrom(dbPlayers,x=>x.nickname,'— выбери игрока —');
+}
+function toggleNewEnc(){
+  const box=document.getElementById('new-enc');
+  const open=box.style.display==='none';
+  box.style.display=open?'block':'none';
+  document.getElementById('new-enc-toggle').className='btn '+(open?'btn-y':'btn-g');
+  if(open)populateNewEncSelects();
+}
+function prefillFromOCR(){
+  if(!lastResult){neStatus('Сначала распознайте скриншот','#f87171');return;}
+  // left = fp of THIS match: match1 -> player1, match2 -> player2
+  const p1Nick=matchNum===1?lastResult.left_player:lastResult.right_player;
+  const p2Nick=matchNum===1?lastResult.right_player:lastResult.left_player;
+  setNick('ne-p1',p1Nick); setNick('ne-p2',p2Nick);
+  neStatus('Подставлено. Проверьте и создайте.','#4ade80');
+}
+function setNick(selId,nick){
+  if(!nick)return;
+  const ex=dbPlayers.find(p=>p.nickname.toLowerCase()===nick.toLowerCase());
+  if(ex){document.getElementById(selId).value=ex.id;document.getElementById(selId+'-new').value='';}
+  else{document.getElementById(selId).value='';document.getElementById(selId+'-new').value=nick;}
+}
+function neStatus(msg,color){const el=document.getElementById('ne-status');el.textContent=msg;el.style.color=color||'var(--sub)';}
+
+async function resolvePlayer(selId){
+  const newNick=document.getElementById(selId+'-new').value.trim();
+  if(newNick){
+    const ex=dbPlayers.find(p=>p.nickname.toLowerCase()===newNick.toLowerCase());
+    if(ex)return ex.id;
+    const{data,error}=await sb.from('players').insert({nickname:newNick}).select().single();
+    if(error)throw new Error('игрок «'+newNick+'»: '+error.message);
+    dbPlayers.push(data);
+    return data.id;
+  }
+  return document.getElementById(selId).value;
+}
+async function resolveTour(){
+  const newName=document.getElementById('ne-tour-new').value.trim();
+  if(newName){
+    const ex=dbTours.find(t=>t.name.toLowerCase()===newName.toLowerCase());
+    if(ex)return ex.id;
+    const{data,error}=await sb.from('tournaments').insert({name:newName}).select().single();
+    if(error)throw new Error('турнир «'+newName+'»: '+error.message);
+    dbTours.push(data);
+    return data.id;
+  }
+  return document.getElementById('ne-tour').value;
+}
+async function createEncounter(){
+  try{
+    neStatus('Создаю…','var(--sub)');
+    const tourId=await resolveTour();
+    if(!tourId)return neStatus('Выберите или впишите турнир','#f87171');
+    const p1Id=await resolvePlayer('ne-p1');
+    const p2Id=await resolvePlayer('ne-p2');
+    if(!p1Id||!p2Id)return neStatus('Укажите обоих игроков','#f87171');
+    if(p1Id===p2Id)return neStatus('Игроки должны быть разными','#f87171');
+
+    const{data,error}=await sb.from('encounters').insert(
+      {tournament_id:tourId,player1_id:p1Id,player2_id:p2Id}).select().single();
+    if(error)throw new Error(error.message);
+
+    dbEncs.unshift(data);
+    populateNewEncSelects();
+    refreshEncSelect(data.id);            // rebuild list and select the new one
+    document.getElementById('autodetect').textContent='✓ Новая встреча выбрана';
+    document.getElementById('autodetect').style.color='#4ade80';
+    neStatus('✓ Встреча создана и выбрана','#4ade80');
+  }catch(e){
+    neStatus('Ошибка: '+e.message,'#f87171');
+    console.error(e);
   }
 }
 

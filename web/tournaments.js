@@ -32,15 +32,25 @@ function renderCostsTable(tourId,tourName,existing){
   const rows=D.chars.map(c=>{
     const sOpts=(charSigMap[c.id]||[]).map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
     const anyEx=msCols.map(ms=>costMap[`${c.id}_${ms}`]).find(x=>x)||{};
-    const sigSel=`<select class="ci-char" data-c="${c.id}" data-f="sig" style="width:auto;font-size:13px;padding:3px 6px">
+    const sigSel=`<select class="ci-char" data-c="${c.id}" data-f="sig" style="width:160px;font-size:13px;padding:3px 6px">
       <option value="">—</option>${sOpts.replace(`value="${anyEx.sig_id||''}"`,`value="${anyEx.sig_id||''}" selected`)}
     </select>`;
     const msCells=msCols.map(ms=>{
       const ex=costMap[`${c.id}_${ms}`]||{};
       return`<td style="padding:6px 6px;text-align:center"><input class="ci-ms" data-c="${c.id}" data-m="${ms}" type="number" min="0" placeholder="—" value="${ex.cost??''}" style="width:65px;padding:3px 6px;font-size:13px;text-align:center"></td>`;
     }).join('');
+    const avatarPh=`<div style="width:32px;height:32px;border-radius:6px;background:var(--border);flex-shrink:0"></div>`;
+    const rarityPh=`<div style="width:20px;height:20px;border-radius:4px;background:var(--border);flex-shrink:0"></div>`;
+    const elemPh=`<div style="width:20px;height:20px;border-radius:50%;background:var(--border);flex-shrink:0"></div>`;
     return`<tr style="border-top:1px solid var(--border)">
-      <td style="padding:8px 10px;font-weight:500;white-space:nowrap">${c.name}</td>
+      <td style="padding:8px 10px;white-space:nowrap">
+        <div style="display:flex;align-items:center;gap:8px">
+          ${avatarPh}
+          <span style="font-weight:500">${c.name}</span>
+          ${rarityPh}
+          ${elemPh}
+        </div>
+      </td>
       <td style="padding:6px 8px;text-align:center"><input class="ci-char" data-c="${c.id}" data-f="sig_cost" type="number" min="0" placeholder="—" value="${anyEx.sig_cost??''}" style="width:65px;padding:3px 6px;font-size:13px;text-align:center"></td>
       <td style="padding:6px 8px">${sigSel}</td>
       ${msCells}
