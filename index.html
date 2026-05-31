@@ -8,72 +8,122 @@
 <meta http-equiv="Expires" content="0">
 <title>ZZZ Tournament Stats</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Saira+Condensed:ital,wght@0,700;0,800;0,900;1,800;1,900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdn.tailwindcss.com"></script>
 <script>tailwind.config={theme:{extend:{fontFamily:{raj:['Rajdhani','sans-serif'],mono:['JetBrains Mono','monospace']}}}}</script>
 <style>
-  :root{--bg:#08090d;--card:#0f1118;--border:#1c1f2e;--accent:#f5c842;--cyan:#3dd9d6;--text:#e8eaf0;--sub:#7b7f96}
+  :root{
+    --bg:#0b0b0d;--card:#161618;--panel-2:#1c1c20;--panel-3:#242429;
+    --border:#26262c;--line:rgba(255,255,255,.07);
+    --red:#ff1f44;--pink:#ec1862;--grad:linear-gradient(95deg,#ff1f44,#ec1862);
+    --accent:#ff1f44;--gold:#f5c842;--cyan:#3dd9d6;
+    --text:#f3f3f5;--sub:#8a8a93;
+  }
   *{box-sizing:border-box;margin:0;padding:0}
   body{background:var(--bg);color:var(--text);font-family:'Rajdhani',sans-serif;min-height:100vh}
-  ::-webkit-scrollbar{width:5px;height:5px}
+  /* faceted brand background */
+  .facets{position:fixed;inset:0;z-index:0;pointer-events:none}
+  .topstripe{height:4px;background:var(--grad);position:sticky;top:0;z-index:50}
+  body>*:not(.facets){position:relative;z-index:1}
+  .disp{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;text-transform:uppercase;letter-spacing:.01em}
+  ::-webkit-scrollbar{width:6px;height:6px}
   ::-webkit-scrollbar-track{background:var(--card)}
-  ::-webkit-scrollbar-thumb{background:#2a2d3e;border-radius:3px}
-  .tab-btn{border:none;background:none;border-bottom:2px solid transparent;padding:9px 18px;font-family:'Rajdhani',sans-serif;font-size:15px;font-weight:500;color:var(--sub);cursor:pointer;transition:.15s;letter-spacing:.03em}
+  ::-webkit-scrollbar-thumb{background:#34343b;border-radius:3px}
+  ::-webkit-scrollbar-thumb:hover{background:var(--red)}
+  /* tabs */
+  .tab-btn{border:none;background:none;position:relative;padding:14px 22px;font-family:'Saira Condensed',sans-serif;font-style:italic;font-size:19px;font-weight:800;text-transform:uppercase;color:var(--sub);cursor:pointer;transition:.15s;letter-spacing:.02em}
   .tab-btn:hover{color:var(--text)}
-  .tab-btn.active{color:var(--text);border-bottom-color:var(--accent)}
-  .tbl-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:8px}
+  .tab-btn.active{color:#fff}
+  .tab-btn.active::after{content:"";position:absolute;left:14px;right:14px;bottom:-1px;height:3px;border-radius:3px 3px 0 0;background:var(--grad)}
+  .tbl-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:12px;background:var(--card)}
   table{border-collapse:collapse;font-size:12px;white-space:nowrap;width:100%;font-family:'JetBrains Mono',monospace}
-  th,td{padding:5px 10px;border:1px solid var(--border);text-align:center}
-  th{background:#0b0d14;font-size:11px;font-weight:500;color:var(--sub);cursor:pointer;user-select:none;font-family:'Rajdhani',sans-serif;letter-spacing:.04em}
-  th:hover{color:var(--text);background:#12141d}
-  .th-g{text-align:center!important;background:#09090f!important;color:var(--text)!important;font-size:11px;border-bottom:1px solid #2a2d3e!important}
-  td.nc{text-align:left;font-weight:600;color:var(--text);min-width:150px;font-family:'Rajdhani',sans-serif;font-size:13px}
+  th,td{padding:6px 11px;border:1px solid var(--border);text-align:center}
+  th{background:#101013;font-size:11px;font-weight:500;color:var(--sub);cursor:pointer;user-select:none;font-family:'Rajdhani',sans-serif;font-weight:600;letter-spacing:.04em}
+  th:hover{color:var(--text);background:#17171c}
+  .th-g{text-align:center!important;background:#121214!important;color:#fff!important;font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;font-size:13px;letter-spacing:.03em;border-bottom:2px solid var(--red)!important}
+  td.nc{text-align:left;font-weight:600;color:var(--text);min-width:150px;font-family:'Rajdhani',sans-serif;font-size:14px}
   th.nc{text-align:left}
-  .g{color:#4ade80;font-weight:600}.r{color:#f87171;font-weight:600}.m{color:var(--sub)}
-  .vrow{background:#0a0c12}.vrow td.nc{color:var(--sub);font-weight:400;padding-left:22px;font-size:12px}
-  .seg-btn{border:none;background:none;padding:5px 14px;font-size:13px;font-family:'Rajdhani',sans-serif;font-weight:500;color:var(--sub);cursor:pointer;border-radius:4px;transition:.15s}
-  .seg-btn.on{background:#1c1f2e;color:var(--text)}
-  .chev{font-size:16px;color:var(--sub);display:inline-block;margin-left:5px}
-  select,input[type=text],input[type=number]{background:#0f1118;border:1px solid var(--border);color:var(--text);border-radius:5px;padding:5px 10px;font-family:'Rajdhani',sans-serif;font-size:14px}
+  .g{color:#46d369;font-weight:700}.r{color:#ff6b7d;font-weight:700}.m{color:var(--sub)}
+  .vrow{background:#101014}.vrow td.nc{color:var(--sub);font-weight:500;padding-left:22px;font-size:12px}
+  .seg-btn{border:none;background:none;padding:8px 18px;font-size:14px;font-family:'Saira Condensed',sans-serif;font-weight:800;text-transform:uppercase;letter-spacing:.02em;color:var(--sub);cursor:pointer;transition:.15s}
+  .seg-btn.on{background:var(--grad);color:#fff}
+  .chev{font-size:15px;color:var(--red);display:inline-block;margin-left:5px}
+  select,input[type=text],input[type=number]{background:var(--panel-2);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:8px 12px;font-family:'Rajdhani',sans-serif;font-weight:600;font-size:14px;transition:.15s}
   select{cursor:pointer}
+  select:focus,input:focus{outline:none;border-color:var(--red)}
   .pic{width:22px;height:22px;border-radius:5px;display:inline-flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;flex-shrink:0;font-family:'Rajdhani',sans-serif}
-  .badge-s{font-size:9px;font-weight:700;padding:0 4px;border-radius:3px;background:#451a03;color:#fbbf24;font-family:'Rajdhani',sans-serif;letter-spacing:.05em}
-  .badge-a{font-size:9px;font-weight:700;padding:0 4px;border-radius:3px;background:#1c1f2e;color:var(--sub);font-family:'Rajdhani',sans-serif;letter-spacing:.05em}
-  .ms-tag{font-size:10px;padding:0 5px;border-radius:3px;background:#12141d;border:1px solid var(--border);color:var(--sub);font-family:'JetBrains Mono',monospace}
-  .hl-cell{background:#0d1b2e;color:#60a5fa;font-weight:700;font-size:14px!important;font-family:'Rajdhani',sans-serif}
-  .note{font-size:11px;color:var(--sub);margin-top:8px;font-family:'Rajdhani',sans-serif}
-  .empty{padding:40px 0;text-align:center;color:var(--sub);font-size:14px}
-  .spinner{width:20px;height:20px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;margin:0 auto}
+  .badge-s{font-size:9px;font-weight:800;padding:1px 5px;border-radius:4px;background:linear-gradient(180deg,#f8d36a,#d99a16);color:#231703;font-family:'Rajdhani',sans-serif;letter-spacing:.05em}
+  .badge-a{font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;background:var(--panel-3);color:var(--sub);font-family:'Rajdhani',sans-serif;letter-spacing:.05em}
+  .ms-tag{font-size:10px;padding:1px 6px;border-radius:4px;background:rgba(255,31,68,.14);border:1px solid rgba(255,31,68,.35);color:#ff7587;font-family:'JetBrains Mono',monospace;font-weight:600}
+  .hl-cell{background:rgba(255,31,68,.13);color:#ff6b7d;font-weight:800;font-size:14px!important;font-family:'Saira Condensed',sans-serif;font-style:italic}
+  .note{font-size:12px;color:var(--sub);margin-top:10px;font-family:'Rajdhani',sans-serif;font-weight:500}
+  .empty{padding:48px 0;text-align:center;color:var(--sub);font-size:15px;font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;letter-spacing:.04em}
+  .spinner{width:22px;height:22px;border:2px solid var(--border);border-top-color:var(--red);border-radius:50%;animation:spin .7s linear infinite;margin:0 auto}
   /* читаемость таблицы персонажей */
-  tbody tr:hover td{background:#12141d}
-  tbody tr:hover td.nc{background:#161922}
-  td.nc,th.nc{position:sticky;left:0;z-index:2;background:#0d0f17}
-  th.nc{z-index:4;background:#0b0d14}
-  .vrow td.nc{background:#0a0c12}
-  .gb{border-left:2px solid #2a2d3e!important}
+  tbody tr:hover td{background:#17171c}
+  tbody tr:hover td.nc{background:#1d1d22}
+  td.nc,th.nc{position:sticky;left:0;z-index:2;background:#131317}
+  th.nc{z-index:4;background:#101013}
+  .vrow td.nc{background:#101014}
+  .gb{border-left:2px solid #34343b!important}
   tbody td.gb{font-weight:600;color:var(--text)}
   td.ic,th.ic{text-align:center}
   /* надёжное горизонтальное центрирование одиночных иконок (text-align не всегда центрирует img в ячейке) */
   td.ic>img:only-child,th.ic>img:only-child{display:block;margin:0 auto}
   td.ic img,th.ic img{vertical-align:middle}
   @keyframes spin{to{transform:rotate(360deg)}}
+  /* brand header */
+  .hdr{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:16px 28px;border-bottom:1px solid var(--border);background:rgba(11,11,13,.72);backdrop-filter:blur(12px)}
+  .brand{display:flex;align-items:center;gap:11px}
+  .brand .mk{height:42px;width:auto;display:block}
+  .brand .wm{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;font-size:25px;letter-spacing:.02em;background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent;padding-right:.16em}
+  .brand .suf{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;font-size:25px;color:#fff;text-transform:uppercase;margin-left:-4px}
+  .live{display:flex;align-items:center;gap:8px;font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;font-size:13px;letter-spacing:.05em;color:var(--sub)}
+  .live .dot{width:9px;height:9px;border-radius:50%;background:var(--red);box-shadow:0 0 0 0 rgba(255,31,68,.6);animation:pulse 1.8s infinite}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(255,31,68,.5)}70%{box-shadow:0 0 0 7px rgba(255,31,68,0)}100%{box-shadow:0 0 0 0 rgba(255,31,68,0)}}
+  .admin-link{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;font-size:14px;text-transform:uppercase;letter-spacing:.03em;color:var(--sub);text-decoration:none;padding:7px 14px;border:1px solid var(--border);border-radius:8px;transition:.15s}
+  .admin-link:hover{color:#fff;border-color:var(--red)}
+  .tabrow{border-bottom:1px solid var(--border);padding:0 22px;display:flex;background:rgba(11,11,13,.4)}
 </style>
 </head>
 <body>
 
+<!-- brand faceted background -->
+<svg class="facets" preserveAspectRatio="xMidYMid slice" viewBox="0 0 1440 900">
+  <defs>
+    <pattern id="poly" width="240" height="210" patternUnits="userSpaceOnUse">
+      <rect width="240" height="210" fill="#0b0b0d"/>
+      <polygon points="0,0 130,55 0,120" fill="#0e0e11"/>
+      <polygon points="130,55 240,0 240,110 150,140" fill="#0d0d10"/>
+      <polygon points="0,120 150,140 70,210 0,210" fill="#101014"/>
+      <polygon points="150,140 240,110 240,210 130,210" fill="#0c0c0f"/>
+      <polygon points="70,210 130,210 150,140" fill="#0f0f13"/>
+    </pattern>
+  </defs>
+  <rect width="1440" height="900" fill="url(#poly)"/>
+</svg>
+
+<div class="topstripe"></div>
+
 <!-- Header -->
-<div style="border-bottom:1px solid var(--border);padding:12px 24px;display:flex;align-items:center;justify-content:space-between;gap:16px">
-  <div style="display:flex;align-items:center;gap:16px">
-    <h1 style="font-size:20px;font-weight:700;color:var(--accent);letter-spacing:.06em">ZZZ STATS</h1>
-    <select id="tour-sel" style="min-width:180px">
+<div class="hdr">
+  <div style="display:flex;align-items:center;gap:20px">
+    <div class="brand">
+      <img class="mk" src="nexus-logo.png" alt="NEXUS">
+      <span class="wm">ZZZ</span><span class="suf">STATS</span>
+    </div>
+    <select id="tour-sel" style="min-width:200px">
       <option value="">Загрузка...</option>
     </select>
   </div>
-  <a href="admin.html" style="font-size:12px;color:var(--sub);text-decoration:none;font-family:'Rajdhani',sans-serif;letter-spacing:.04em">Управление →</a>
+  <div style="display:flex;align-items:center;gap:16px">
+    <span class="live"><span class="dot"></span> NEXUS SHIYU</span>
+    <a href="admin.html" class="admin-link">Управление →</a>
+  </div>
 </div>
 
 <!-- Tabs -->
-<div style="border-bottom:1px solid var(--border);padding:0 24px;display:flex">
+<div class="tabrow">
   <button class="tab-btn active" data-tab="chars">Персонажи</button>
   <button class="tab-btn" data-tab="players">Игроки</button>
   <button class="tab-btn" data-tab="ext">Расширенная</button>
@@ -297,14 +347,14 @@ function cellsHTML(d,isAll){
 function renderChars(data){
   const isAll=S.tour===ALL;
   const sig=isAll?6:7;
-  const co=isAll?'':'<th rowspan="2" class="nc gb" onclick="sortC(\'cost\')" title="Стоимость персонажа">Кост</th>';
+  const co=isAll?'':'<th rowspan="2" class="nc gb th-g" onclick="sortC(\'cost\')" title="Стоимость персонажа">Кост</th>';
   const sco=isAll?'':`<th class="gb" onclick="sortC('sc')" title="Стоимость сигны">Кост</th>`;
   const TS='Всего',TW='Победы',TD='Ничьи',TL='Поражения',TWR='Винрейт (ничья = ½)',TPT='Доля от всех матчей';
   document.getElementById('chars-head').innerHTML=`<tr>
-    <th rowspan="2" class="nc" onclick="sortC('name')">Имя</th>
-    <th rowspan="2" class="ic" onclick="sortC('rarity')" title="Редкость">Редк.</th>
-    <th rowspan="2" class="ic" onclick="sortC('role')" title="Роль">Роль</th>
-    <th rowspan="2" class="ic" onclick="sortC('element')" title="Атрибут">Атр.</th>${co}
+    <th rowspan="2" class="nc th-g" onclick="sortC('name')">Имя</th>
+    <th rowspan="2" class="ic th-g" onclick="sortC('rarity')" title="Редкость">Редкость</th>
+    <th rowspan="2" class="ic th-g" onclick="sortC('role')" title="Роль">Роль</th>
+    <th rowspan="2" class="ic th-g" onclick="sortC('element')" title="Атрибут">Атрибут</th>${co}
     <th colspan="6" class="th-g gb">Пики</th><th colspan="5" class="th-g gb">Фп</th><th colspan="5" class="th-g gb">Дабл</th>
     <th colspan="2" class="th-g gb">Баны</th><th colspan="2" class="th-g gb">Пики+баны</th><th colspan="2" class="th-g gb">В ростере</th>
     <th colspan="${sig}" class="th-g gb" id="sg">Со своей сигной</th>

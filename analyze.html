@@ -7,20 +7,20 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <title>ZZZ Stats — Анализ скриншота</title>
-<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Saira+Condensed:ital,wght@0,800;0,900;1,900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
-:root{--bg:#08090d;--card:#0f1118;--border:#1c1f2e;--accent:#f5c842;--text:#e8eaf0;--sub:#7b7f96}
+:root{--bg:#0b0b0d;--card:#161618;--border:#26262c;--accent:#ff1f44;--grad:linear-gradient(95deg,#ff1f44,#ec1862);--text:#f3f3f5;--sub:#8a8a93}
 *{box-sizing:border-box;margin:0;padding:0}
 body{background:var(--bg);color:var(--text);font-family:'Rajdhani',sans-serif;min-height:100vh}
 input[type=text],input[type=email],input[type=password],input[type=number],select{
   background:#0d0f18;border:1px solid var(--border);color:var(--text);border-radius:6px;
   padding:7px 10px;font-family:'Rajdhani',sans-serif;font-size:14px;outline:none}
-input:focus,select:focus{border-color:#3b4260}
+input:focus,select:focus{border-color:var(--accent)}
 label{font-size:12px;color:var(--sub);display:block;margin-bottom:4px;letter-spacing:.04em}
 .btn{border:none;border-radius:6px;padding:8px 18px;font-family:'Rajdhani',sans-serif;font-size:14px;font-weight:600;cursor:pointer;letter-spacing:.04em;transition:.15s}
 .btn:disabled{opacity:.5;cursor:not-allowed}
-.btn-y{background:var(--accent);color:#000}.btn-y:hover:not(:disabled){background:#ffd235}
-.btn-g{background:#1c1f2e;color:var(--text);border:1px solid var(--border)}.btn-g:hover:not(:disabled){background:#252840}
+.btn-y{background:var(--grad);color:#fff;text-transform:uppercase;letter-spacing:.04em}.btn-y:hover:not(:disabled){filter:brightness(1.12)}
+.btn-g{background:var(--card);color:var(--text);border:1px solid var(--border)}.btn-g:hover:not(:disabled){background:#242429;border-color:var(--accent)}
 .card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:20px}
 .alert-err{background:#2b0a0a;color:#f87171;border:1px solid #7f1d1d;padding:10px 14px;border-radius:6px;font-size:13px}
 .alert-ok{background:#052e16;color:#4ade80;border:1px solid #14532d;padding:10px 14px;border-radius:6px;font-size:13px}
@@ -38,7 +38,7 @@ h3{font-size:16px;font-weight:600;margin-bottom:14px;letter-spacing:.04em}
 <!-- Header -->
 <div style="border-bottom:1px solid var(--border);padding:12px 24px;display:flex;align-items:center;justify-content:space-between">
   <div style="display:flex;align-items:center;gap:16px">
-    <a href="index.html" style="font-size:20px;font-weight:700;color:var(--accent);text-decoration:none;letter-spacing:.06em">ZZZ STATS</a>
+    <a href="index.html" style="font-family:'Saira Condensed',sans-serif;font-style:italic;font-size:22px;font-weight:900;color:var(--accent);text-decoration:none;letter-spacing:.02em">ZZZ STATS</a>
     <span style="color:var(--sub);font-size:14px">/ Анализ скриншота</span>
   </div>
   <div style="display:flex;gap:12px;align-items:center">
@@ -1011,12 +1011,12 @@ function drawZoneOverlay(){
     const z=Z[k];
     const d=document.createElement('div');
     d.id='zd-'+k;
-    d.style.cssText=`position:absolute;left:${z.x*100}%;top:${z.y*100}%;width:${z.w*100}%;height:${z.h*100}%;border:1px solid #f5c842;background:rgba(245,200,66,.12);pointer-events:auto;cursor:move;box-sizing:border-box`;
+    d.style.cssText=`position:absolute;left:${z.x*100}%;top:${z.y*100}%;width:${z.w*100}%;height:${z.h*100}%;border:1px solid #ff1f44;background:rgba(255,31,68,.14);pointer-events:auto;cursor:move;box-sizing:border-box`;
     const lbl=document.createElement('span');
-    lbl.textContent=k; lbl.style.cssText='position:absolute;top:-11px;left:0;font-size:8px;line-height:1;color:#f5c842;white-space:nowrap;text-shadow:0 0 2px #000';
+    lbl.textContent=k; lbl.style.cssText='position:absolute;top:-11px;left:0;font-size:8px;line-height:1;color:#ff1f44;white-space:nowrap;text-shadow:0 0 2px #000';
     d.appendChild(lbl);
     const hz=document.createElement('div');
-    hz.style.cssText='position:absolute;right:-4px;bottom:-4px;width:9px;height:9px;background:#f5c842;cursor:nwse-resize;pointer-events:auto';
+    hz.style.cssText='position:absolute;right:-4px;bottom:-4px;width:9px;height:9px;background:#ff1f44;cursor:nwse-resize;pointer-events:auto';
     d.appendChild(hz);
     makeDraggable(d,hz,k);
     ov.appendChild(d);
