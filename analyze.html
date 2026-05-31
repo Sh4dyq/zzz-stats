@@ -81,11 +81,12 @@ h3{font-size:16px;font-weight:600;margin-bottom:14px;letter-spacing:.04em}
         <input id="file-input" type="file" accept="image/*" style="width:100%" onchange="onFile(event)">
       </div>
     </div>
-    <div id="preview-wrap" style="margin-bottom:12px;display:none">
+    <div id="preview-wrap" style="margin-bottom:12px;display:none;overflow:auto;max-height:80vh;border-radius:6px">
       <div id="preview-stage" style="position:relative;display:inline-block;max-width:100%">
-        <img id="preview-img" style="max-width:100%;display:block;border-radius:6px;border:1px solid var(--border)">
+        <img id="preview-img" style="max-width:100%;width:100%;display:block;border-radius:6px;border:1px solid var(--border)">
         <div id="zone-overlay" style="position:absolute;inset:0;pointer-events:none;display:none"></div>
       </div>
+      <div style="font-size:10px;color:var(--sub);padding:4px 2px 0">Колёсико мыши — зум скриншота для точной разметки зон (двойной клик — сброс).</div>
     </div>
     <div id="calib-panel" style="display:none;margin-bottom:12px;border:1px solid var(--border);border-radius:8px;padding:12px;background:#0b0d14">
       <div style="font-size:12px;color:var(--sub);margin-bottom:8px">
@@ -307,6 +308,7 @@ function onFile(e){
     document.getElementById('preview-img').src=url;
     document.getElementById('preview-wrap').style.display='block';
     fileB64=url.split(',')[1];
+    resetPreviewZoom();
     fullImg=new Image();
     fullImg.onload=()=>{ if(calibOn)drawZoneOverlay(); };
     fullImg.src=url;
@@ -766,6 +768,7 @@ async function saveData(){
       document.getElementById('results').style.display='none';
       document.getElementById('file-input').value='';
       document.getElementById('preview-wrap').style.display='none';
+      resetPreviewZoom();
       fileB64=null;
     },2500);
   }catch(e){
@@ -784,6 +787,37 @@ async function saveData(){
 // renderResults/saveData. Bans are left empty here (Этап 2 = pHash icons).
 // =====================================================================
 let calibOn=false;
+
+// --- Зум превью колёсиком мыши (для точной разметки зон) ---
+let previewZoom=1, previewBaseW=0;
+function applyPreviewZoom(){
+  const st=document.getElementById('preview-stage');
+  st.style.width = previewZoom<=1 ? '' : (previewBaseW*previewZoom)+'px';
+}
+function resetPreviewZoom(){
+  previewZoom=1; previewBaseW=0;
+  applyPreviewZoom();
+  const wrap=document.getElementById('preview-wrap');
+  if(wrap){wrap.scrollLeft=0;wrap.scrollTop=0;}
+}
+function onPreviewWheel(e){
+  if(!fullImg)return;
+  e.preventDefault();
+  const wrap=document.getElementById('preview-wrap');
+  const img=document.getElementById('preview-img');
+  if(!previewBaseW)previewBaseW=img.clientWidth||img.naturalWidth||0;
+  if(!previewBaseW)return;
+  const rect=img.getBoundingClientRect();
+  const fx=(e.clientX-rect.left)/rect.width;   // точка под курсором, в долях изображения
+  const fy=(e.clientY-rect.top)/rect.height;
+  const factor=e.deltaY<0?1.2:1/1.2;
+  previewZoom=Math.min(8,Math.max(1,previewZoom*factor));
+  applyPreviewZoom();
+  // удержать точку под курсором на месте
+  const nrect=img.getBoundingClientRect(), wrect=wrap.getBoundingClientRect();
+  wrap.scrollLeft = fx*nrect.width  - (e.clientX-wrect.left);
+  wrap.scrollTop  = fy*nrect.height - (e.clientY-wrect.top);
+}
 
 // --- ZONES (fractions of image W/H; survive any resolution) ---
 // Defaults baked from a real user calibration (1920-wide shiyu.darte.gg draft).
@@ -1075,6 +1109,14 @@ async function runLocalAnalysis(progress){
     left_bans:bans.left,right_bans:bans.right
   };
 }
+
+// Зум превью: колёсико — масштаб, двойной клик — сброс.
+(function(){
+  const wrap=document.getElementById('preview-wrap');
+  if(!wrap)return;
+  wrap.addEventListener('wheel',onPreviewWheel,{passive:false});
+  wrap.addEventListener('dblclick',resetPreviewZoom);
+})();
 
 </script>
 </body>
