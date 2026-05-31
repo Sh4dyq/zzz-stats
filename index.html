@@ -137,7 +137,7 @@ const sb=supabase.createClient(SB_URL,SB_KEY);
 
 const ROLES={atk:{bg:'#3b1010',fg:'#fca5a5'},stun:{bg:'#0f1f3b',fg:'#93c5fd'},rupt:{bg:'#2d1a00',fg:'#fcd34d'},sup:{bg:'#0a2218',fg:'#6ee7b7'},def:{bg:'#0a2218',fg:'#86efac'},ano:{bg:'#1a0d3b',fg:'#c4b5fd'}};
 
-let S={tournaments:[],characters:[],players:[],encounters:[],matches:[],picks:[],bans:[],costs:{},rosters:{},tour:'__all__',view:'v',cSort:{k:'pk',asc:false}};
+let S={tournaments:[],characters:[],players:[],encounters:[],matches:[],picks:[],bans:[],costs:{},rosters:{},tour:'__all__',view:'v',cSort:{k:'name',asc:true}};
 
 const ALL='__all__';
 const f1=v=>typeof v==='number'?v.toFixed(2)+'%':v;

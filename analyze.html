@@ -262,7 +262,7 @@ const DBL_T1=[6,7,10], DBL_T2=[11,15,18];
 const FP_BANS=[1,4,13], DBL_BANS=[2,3,14];
 
 let matchNum=1, fileB64=null, fileMime='image/png';
-let dbChars=[], dbPlayers=[], dbEncs=[], dbTours=[];
+let dbChars=[], dbPlayers=[], dbEncs=[], dbTours=[], dbSigs=[];
 let lastResult=null;
 
 // --- AUTH ---
@@ -295,13 +295,14 @@ async function init(){
   document.getElementById('gemini-key').value=k;
   updateKeyStatus(k);
 
-  const[{data:ch},{data:pl},{data:en},{data:to}]=await Promise.all([
+  const[{data:ch},{data:pl},{data:en},{data:to},{data:sg}]=await Promise.all([
     sb.from('characters').select('*').order('name'),
     sb.from('players').select('*').order('nickname'),
     sb.from('encounters').select('*').order('created_at',{ascending:false}),
-    sb.from('tournaments').select('*')
+    sb.from('tournaments').select('*'),
+    sb.from('signatures').select('*')
   ]);
-  dbChars=ch||[]; dbPlayers=pl||[]; dbEncs=en||[]; dbTours=to||[];
+  dbChars=ch||[]; dbPlayers=pl||[]; dbEncs=en||[]; dbTours=to||[]; dbSigs=sg||[];
   refreshEncSelect();
   populateNewEncSelects();
 }
@@ -548,6 +549,29 @@ function findChar(name){
   return bestScore<=0.34?best:null;
 }
 
+// --- Картинки персонажей/амплификаторов (статика из репо web/icons/, fallback — пустой слот) ---
+// Те же источники, что в web/icons.js (iconChar) и web/signatures.js (sigImg).
+function escA(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function emptySlot(sz){return `<span style="display:inline-block;width:${sz}px;height:${sz}px;border-radius:6px;background:#1c1f2e;flex-shrink:0;vertical-align:middle"></span>`;}
+function charImg(c,sz){
+  sz=sz||28;
+  const name=c&&c.name;
+  const url=(c&&(c.icon_url||c.portrait_url))||(name?'web/icons/characters/'+encodeURIComponent(name)+'.webp':'');
+  const fb=emptySlot(sz);
+  if(!url)return fb;
+  return `<img src="${escA(url)}" alt="${escA(name)}" width="${sz}" height="${sz}" loading="lazy" style="width:${sz}px;height:${sz}px;object-fit:cover;border-radius:6px;flex-shrink:0;vertical-align:middle" data-fb="${escA(fb)}" onerror="this.outerHTML=this.getAttribute('data-fb')">`;
+}
+// Сигнатурный амплификатор персонажа (по character_id) — для отображения и подготовки к pHash.
+function sigForChar(charId){return charId?dbSigs.find(s=>s.character_id===charId)||null:null;}
+function ampImg(sig,sz){
+  sz=sz||28;
+  const name=sig&&sig.name;
+  const url=(sig&&sig.image_url)||(name?'web/icons/amplifiers/'+encodeURIComponent(name)+'.webp':'');
+  const fb=emptySlot(sz);
+  if(!url)return fb;
+  return `<img src="${escA(url)}" alt="${escA(name)}" title="${escA(name)}" width="${sz}" height="${sz}" loading="lazy" style="width:${sz}px;height:${sz}px;object-fit:cover;border-radius:6px;flex-shrink:0;vertical-align:middle" data-fb="${escA(fb)}" onerror="this.outerHTML=this.getAttribute('data-fb')">`;
+}
+
 function charOpts(){
   return '<option value="">— не найден —</option>'+
     dbChars.map(c=>`<option value="${c.id}">${c.name}</option>`).join('');
@@ -707,16 +731,19 @@ function pickRows(side,team,list){
     const char=findChar(p.name||'');
     const uid=`${side}-${team}-${i}`;
     const unmatched=!char&&p.name?';border-color:#f87171;background:#1a0808':'';
+    const sig=sigForChar(char?.id);
     html+=`<div class="row">
-      <select id="pc-${uid}" style="flex:1;font-size:12px;padding:4px 6px${unmatched}">
+      <span id="pi-${uid}">${charImg(char,28)}</span>
+      <select id="pc-${uid}" onchange="updatePickImg('${uid}')" style="flex:1;font-size:12px;padding:4px 6px${unmatched}">
         ${setSel(charOpts(),char?.id||'')}
       </select>
       <select id="pm-${uid}" style="font-size:12px;padding:4px 5px;width:58px">
         ${setSel(msOpts(),String(p.mindscape??0))}
       </select>
       <label style="display:flex;align-items:center;gap:3px;font-size:11px;color:var(--sub);white-space:nowrap;cursor:pointer;margin:0">
-        <input type="checkbox" id="ps-${uid}" style="accent-color:var(--accent)" ${p.has_signature?'checked':''}> sig
+        <input type="checkbox" id="ps-${uid}" onchange="updatePickImg('${uid}')" style="accent-color:var(--accent)" ${p.has_signature?'checked':''}> sig
       </label>
+      <span id="pa-${uid}" title="Сигнатурный амплификатор" style="opacity:${p.has_signature?1:.35}">${ampImg(sig,28)}</span>
     </div>`;
   }
   return html;
@@ -730,12 +757,28 @@ function renderBanGroup(side,bans){
     const uid=`${side}-ban-${i}`;
     const unmatched=name&&!char?';border-color:#f87171;background:#1a0808':'';
     html+=`<div class="row">
-      <select id="bn-${uid}" style="flex:1;font-size:12px;padding:4px 6px${unmatched}">
+      <span id="bi-${uid}">${charImg(char,28)}</span>
+      <select id="bn-${uid}" onchange="updateBanImg('${uid}')" style="flex:1;font-size:12px;padding:4px 6px${unmatched}">
         ${setSel(charOpts(),char?.id||'')}
       </select>
     </div>`;
   }
   document.getElementById(`${side}-bans`).innerHTML=html;
+}
+
+// Обновить мини-фото/амплификатор при ручной правке селекта или галочки sig.
+function updatePickImg(uid){
+  const id=document.getElementById(`pc-${uid}`)?.value||'';
+  const c=dbChars.find(x=>x.id===id)||null;
+  const sigOn=document.getElementById(`ps-${uid}`)?.checked;
+  const pi=document.getElementById(`pi-${uid}`); if(pi)pi.innerHTML=charImg(c,28);
+  const pa=document.getElementById(`pa-${uid}`);
+  if(pa){pa.innerHTML=ampImg(sigForChar(id),28);pa.style.opacity=sigOn?1:.35;}
+}
+function updateBanImg(uid){
+  const id=document.getElementById(`bn-${uid}`)?.value||'';
+  const c=dbChars.find(x=>x.id===id)||null;
+  const bi=document.getElementById(`bi-${uid}`); if(bi)bi.innerHTML=charImg(c,28);
 }
 
 // --- HELPERS ---
