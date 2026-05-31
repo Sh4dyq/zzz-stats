@@ -921,11 +921,13 @@ const DEFAULT_ZONES={
   right_name: {x:0.578,y:0.090,w:0.180,h:0.040},
   left_timer: {x:0.423,y:0.108,w:0.060,h:0.034},
   right_timer:{x:0.524,y:0.108,w:0.060,h:0.034},
-  // pick footers (name + "Lv.60 Mx" strip). L/R groups, T1 row then T2 row.
-  L_T1_0:{x:0.108,y:0.672,w:0.108,h:0.078}, L_T1_1:{x:0.228,y:0.672,w:0.108,h:0.078}, L_T1_2:{x:0.348,y:0.672,w:0.108,h:0.078},
-  L_T2_0:{x:0.108,y:0.876,w:0.108,h:0.078}, L_T2_1:{x:0.228,y:0.876,w:0.108,h:0.078}, L_T2_2:{x:0.348,y:0.876,w:0.108,h:0.078},
-  R_T1_0:{x:0.528,y:0.672,w:0.108,h:0.078}, R_T1_1:{x:0.648,y:0.672,w:0.108,h:0.078}, R_T1_2:{x:0.768,y:0.672,w:0.108,h:0.078},
-  R_T2_0:{x:0.528,y:0.876,w:0.108,h:0.078}, R_T2_1:{x:0.648,y:0.876,w:0.108,h:0.078}, R_T2_2:{x:0.768,y:0.876,w:0.108,h:0.078}
+  // pick footers — TIGHT on the name + "Lv.60 Mx" TEXT only (NO amplifier icon:
+  // that gets its own zone + pHash in Этап 2). Mixing icon art into the OCR crop
+  // produces garbage. L/R groups, T1 row then T2 row.
+  L_T1_0:{x:0.110,y:0.694,w:0.082,h:0.054}, L_T1_1:{x:0.230,y:0.694,w:0.082,h:0.054}, L_T1_2:{x:0.350,y:0.694,w:0.082,h:0.054},
+  L_T2_0:{x:0.110,y:0.898,w:0.082,h:0.054}, L_T2_1:{x:0.230,y:0.898,w:0.082,h:0.054}, L_T2_2:{x:0.350,y:0.898,w:0.082,h:0.054},
+  R_T1_0:{x:0.530,y:0.694,w:0.082,h:0.054}, R_T1_1:{x:0.650,y:0.694,w:0.082,h:0.054}, R_T1_2:{x:0.770,y:0.694,w:0.082,h:0.054},
+  R_T2_0:{x:0.530,y:0.898,w:0.082,h:0.054}, R_T2_1:{x:0.650,y:0.898,w:0.082,h:0.054}, R_T2_2:{x:0.770,y:0.898,w:0.082,h:0.054}
 };
 function getZones(){
   try{const s=JSON.parse(localStorage.getItem('zzz_zones'));if(s)return {...structuredClone(DEFAULT_ZONES),...s};}catch(e){}
