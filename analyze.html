@@ -3,6 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>ZZZ Stats — Анализ скриншота</title>
 <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
@@ -883,7 +886,13 @@ let _lastAlign=null;                     // {s,dx,dy} последнего пр�
 function AZ(){return curZones||getZones();}            // зоны для кропа/хэша
 function autoAlign(){return localStorage.getItem('zzz_autoalign')!=='0';}  // по умолчанию вкл.
 function setAutoAlign(on){localStorage.setItem('zzz_autoalign',on?'1':'0');}
-function getRefAnchors(){try{return JSON.parse(localStorage.getItem('zzz_ref_anchors'))||null;}catch(e){return null;}}
+// Якоря валидны только если обе точки в верхней шапке (y<0.25) и разнесены по X —
+// иначе это мусор/стэйл от старого детекта (садился в драфт-сетку): отбрасываем.
+function validAnchors(a){
+  return !!(a&&a.L&&a.R&&a.L.y<0.25&&a.R.y<0.25&&Math.abs(a.R.x-a.L.x)>0.03&&
+    [a.L.x,a.L.y,a.R.x,a.R.y].every(v=>v>=0&&v<=1));
+}
+function getRefAnchors(){try{const a=JSON.parse(localStorage.getItem('zzz_ref_anchors'));return validAnchors(a)?a:null;}catch(e){return null;}}
 function ctr(z){return {x:z.x+z.w/2,y:z.y+z.h/2};}
 
 // Найти центроиды левой/правой красных плашек таймеров. Возвращает {L,R} в долях или null.
