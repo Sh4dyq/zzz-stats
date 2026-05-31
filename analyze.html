@@ -86,7 +86,7 @@ h3{font-size:16px;font-weight:600;margin-bottom:14px;letter-spacing:.04em}
         <img id="preview-img" style="max-width:100%;width:100%;display:block;border-radius:6px;border:1px solid var(--border)">
         <div id="zone-overlay" style="position:absolute;inset:0;pointer-events:none;display:none"></div>
       </div>
-      <div style="font-size:10px;color:var(--sub);padding:4px 2px 0">Колёсико мыши — зум скриншота для точной разметки зон (двойной клик — сброс).</div>
+      <div style="font-size:10px;color:var(--sub);padding:4px 2px 0">При активной калибровке: колёсико мыши — зум скриншота для точной разметки зон (двойной клик — сброс).</div>
     </div>
     <div id="calib-panel" style="display:none;margin-bottom:12px;border:1px solid var(--border);border-radius:8px;padding:12px;background:#0b0d14">
       <div style="font-size:12px;color:var(--sub);margin-bottom:8px">
@@ -792,7 +792,8 @@ let calibOn=false;
 let previewZoom=1, previewBaseW=0;
 function applyPreviewZoom(){
   const st=document.getElementById('preview-stage');
-  st.style.width = previewZoom<=1 ? '' : (previewBaseW*previewZoom)+'px';
+  if(previewZoom<=1){ st.style.width=''; st.style.maxWidth='100%'; }
+  else { st.style.maxWidth='none'; st.style.width=(previewBaseW*previewZoom)+'px'; }
 }
 function resetPreviewZoom(){
   previewZoom=1; previewBaseW=0;
@@ -801,7 +802,7 @@ function resetPreviewZoom(){
   if(wrap){wrap.scrollLeft=0;wrap.scrollTop=0;}
 }
 function onPreviewWheel(e){
-  if(!fullImg)return;
+  if(!fullImg||!calibOn)return;   // зум только при активной калибровке зон
   e.preventDefault();
   const wrap=document.getElementById('preview-wrap');
   const img=document.getElementById('preview-img');
@@ -866,7 +867,7 @@ function toggleCalib(){
   document.getElementById('calib-btn').className='btn '+(calibOn?'btn-y':'btn-g');
   document.getElementById('calib-panel').style.display=calibOn?'block':'none';
   if(calibOn){ if(!fullImg){alert('Сначала выберите скриншот');calibOn=false;document.getElementById('calib-btn').className='btn btn-g';document.getElementById('calib-panel').style.display='none';return;} drawZoneOverlay(); }
-  else document.getElementById('zone-overlay').style.display='none';
+  else { document.getElementById('zone-overlay').style.display='none'; resetPreviewZoom(); }
 }
 function clamp01(v){return Math.max(0,Math.min(0.999,v));}
 function drawZoneOverlay(){
