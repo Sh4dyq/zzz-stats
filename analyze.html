@@ -58,43 +58,14 @@ h3{font-size:16px;font-weight:600;margin-bottom:14px;letter-spacing:.04em}
 <!-- Main -->
 <div id="main" style="display:none;padding:24px;max-width:960px;margin:0 auto">
 
-  <!-- Gemini key -->
-  <div class="card" style="margin-bottom:16px">
-    <h3>OpenRouter API ключ</h3>
-    <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
-      <div style="flex:1;min-width:200px">
-        <label>Ключ сохраняется только в вашем браузере</label>
-        <input id="gemini-key" type="text" placeholder="sk-or-..." style="width:100%;font-family:'JetBrains Mono',monospace;font-size:12px">
-      </div>
-      <button class="btn btn-g" onclick="saveKey()">Сохранить</button>
-      <a href="https://openrouter.ai/keys" target="_blank"
-         style="font-size:12px;color:var(--accent);text-decoration:none;white-space:nowrap;padding-bottom:10px">
-        Получить бесплатно →
-      </a>
-    </div>
-    <div id="key-status" style="font-size:12px;color:var(--sub);margin-top:6px"></div>
-    <div style="margin-top:12px">
-      <label>Модель с поддержкой изображений</label>
-      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-        <select id="or-model" style="flex:1;min-width:260px;max-width:500px">
-          <option value="">— нажми «Найти модели» →</option>
-        </select>
-        <button class="btn btn-g" id="find-btn" onclick="findModels()" style="white-space:nowrap">Найти модели</button>
-      </div>
-      <div id="model-status" style="font-size:12px;color:var(--sub);margin-top:4px"></div>
-    </div>
-  </div>
-
   <!-- Upload -->
   <div class="card" style="margin-bottom:16px">
     <h3>Скриншот завершённого драфта</h3>
     <div style="margin-bottom:12px">
-      <label>Движок распознавания</label>
+      <label>Распознавание: локальное (OCR), офлайн, без ключа</label>
       <div style="display:flex;gap:4px;flex-wrap:wrap;align-items:center">
-        <button id="eng-local" class="btn btn-y" style="padding:6px 16px" onclick="setEngine('local')">Локальный (OCR)</button>
-        <button id="eng-neural" class="btn btn-g" style="padding:6px 16px" onclick="setEngine('neural')">Нейросеть</button>
-        <button id="calib-btn" class="btn btn-g" style="padding:6px 16px;margin-left:8px" onclick="toggleCalib()">⚙ Калибровка зон</button>
-        <span id="eng-hint" style="font-size:11px;color:var(--sub);margin-left:8px"></span>
+        <button id="calib-btn" class="btn btn-g" style="padding:6px 16px" onclick="toggleCalib()">⚙ Калибровка зон</button>
+        <span style="font-size:11px;color:var(--sub);margin-left:8px">Баны пока проставляются вручную.</span>
       </div>
     </div>
     <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:12px">
@@ -261,7 +232,7 @@ const FP_T1=[5,8,9], FP_T2=[12,16,17];
 const DBL_T1=[6,7,10], DBL_T2=[11,15,18];
 const FP_BANS=[1,4,13], DBL_BANS=[2,3,14];
 
-let matchNum=1, fileB64=null, fileMime='image/png';
+let matchNum=1, fileB64=null;
 let dbChars=[], dbPlayers=[], dbEncs=[], dbTours=[], dbSigs=[];
 let lastResult=null;
 
@@ -291,10 +262,6 @@ sb.auth.onAuthStateChange((_,sess)=>{
 
 // --- INIT ---
 async function init(){
-  const k=localStorage.getItem('gemini_key')||'';
-  document.getElementById('gemini-key').value=k;
-  updateKeyStatus(k);
-
   const[{data:ch},{data:pl},{data:en},{data:to},{data:sg}]=await Promise.all([
     sb.from('characters').select('*').order('name'),
     sb.from('players').select('*').order('nickname'),
@@ -323,64 +290,6 @@ function refreshEncSelect(keepId){
   if(cur)sel.value=cur;
 }
 
-// --- FIND MODELS ---
-async function findModels(){
-  const key=localStorage.getItem('gemini_key')||'';
-  if(!key){alert('Сначала введите и сохраните ключ');return;}
-  const btn=document.getElementById('find-btn');
-  const status=document.getElementById('model-status');
-  btn.disabled=true; btn.innerHTML='<span class="spinner"></span>';
-  status.textContent='Запрашиваю список моделей...'; status.style.color='var(--sub)';
-  try{
-    const res=await fetch('https://openrouter.ai/api/v1/models',{
-      headers:{'Authorization':`Bearer ${key}`}
-    });
-    const data=await res.json();
-    const free=(data.data||[]).filter(m=>{
-      const isFree=m.pricing?.prompt==='0'||parseFloat(m.pricing?.prompt||'1')===0;
-      const hasVision=m.architecture?.modality&&(
-        m.architecture.modality.includes('image')||
-        m.architecture.modality.includes('vision')||
-        m.architecture.input_modalities?.includes('image')
-      );
-      return isFree&&hasVision;
-    });
-    const sel=document.getElementById('or-model');
-    if(free.length===0){
-      status.style.color='#f87171';
-      status.textContent='Бесплатных моделей с поддержкой изображений не найдено. Попробуй пополнить баланс на $1.';
-      // Show all free models anyway
-      const allFree=(data.data||[]).filter(m=>
-        m.pricing?.prompt==='0'||parseFloat(m.pricing?.prompt||'1')===0
-      );
-      sel.innerHTML='<option value="">— нет бесплатных vision-моделей —</option>'+
-        allFree.slice(0,10).map(m=>`<option value="${m.id}">${m.id}</option>`).join('');
-    }else{
-      sel.innerHTML=free.map(m=>`<option value="${m.id}">${m.id}</option>`).join('');
-      status.style.color='#4ade80';
-      status.textContent=`✓ Найдено ${free.length} бесплатных моделей с vision. Первая выбрана автоматически.`;
-    }
-  }catch(e){
-    status.style.color='#f87171';
-    status.textContent='Ошибка: '+e.message;
-  }finally{
-    btn.disabled=false; btn.textContent='Найти модели';
-  }
-}
-
-// --- KEY ---
-function saveKey(){
-  const k=document.getElementById('gemini-key').value.trim();
-  localStorage.setItem('gemini_key',k);
-  updateKeyStatus(k);
-}
-function updateKeyStatus(k){
-  const el=document.getElementById('key-status');
-  if(k&&k.length>10){el.style.color='#4ade80';el.textContent='✓ Ключ сохранён — бесплатный тир доступен без карты';}
-  else if(k){el.style.color='#f87171';el.textContent='Ключ слишком короткий, проверьте что скопировали полностью';}
-  else{el.style.color='var(--sub)';el.textContent='Зарегистрируйтесь на openrouter.ai и создайте ключ — это бесплатно и работает из России';}
-}
-
 // --- MATCH NUM ---
 function setMatchNum(n){
   matchNum=n;
@@ -392,7 +301,6 @@ function setMatchNum(n){
 let fullImg=null;
 function onFile(e){
   const f=e.target.files[0]; if(!f)return;
-  fileMime=f.type||'image/png';
   const r=new FileReader();
   r.onload=ev=>{
     const url=ev.target.result;
@@ -406,28 +314,24 @@ function onFile(e){
   r.readAsDataURL(f);
 }
 
-// --- ANALYSIS ---
+// --- ANALYSIS (локальный OCR-движок) ---
 async function runAnalysis(){
   if(!fileB64){alert('Выберите файл скриншота');return;}
-  const key=localStorage.getItem('gemini_key')||'';
-  if(engine==='neural'&&!key){alert('Для нейросети введите и сохраните API ключ');return;}
 
   const btn=document.getElementById('analyze-btn');
   const status=document.getElementById('analyze-status');
   btn.disabled=true;
   btn.innerHTML='<span class="spinner"></span>Анализирую...';
   status.style.color='var(--sub)';
-  status.textContent=engine==='local'?'Локальное распознавание (OCR)...':'';
+  status.textContent='Локальное распознавание (OCR)...';
   document.getElementById('results').style.display='none';
 
   try{
-    const result=engine==='local'
-      ? await runLocalAnalysis(s=>{status.textContent=s;})
-      : await callGemini(key,fileB64,fileMime);
+    const result=await runLocalAnalysis(s=>{status.textContent=s;});
     renderResults(result);
     document.getElementById('results').style.display='block';
     document.getElementById('results').scrollIntoView({behavior:'smooth',block:'start'});
-    if(engine==='local'){status.style.color='#4ade80';status.textContent='✓ Распознано локально. Проверьте и поправьте при необходимости.';}
+    status.style.color='#4ade80';status.textContent='✓ Распознано локально. Проверьте и поправьте при необходимости.';
   }catch(e){
     status.style.color='#f87171';
     status.textContent='Ошибка анализа: '+e.message;
@@ -436,75 +340,6 @@ async function runAnalysis(){
     btn.disabled=false;
     btn.textContent='Анализировать';
   }
-}
-
-async function callGemini(key,b64,mime){
-  const prompt=`This is a completed draft screenshot from the Zenless Zone Zero tournament site shiyu.darte.gg.
-
-Return ONLY a JSON object with this structure (no markdown, no explanation):
-{
-  "left_player": "nickname",
-  "right_player": "nickname",
-  "left_timer": "M:SS",
-  "right_timer": "M:SS",
-  "left_restarts": 0,
-  "right_restarts": 0,
-  "left_picks": [
-    {"name": "character name", "mindscape": 0, "has_signature": false, "team": 1}
-  ],
-  "right_picks": [...],
-  "left_bans": ["name1", "name2", "name3"],
-  "right_bans": ["name1", "name2", "name3"]
-}
-
-Extraction rules:
-LEFT PLAYER = the large bold nickname at the top-left. RIGHT PLAYER = top-right.
-
-TIMERS: Find the two timers shown on red/highlighted backgrounds flanking the central circular room-number badge. The timer to the LEFT of the badge = left_timer. The timer to the RIGHT = right_timer. Format: M:SS (e.g. "2:03").
-
-RESTARTS: At the very top of the screen look for "P1 restarts" and "P2 restarts". P1 restarts = left_restarts (integer), P2 restarts = right_restarts.
-
-PICKS: In the BOTTOM section there are two groups of large character cards. Left group = left player, right group = right player. Each group has 6 characters in two rows of 3:
-- Top row (labeled "01 TEAM") → team: 1
-- Bottom row (labeled "02 TEAM") → team: 2
-For each character:
-  "name" = exact text label below the character portrait (e.g. "Burnice", "Ellen")
-  "mindscape" = integer from the M0-M6 badge near the character (e.g. M2 → 2, M0 → 0)
-  "has_signature" = true if the small weapon icon on the card appears golden/ornate/unique (signature quality). false if gray/generic or uncertain.
-
-BANS: In the upper draft grid, identify the 3 characters banned by each player from the character portrait icons. Left player banned characters are in grid positions 1, 4, 13. Right player banned characters are in positions 2, 3, 14. Use the character name as you can identify them visually.
-
-Return exactly 6 picks per player (3 team-1 and 3 team-2) and exactly 3 bans per player.`;
-
-  const res=await fetch('https://openrouter.ai/api/v1/chat/completions',{
-    method:'POST',
-    headers:{
-      'Authorization':`Bearer ${key}`,
-      'Content-Type':'application/json',
-      'HTTP-Referer':window.location.href,
-      'X-Title':'ZZZ Stats Analyzer'
-    },
-    body:JSON.stringify({
-      model:document.getElementById('or-model').value,
-      messages:[{
-        role:'user',
-        content:[
-          {type:'text',text:prompt},
-          {type:'image_url',image_url:{url:`data:${mime};base64,${b64}`}}
-        ]
-      }]
-    })
-  });
-
-  if(!res.ok){
-    const err=await res.json().catch(()=>({}));
-    throw new Error(err?.error?.message||`HTTP ${res.status}`);
-  }
-
-  const data=await res.json();
-  let text=data?.choices?.[0]?.message?.content||'';
-  text=text.replace(/```json\s*/g,'').replace(/```\s*/g,'').trim();
-  return JSON.parse(text);
 }
 
 // --- RENDER RESULTS ---
@@ -942,19 +777,10 @@ async function saveData(){
 
 // =====================================================================
 // LOCAL ENGINE (Tesseract OCR + zone cropping) — Этап 1
-// Produces the SAME JSON shape as callGemini(), so renderResults/saveData
-// are reused unchanged. Bans are left empty here (Этап 2 = pHash icons).
+// Produces a {left_player,...,left_picks,...} object consumed by
+// renderResults/saveData. Bans are left empty here (Этап 2 = pHash icons).
 // =====================================================================
-let engine='local', calibOn=false;
-
-function setEngine(e){
-  engine=e;
-  document.getElementById('eng-local').className='btn '+(e==='local'?'btn-y':'btn-g');
-  document.getElementById('eng-neural').className='btn '+(e==='neural'?'btn-y':'btn-g');
-  document.getElementById('eng-hint').textContent = e==='local'
-    ? 'Бесплатно, офлайн, без ключа. Баны пока проставляются вручную.'
-    : 'Требует API-ключ OpenRouter.';
-}
+let calibOn=false;
 
 // --- ZONES (fractions of image W/H; survive any resolution) ---
 // Defaults baked from a real user calibration (1920-wide shiyu.darte.gg draft).
@@ -1158,7 +984,7 @@ function parsePick(raw){
   return {name,mindscape:ms};
 }
 
-// --- Orchestrator: returns callGemini-compatible object ---
+// --- Orchestrator: returns the object consumed by renderResults/saveData ---
 async function runLocalAnalysis(progress){
   const img=fullImg;
   if(!img||!img.naturalWidth)throw new Error('Изображение не загружено');
@@ -1190,8 +1016,6 @@ async function runLocalAnalysis(progress){
   };
 }
 
-// init engine button state
-setEngine('local');
 </script>
 </body>
 </html>
