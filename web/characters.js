@@ -26,7 +26,6 @@ async function pgCharacters(){
     if(c.id===_editChar)return charEditRow(c);
     return`<div class="row-item">
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-        ${iconChar(c,32)}
         ${iconRarity(c.rarity,18)}
         <span style="font-weight:600">${c.name}</span>
         ${iconElement(c.element,18)}
@@ -39,15 +38,15 @@ async function pgCharacters(){
     </div>`;
   }).join('');
 
-  const elField=D.hasElement?`<div><label>Атрибут</label><select id="c-el"><option value="">—</option>${Object.entries(ELEMENTS).map(([k,vv])=>`<option value="${k}">${vv}</option>`).join('')}</select></div>`:'';
+  const elField=D.hasElement?`<div><label>Атрибут</label>${icSelect('c-el',icElementItems())}</div>`:'';
 
   html(`<div class="card" style="margin-bottom:16px">
     <h3>Добавить вручную</h3>
     <div class="${D.hasElement?'grid2':'grid3'}">
       <div><label>Имя (EN)</label><input id="c-name" type="text" placeholder="Ellen Joe"></div>
       ${elField}
-      <div><label>Редкость</label><select id="c-rar"><option value="S">S</option><option value="A">A</option></select></div>
-      <div><label>Роль</label>${roleSelect('c-role')}</div>
+      <div><label>Редкость</label>${icSelect('c-rar',icRarityItems())}</div>
+      <div><label>Роль</label>${icSelect('c-role',icRoleItems())}</div>
     </div>
     <button class="btn btn-y" style="margin-top:12px" onclick="addChar()">Добавить</button>
     ${D.hasElement?'':`<p style="color:var(--sub);font-size:12px;margin-top:10px">💡 Чтобы хранить атрибут (Лёд/Огонь/…), один раз выполни в Supabase → SQL Editor:<br><code style="color:var(--accent)">alter table characters add column if not exists element text;</code><br>после этого обнови страницу.</p>`}
@@ -56,12 +55,12 @@ async function pgCharacters(){
 }
 
 function charEditRow(c){
-  const elField=D.hasElement?`<select id="ec-el"><option value="">—</option>${Object.entries(ELEMENTS).map(([k,vv])=>`<option value="${k}" ${c.element===k?'selected':''}>${vv}</option>`).join('')}</select>`:'';
+  const elField=D.hasElement?`<div style="min-width:140px">${icSelect('ec-el',icElementItems(),c.element)}</div>`:'';
   return`<div class="row-item" style="border-color:var(--accent);flex-wrap:wrap;gap:8px">
     <input id="ec-name" type="text" value="${(c.name||'').replace(/"/g,'&quot;')}" style="flex:1;min-width:150px">
-    <select id="ec-rar"><option value="S" ${c.rarity==='S'?'selected':''}>S</option><option value="A" ${c.rarity==='A'?'selected':''}>A</option></select>
+    <div style="min-width:90px">${icSelect('ec-rar',icRarityItems(),c.rarity)}</div>
     ${elField}
-    ${roleSelect('ec-role',c.role)}
+    <div style="min-width:140px">${icSelect('ec-role',icRoleItems(),c.role)}</div>
     <button class="btn btn-y" style="font-size:12px;padding:5px 12px" onclick="saveEditChar('${c.id}')">Сохранить</button>
     <button class="btn btn-g" style="font-size:12px;padding:5px 12px" onclick="cancelEditChar()">Отмена</button>
   </div>`;

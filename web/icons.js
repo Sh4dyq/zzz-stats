@@ -70,6 +70,48 @@ function iconChar(c,size){
   return fb;
 }
 
+// --- Наборы пунктов для кастомных дропдаунов с иконками ---
+function icRarityItems(sz){return [{value:'S',label:'S',icon:iconRarity('S',sz||18)},{value:'A',label:'A',icon:iconRarity('A',sz||18)}];}
+function icRoleItems(sz){return Object.entries(IC_ROLE_LBL).map(([k,l])=>({value:k,label:l,icon:iconRole(k,sz||18)}));}
+function icElementItems(sz){return Object.entries(IC_ELEM_LBL).map(([k,l])=>({value:k,label:l,icon:iconElement(k,sz||18)}));}
+
+// --- Кастомный дропдаун с иконками ---
+// Хранит выбранное значение в скрытом <input id="<id>">, поэтому совместим с v(id).
+// items: [{value,label,icon(html)}]. selected — текущее значение.
+function icSelect(id,items,selected){
+  let cur=items.find(i=>i.value===selected);
+  if(!cur)cur=items[0];
+  const optHtml=i=>`<span class="icsel-ic">${i.icon||''}</span><span>${_icEsc(i.label)}</span>`;
+  const opts=items.map(i=>`<div class="icsel-opt${i.value===(cur&&cur.value)?' sel':''}" data-v="${_icEsc(i.value)}" onclick="icSelectPick('${id}',this)">${optHtml(i)}</div>`).join('');
+  return `<div class="icsel" id="icsel-${id}">
+    <input type="hidden" id="${id}" value="${_icEsc(cur?cur.value:'')}">
+    <button type="button" class="icsel-btn" onclick="icSelectToggle('${id}',event)">
+      <span class="icsel-cur">${cur?optHtml(cur):''}</span><span class="icsel-arr">▾</span>
+    </button>
+    <div class="icsel-list" id="icsel-list-${id}">${opts}</div>
+  </div>`;
+}
+function icSelectToggle(id,ev){
+  if(ev)ev.stopPropagation();
+  const list=document.getElementById('icsel-list-'+id);if(!list)return;
+  const open=list.classList.contains('open');
+  document.querySelectorAll('.icsel-list.open').forEach(l=>l.classList.remove('open'));
+  if(!open)list.classList.add('open');
+}
+function icSelectPick(id,el){
+  const inp=document.getElementById(id);if(inp)inp.value=el.getAttribute('data-v');
+  const wrap=document.getElementById('icsel-'+id);
+  if(wrap){
+    wrap.querySelector('.icsel-cur').innerHTML=el.innerHTML;
+    wrap.querySelectorAll('.icsel-opt').forEach(o=>o.classList.toggle('sel',o===el));
+  }
+  const list=document.getElementById('icsel-list-'+id);if(list)list.classList.remove('open');
+}
+if(typeof document!=='undefined'&&!window._icSelInit){
+  window._icSelInit=true;
+  document.addEventListener('click',e=>{if(!e.target.closest('.icsel'))document.querySelectorAll('.icsel-list.open').forEach(l=>l.classList.remove('open'));});
+}
+
 // --- Большой портрет персонажа (для анализатора, Этап B) ---
 function iconCharPortrait(c,size){
   const s=size||96;
