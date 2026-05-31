@@ -243,6 +243,19 @@ const FP_T1=[5,8,9], FP_T2=[12,16,17];
 const DBL_T1=[6,7,10], DBL_T2=[11,15,18];
 const FP_BANS=[1,4,13], DBL_BANS=[2,3,14];
 
+// Фиксированная раскладка драфт-сетки (подтверждена скринами): slot № хода → метаданные.
+// Левая сторона = всегда fp, правая = всегда dbl (во 2-й игре bo2 игроки меняются местами).
+// kind: 'pick'|'ban'; team: 1|2 для пиков, null для банов; idx: позиция внутри своей группы (для рендера/порядка).
+const GRID_SLOTS=(()=>{
+  const m={};
+  const add=(arr,side,kind,team)=>arr.forEach((n,idx)=>m[n]={slot:n,side,kind,team,idx});
+  add(FP_T1,'left','pick',1);  add(FP_T2,'left','pick',2);
+  add(DBL_T1,'right','pick',1);add(DBL_T2,'right','pick',2);
+  add(FP_BANS,'left','ban',null); add(DBL_BANS,'right','ban',null);
+  return m;
+})();
+const GRID_PICK_DIST=64;   // порог Хэмминга для кросс-источника (webp-эталон vs кроп из игры)
+
 let matchNum=1, fileB64=null;
 let dbChars=[], dbPlayers=[], dbEncs=[], dbTours=[], dbSigs=[];
 let lastResult=null;
@@ -770,7 +783,7 @@ async function saveData(){
     }
 
     // Самообучение pHash: запоминаем иконки подтверждённых банов как эталоны.
-    await learnBanIcons();
+    await learnIcons();
 
     status.className='alert-ok';
     status.textContent='✓ Матч сохранён! Готово к следующему скриншоту.';
@@ -855,16 +868,33 @@ const DEFAULT_ZONES={
   R_T2_0:{x:0.5254022988505748,y:0.883715652201639,w:0.04981609195402299,h:0.054},
   R_T2_1:{x:0.6385057471264368,y:0.8877968944297421,w:0.052114942528735636,h:0.04991875777189682},
   R_T2_2:{x:0.7504597701149426,y:0.8877968944297421,w:0.05326436781609196,h:0.04787813665784523},
-  // ban icons in the upper draft grid (Этап 2, pHash). ПЛЕЙСХОЛДЕРНЫЕ координаты —
-  // откалибруйте под реальную сетку через «⚙ Калибровка зон». left=1,4,13; right=2,3,14.
-  L_BAN_0:{x:0.300,y:0.250,w:0.050,h:0.090},
-  L_BAN_1:{x:0.360,y:0.250,w:0.050,h:0.090},
-  L_BAN_2:{x:0.420,y:0.250,w:0.050,h:0.090},
-  R_BAN_0:{x:0.530,y:0.250,w:0.050,h:0.090},
-  R_BAN_1:{x:0.590,y:0.250,w:0.050,h:0.090},
-  R_BAN_2:{x:0.650,y:0.250,w:0.050,h:0.090}
+  // ИКОНКИ драфт-сетки (Этап 2, pHash) — все 18 слотов по фикс-раскладке. Ключ G<slot> = № хода.
+  // Координаты СТАРТОВЫЕ (под ~финальный драфт shiyu) — откалибруйте через «⚙ Калибровка зон».
+  // Левая сторона (fp):   ряд1 8 5 4 1 / ряд2 16 13 12 9 / ряд3 17
+  // Правая сторона (dbl):  ряд1 2 3 6 7 / ряд2 10 11 14 15 / ряд3 18
+  ...GRID_DEFAULT_ZONES()
 };
-const BAN_ZONE_KEYS={left:['L_BAN_0','L_BAN_1','L_BAN_2'],right:['R_BAN_0','R_BAN_1','R_BAN_2']};
+// Сгенерировать дефолтные зоны иконок сетки из регулярной модели (4 кол × 2 ряда + 1 нижняя на сторону).
+function GRID_DEFAULT_ZONES(){
+  const w=0.045,h=0.082, Lx=[0.278,0.332,0.386,0.440], Rx=[0.527,0.581,0.635,0.689], Ry=[0.225,0.330,0.435];
+  // [slot, x, y]
+  const cells=[
+    // left fp: row1 8 5 4 1
+    [8,Lx[0],Ry[0]],[5,Lx[1],Ry[0]],[4,Lx[2],Ry[0]],[1,Lx[3],Ry[0]],
+    // left fp: row2 16 13 12 9
+    [16,Lx[0],Ry[1]],[13,Lx[1],Ry[1]],[12,Lx[2],Ry[1]],[9,Lx[3],Ry[1]],
+    // left fp: row3 17 (под 3-й колонкой)
+    [17,Lx[2],Ry[2]],
+    // right dbl: row1 2 3 6 7
+    [2,Rx[0],Ry[0]],[3,Rx[1],Ry[0]],[6,Rx[2],Ry[0]],[7,Rx[3],Ry[0]],
+    // right dbl: row2 10 11 14 15
+    [10,Rx[0],Ry[1]],[11,Rx[1],Ry[1]],[14,Rx[2],Ry[1]],[15,Rx[3],Ry[1]],
+    // right dbl: row3 18 (под 2-й колонкой)
+    [18,Rx[1],Ry[2]]
+  ];
+  const o={}; cells.forEach(([n,x,y])=>o['G'+n]={x,y,w,h}); return o;
+}
+function gridKey(slot){return 'G'+slot;}
 function getZones(){
   try{const s=JSON.parse(localStorage.getItem('zzz_zones'));if(s)return {...structuredClone(DEFAULT_ZONES),...s};}catch(e){}
   return structuredClone(DEFAULT_ZONES);
@@ -1146,50 +1176,73 @@ function parsePick(raw){
   return {name,mindscape:ms};
 }
 
-// Эталоны иконок банов из Supabase (растущая база, пополняется из подтверждений).
-// Таблица icon_hashes может ещё не существовать → возвращаем [] без падения.
-async function loadBanRefs(){
-  try{
-    const{data,error}=await sb.from('icon_hashes').select('character_id,hash').eq('kind','ban');
-    if(error)return[];
-    return (data||[]).filter(r=>r.character_id&&r.hash);
-  }catch(e){return[];}
-}
+// === Этап 2: распознавание ВСЕЙ драфт-сетки по pHash ===
+// Эталоны = иконки из репо (web/icons/characters/<name>.webp) + накопленные реальные кропы из
+// подтверждённых сохранений (icon_hashes). aHash яркостный → один эталон годится и для цветных
+// пиков, и для десатурированных (ч/б) банов: цвет отбрасывается, паттерн яркости сохраняется.
+let _charRefs=null;            // [{character_id,hash}] — кэш базы эталонов на сессию
 
-// Распознать баны по pHash (имена для совместимости с renderBanGroup/JSON-контрактом).
-function recognizeBans(img,refs){
-  const out={left:[],right:[]};
-  if(!refs.length)return out;             // база эталонов пуста — баны проставит пользователь
-  const Z=AZ();
-  for(const side of['left','right']){
-    for(const k of BAN_ZONE_KEYS[side]){
-      const z=Z[k];
-      if(!z){out[side].push('');continue;}
-      const m=matchIcon(hashIcon(img,z),refs,12);   // один источник → малый порог Хэмминга
-      const c=m&&dbChars.find(x=>x.id===m.character_id);
-      out[side].push(c?c.name:'');
-    }
+function hashImageEl(img){return hashIcon(img,{x:0,y:0,w:1,h:1});}   // хэш standalone-картинки целиком
+function loadImg(src){return new Promise(res=>{const im=new Image();im.onload=()=>res(im);im.onerror=()=>res(null);im.src=src;});}
+
+// Собрать базу эталонов: webp персонажей (по dbChars) + строки icon_hashes из БД. Кэшируется на сессию.
+async function loadIconRefs(progress){
+  if(_charRefs)return _charRefs;
+  const refs=[];
+  let done=0;
+  for(const c of dbChars){                 // 1) статика репозитория — доступна сразу, без логина
+    const im=await loadImg('web/icons/characters/'+encodeURIComponent(c.name)+'.webp');
+    if(im&&im.naturalWidth)refs.push({character_id:c.id,hash:hashImageEl(im)});
+    if(progress&&(++done%10===0))progress(`Эталоны иконок ${done}/${dbChars.length}...`);
   }
-  return out;
+  try{                                       // 2) накопленные реальные кропы (точнее при совпадении источника)
+    const{data}=await sb.from('icon_hashes').select('character_id,hash');
+    (data||[]).forEach(r=>{if(r.character_id&&r.hash)refs.push({character_id:r.character_id,hash:r.hash});});
+  }catch(e){}
+  _charRefs=refs;
+  return refs;
 }
 
-// Самообучение: хэшируем иконки подтверждённых банов из текущего скрина и
-// дописываем в icon_hashes (kind='ban'). Best-effort: при отсутствии таблицы/картинки молча выходим.
-async function learnBanIcons(){
+// Распознать все 18 слотов сетки. Возвращает {picks:{left,right}, bans:{left,right}}.
+// picks[side] — team-упорядоченный массив {name,team,_charId,dist}; bans[side] — имена по ban_order.
+function recognizeGrid(img,refs){
+  const Z=AZ(), bySlot={};
+  for(let n=1;n<=18;n++){
+    const meta=GRID_SLOTS[n], z=Z[gridKey(n)];
+    if(!meta||!z)continue;
+    const m=refs.length?matchIcon(hashIcon(img,z),refs,GRID_PICK_DIST):null;
+    const c=m&&dbChars.find(x=>x.id===m.character_id);
+    bySlot[n]={...meta,charId:c?c.id:'',name:c?c.name:'',dist:m?m.dist:null,redFrame:hasRedFrame(img,z)};
+  }
+  const picks={left:[],right:[]}, bans={left:[],right:[]};
+  // Пики в порядке слотов команды (T1, затем T2) — тот же порядок, что ждёт saveData (pick_order по индексу).
+  [['left',FP_T1,1],['left',FP_T2,2],['right',DBL_T1,1],['right',DBL_T2,2]].forEach(([side,slots,team])=>{
+    slots.forEach(n=>{const s=bySlot[n]; if(s)picks[side].push({name:s.name,team,_charId:s.charId,dist:s.dist});});
+  });
+  // Баны в порядке ban_order (FP_BANS/DBL_BANS).
+  [['left',FP_BANS],['right',DBL_BANS]].forEach(([side,slots])=>{
+    slots.forEach(n=>{const s=bySlot[n]; bans[side].push(s?s.name:'');});
+  });
+  return {picks,bans};
+}
+
+// Самообучение: после успешного сохранения хэшируем реальные кропы всех 18 слотов с подтверждёнными
+// персонажами (из селектов) и дописываем в icon_hashes (kind='char'). Best-effort.
+async function learnIcons(){
   if(!fullImg||!fullImg.naturalWidth)return;
-  curZones=alignedZones(fullImg);         // те же выровненные зоны, что при распознавании
+  curZones=alignedZones(fullImg);          // те же выровненные зоны, что при распознавании
   const Z=AZ(), rows=[];
-  for(const side of['left','right']){
-    BAN_ZONE_KEYS[side].forEach((k,i)=>{
-      const charId=gBan(side,i), z=Z[k];
-      if(charId&&z)rows.push({character_id:charId,kind:'ban',hash:hashIcon(fullImg,z)});
-    });
-  }
+  [['left','t1',FP_T1],['left','t2',FP_T2],['right','t1',DBL_T1],['right','t2',DBL_T2]].forEach(([side,team,slots])=>{
+    slots.forEach((n,i)=>{const v=gPick(side,team,i), z=Z[gridKey(n)];
+      if(v.charId&&z)rows.push({character_id:v.charId,kind:'char',hash:hashIcon(fullImg,z)});});
+  });
+  [['left',FP_BANS],['right',DBL_BANS]].forEach(([side,slots])=>{
+    slots.forEach((n,i)=>{const charId=gBan(side,i), z=Z[gridKey(n)];
+      if(charId&&z)rows.push({character_id:charId,kind:'char',hash:hashIcon(fullImg,z)});});
+  });
   if(!rows.length)return;
-  try{
-    const{error}=await sb.from('icon_hashes').insert(rows);
-    if(error)console.warn('learnBanIcons:',error.message);
-  }catch(e){console.warn('learnBanIcons:',e);}
+  try{const{error}=await sb.from('icon_hashes').insert(rows);if(error)console.warn('learnIcons:',error.message);}
+  catch(e){console.warn('learnIcons:',e);}
 }
 
 // --- Orchestrator: returns the object consumed by renderResults/saveData ---
@@ -1213,23 +1266,37 @@ async function runLocalAnalysis(progress){
   const left_restarts=parseInt0(await ocrZone(img,'p1_restarts',W_DIG,'7'));
   const right_restarts=parseInt0(await ocrZone(img,'p2_restarts',W_DIG,'7'));
 
-  const picks={left:[],right:[]};
-  const map=[['left',1,'L_T1'],['left',2,'L_T2'],['right',1,'R_T1'],['right',2,'R_T2']];
-  for(const[side,team,prefix] of map){
+  // OCR карточек пиков (имя + mindscape) — источник mindscape; собираем в team-порядке (T1, затем T2).
+  const ocr={left:[],right:[]};
+  for(const[side,team,prefix] of [['left',1,'L_T1'],['left',2,'L_T2'],['right',1,'R_T1'],['right',2,'R_T2']]){
     for(let i=0;i<3;i++){
-      progress&&progress(`Распознаю пики (${prefix} ${i+1}/3)...`);
+      progress&&progress(`Распознаю карточки пиков (${prefix} ${i+1}/3)...`);
       const p=parsePick(await ocrZone(img,`${prefix}_${i}`,W_NAME,'6'));
-      if(p.name)picks[side].push({name:p.name,mindscape:p.mindscape,has_signature:false,team});
+      ocr[side].push({name:p.name,mindscape:p.mindscape,team});
     }
   }
 
-  progress&&progress('Распознаю баны (pHash)...');
-  const bans=recognizeBans(img,await loadBanRefs());
+  // Идентичность пиков и банов — pHash всей сетки иконок.
+  progress&&progress('Распознаю иконки сетки (pHash)...');
+  const grid=recognizeGrid(img,await loadIconRefs(progress));
+
+  // Слить: идентичность из сетки (pHash) + mindscape из OCR-карточек. Сопоставление по личности
+  // персонажа (карточки внизу идут не в порядке очереди сетки), с позиционным запасным вариантом.
+  const picks={left:[],right:[]};
+  for(const side of ['left','right']){
+    const msByChar={};
+    ocr[side].forEach(o=>{const c=findChar(o.name); if(c)msByChar[c.id]=o.mindscape;});
+    grid.picks[side].forEach((g,k)=>{
+      const o=ocr[side][k]||{};
+      const ms=(g._charId&&msByChar[g._charId]!=null)?msByChar[g._charId]:(o.mindscape||0);
+      picks[side].push({name:g.name||o.name||'',mindscape:ms,has_signature:false,team:g.team});
+    });
+  }
 
   return {
     left_player,right_player,left_timer,right_timer,left_restarts,right_restarts,
     left_picks:picks.left,right_picks:picks.right,
-    left_bans:bans.left,right_bans:bans.right
+    left_bans:grid.bans.left,right_bans:grid.bans.right
   };
 }
 
