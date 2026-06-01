@@ -73,11 +73,24 @@ function isSignature(charId,engineEnka){
 function applyDraftToForm(norm){
   const missing=[];
   const fmt=sec=>sec==null?'':`${Math.floor(sec/60)}:${String(sec%60).padStart(2,'0')}`;
-  // player0 = фп (левая колонка, t1/r1), player1 = дабл (t2/r2)
-  const fp=norm.players.player0, dbl=norm.players.player1;
+  const ctx=window._matchCtx||{};
+  // Ориентация сторон ПО НИКУ: порядок массива players[] в API не привязан к тому,
+  // кто фп (особенно в игре 2). Матчим по имени к форме; player0 (ходит первым) = фп.
+  const ps=[norm.players.player0,norm.players.player1];
+  const nm=s=>(s||'').trim().toLowerCase();
+  const find=n=>ps.find(p=>nm(p.name)===nm(n));
+  let fp=find(ctx.fpName), dbl=find(ctx.dblName), oriented='по нику';
+  if(!fp||!dbl||fp===dbl){fp=norm.players.player0;dbl=norm.players.player1;oriented='по порядку (ник не совпал!)';}
+  // actor player0 = первый ходящий = фп формы; player1 = дабл.
+  const sideForActor={player0:fp,player1:dbl};
+  // Штраф за рестарты (накопительная сумма первых N инкрементов).
+  const pen=ctx.penalties||[];
+  const penSum=r=>{let s=0;for(let i=0;i<(r||0)&&i<pen.length;i++)s+=(+pen[i]||0);return s;};
+  const eff=p=>p.clearTime==null?null:p.clearTime+penSum(p.restarts);
+
   const set=(id,val)=>{const el=document.getElementById(id);if(el)el.value=val;};
-  set('t1',fmt(fp.clearTime)); set('r1',fp.restarts);
-  set('t2',fmt(dbl.clearTime)); set('r2',dbl.restarts);
+  set('t1',fmt(eff(fp))); set('r1',fp.restarts);
+  set('t2',fmt(eff(dbl))); set('r2',dbl.restarts);
 
   norm.slots.forEach(slot=>{
     const sel=document.querySelector(`.draft-char[data-slot="${slot.n}"]`);
@@ -86,7 +99,7 @@ function applyDraftToForm(norm){
     if(slot.enka&&!ch){missing.push(`слот ${slot.n}: enka ${slot.enka} нет в БД`);}
     sel.value=ch?ch.id:'';
     if(slot.type==='pick'){
-      const pl=slot.actor==='player0'?fp:dbl;
+      const pl=sideForActor[slot.actor]||fp;
       const ms=document.querySelector(`.draft-ms[data-slot="${slot.n}"]`);
       if(ms)ms.value=String(pl.mindscapeByEnka[slot.enka]??0);
       const sig=document.querySelector(`.draft-sig[data-slot="${slot.n}"]`);
@@ -96,11 +109,11 @@ function applyDraftToForm(norm){
     const img=document.querySelector(`.pk-img[data-imgslot="${slot.n}"]`);
     if(img&&typeof iconChar==='function')img.innerHTML=iconChar(ch,48);
     const amp=document.querySelector(`.pk-amp[data-ampslot="${slot.n}"]`);
-    if(amp&&typeof sigForChar==='function'){const sg=ch?sigForChar(ch.id):null;amp.innerHTML=sg?sigImg(sg,18):'';}
+    if(amp&&typeof sigForChar==='function'){const sg=ch?sigForChar(ch.id):null;amp.innerHTML=sg?sigImg(sg,13):'';}
     const sig2=document.querySelector(`.draft-sig[data-slot="${slot.n}"]`);
     if(sig2&&typeof draftSigChanged==='function')draftSigChanged(sig2);
   });
-  return {missing,fpName:fp.name,dblName:dbl.name};
+  return {missing,fpName:fp.name,dblName:dbl.name,oriented};
 }
 
 // Точка входа из UI (кнопка в openMatch).
@@ -116,11 +129,12 @@ async function importDraftFromLink(){
     const state=await fetchDraftState(parsed.id,parsed.key);
     if(!state||!state.players)throw new Error('пустой init');
     const norm=normalizeDraft(state,ids);
-    const{missing,fpName,dblName}=applyDraftToForm(norm);
-    let msg=`Загружено: ${fpName} (фп) vs ${dblName}`;
+    const{missing,fpName,dblName,oriented}=applyDraftToForm(norm);
+    const warn=oriented.includes('!');
+    let msg=`Загружено: ${fpName} (фп) vs ${dblName} · стороны ${oriented}`;
     if(missing.length)msg+=` · ⚠ ${missing.length} не сопоставлено`;
     if(status)status.textContent=msg+(missing.length?'  ['+missing.join('; ')+']':'');
-    toast(missing.length?'Импорт с предупреждениями':'Драфт импортирован',missing.length?'err':'ok');
+    toast((missing.length||warn)?'Импорт с предупреждениями':'Драфт импортирован',(missing.length||warn)?'err':'ok');
   }catch(e){
     if(status)status.textContent='Ошибка: '+e.message;
     toast('Ошибка импорта: '+e.message,'err');

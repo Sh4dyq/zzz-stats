@@ -98,6 +98,14 @@ async function openMatch(encId,num,p1Id,p2Id){
 
   document.getElementById('page-title').textContent=`Матч ${num} — ${fp?.nickname} (фп) vs ${dbl?.nickname}`;
 
+  // Контекст для импортёра: ники (для ориентации сторон по имени) + штрафы за рестарты турнира.
+  let penalties=[];
+  if(!window.DEV_PREVIEW){
+    const{data:encRow}=await sb.from('encounters').select('tournament_id').eq('id',encId).maybeSingle();
+    if(encRow){const{data:tRow}=await sb.from('tournaments').select('restart_penalties').eq('id',encRow.tournament_id).maybeSingle();penalties=tRow?.restart_penalties||[];}
+  }
+  window._matchCtx={fpName:fp?.nickname||'',dblName:dbl?.nickname||'',penalties};
+
   const mlbl='font-size:11px;color:var(--sub);white-space:nowrap';
   const minp='padding:5px 8px;text-align:center;font-size:13px;margin:0';
   html(`<style>
@@ -176,10 +184,10 @@ const DRAFT_CSS=`<style>
 .dcell.ban .pk-num{background:#dc2626}
 
 /* движок-амплификатор: бейдж снизу-слева (чекбокс + иконка) — клик переключает sig */
-.pk-eng{position:absolute;left:2px;bottom:2px;z-index:3;display:flex;align-items:center;gap:2px;background:rgba(8,8,12,.82);border:1px solid #2a2d3a;border-radius:8px;padding:1px 3px 1px 2px;margin:0;cursor:pointer}
-.pk-eng input[type=checkbox]{width:9px;height:9px;margin:0;accent-color:var(--accent);cursor:pointer;flex-shrink:0}
+.pk-eng{position:absolute;left:2px;bottom:2px;z-index:3;display:flex;align-items:center;gap:2px;background:rgba(8,8,12,.7);border:1px solid #2a2d3a;border-radius:6px;padding:1px 2px;margin:0;cursor:pointer}
+.pk-eng input[type=checkbox]{width:8px;height:8px;margin:0;accent-color:var(--accent);cursor:pointer;flex-shrink:0}
 .pk-amp{display:inline-flex;align-items:center;line-height:0}
-.pk-amp img,.pk-amp .pic{width:13px!important;height:13px!important;border-radius:3px!important;object-fit:contain;background:transparent!important}
+.pk-amp img,.pk-amp .pic{width:10px!important;height:10px!important;border-radius:2px!important;object-fit:contain;background:transparent!important}
 
 /* минскейп: бейдж M0..M6 снизу-справа (нативный select без стрелки) */
 .pk-ms{position:absolute;right:3px;bottom:3px;z-index:3;appearance:none;-webkit-appearance:none;background:rgba(8,8,12,.82);border:1px solid #2a2d3a;color:#fff;border-radius:5px;font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;padding:2px 5px;width:auto;min-width:0;cursor:pointer;text-align:center;text-align-last:center}

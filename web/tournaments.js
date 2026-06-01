@@ -21,10 +21,34 @@ async function delTour(id){if(!confirm('Удалить турнир?'))return;co
 async function openCosts(tourId,tourName){
   document.getElementById('page-title').textContent=`Косты — ${tourName}`;
   const{data:existing}=await sb.from('tournament_costs').select('*').eq('tournament_id',tourId);
-  renderCostsTable(tourId,tourName,existing||[]);
+  const{data:tour}=await sb.from('tournaments').select('restart_penalties').eq('id',tourId).maybeSingle();
+  renderCostsTable(tourId,tourName,existing||[],tour?.restart_penalties||[]);
 }
 
-function renderCostsTable(tourId,tourName,existing){
+// Редактор инкрементальных штрафов за рестарт (сек). N полей; пусто = 0.
+function renderPenalties(pen){
+  const N=6;
+  const inputs=Array.from({length:N},(_,i)=>`<div style="display:flex;flex-direction:column;align-items:center;gap:3px">
+    <span style="font-size:11px;color:var(--sub)">рест. ${i+1}</span>
+    <input class="rp-in" data-i="${i}" type="number" min="0" placeholder="0" value="${pen[i]??''}" style="width:54px;padding:4px 6px;font-size:13px;text-align:center" oninput="updatePenaltyHint()">
+  </div>`).join('');
+  return`<div class="card" style="margin-bottom:16px">
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <span style="font-weight:600;font-size:14px">Штрафы за рестарты (доп. секунды, накопительно):</span>
+      ${inputs}
+      <span id="rp-hint" style="font-size:12px;color:var(--sub)"></span>
+    </div>
+  </div>`;
+}
+function updatePenaltyHint(){
+  const vals=[...document.querySelectorAll('.rp-in')].map(el=>+el.value||0);
+  let cum=0;const parts=vals.map(v=>{cum+=v;return cum;});
+  const el=document.getElementById('rp-hint');
+  if(el)el.textContent='итого после N рестартов: '+parts.map((c,i)=>`${i+1}→+${c}с`).join(', ');
+}
+
+function renderCostsTable(tourId,tourName,existing,penalties){
+  penalties=penalties||[];
   const costMap={};existing.forEach(c=>{costMap[`${c.character_id}_${c.mindscape}`]=c;});
   const charSigMap={};D.sigs.forEach(s=>{if(!charSigMap[s.character_id])charSigMap[s.character_id]=[];charSigMap[s.character_id].push(s);});
   const msCols=[0,1,2,3,4,5,6];
@@ -68,6 +92,7 @@ function renderCostsTable(tourId,tourName,existing){
     <span style="font-weight:600;font-size:14px">Скопировать косты из турнира:</span>
     ${copySelect}
   </div>
+  ${renderPenalties(penalties)}
   <div class="card" style="overflow-x:auto;padding:0">
     <table style="width:100%;border-collapse:collapse;font-size:13px">
       <thead><tr style="background:#0b0d14">
@@ -80,6 +105,7 @@ function renderCostsTable(tourId,tourName,existing){
     </table>
   </div>
   <button class="btn btn-y" style="margin-top:16px" onclick="saveCosts('${tourId}')">Сохранить все косты</button>`);
+  updatePenaltyHint();
 }
 
 async function copyCosts(tourId){
@@ -117,5 +143,10 @@ async function saveCosts(tourId){
       sig_cost:cl.sig_cost??null,sig_id:cl.sig_id??null,is_allowed:true});
   });
   if(valid.length){const{error}=await sb.from('tournament_costs').upsert(valid,{onConflict:'tournament_id,character_id,mindscape'});if(dbErr(error,'сохранение костов'))return;}
-  toast(`Сохранено ${valid.length} записей`);
+  // Штрафы за рестарты — обрезаем хвост нулей, пишем в турнир.
+  let pen=[...document.querySelectorAll('.rp-in')].map(el=>+el.value||0);
+  while(pen.length&&pen[pen.length-1]===0)pen.pop();
+  {const{error}=await sb.from('tournaments').update({restart_penalties:pen}).eq('id',tourId);if(dbErr(error,'сохранение штрафов'))return;
+   const t=D.tours.find(t=>t.id===tourId);if(t)t.restart_penalties=pen;}
+  toast(`Сохранено ${valid.length} костов + штрафы`);
 }
