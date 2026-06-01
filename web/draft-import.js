@@ -1,0 +1,121 @@
+// draft-import.js — импорт драфта с shiyu.darte.gg по ссылке.
+// Поток: ссылка → socket.io (/draft, событие init) → нормализация по enka_id → префилл формы матча.
+// ObjectId→enkaId резолвится из статики web/data/shiyu_ids.json (REST API закрыт CORS из браузера).
+// БД-матчинг строго по enka_id (имена API ≠ имена БД 1:1). См. sql/add_enka_id.sql.
+
+let _shiyuIds=null;            // {agents:{oid:enka}, engines:{oid:enka}}
+async function loadShiyuIds(){
+  if(_shiyuIds)return _shiyuIds;
+  const r=await fetch('web/data/shiyu_ids.json?v='+Date.now());
+  if(!r.ok)throw new Error('shiyu_ids.json не загрузился');
+  _shiyuIds=await r.json();return _shiyuIds;
+}
+
+// enkaId варианта (e.g. "1381_1" — S Anby Buffed) сводим к базовому ("1381").
+const baseEnka=e=>e==null?null:String(e).split('_')[0];
+
+// Разбор ссылки драфта: ?draft_id=..&session_key=.. (или session_id=..)
+function parseDraftLink(url){
+  try{
+    const u=new URL(url.trim());
+    const q=u.searchParams;
+    const id=q.get('draft_id')||q.get('session_id');
+    const key=q.get('session_key');
+    if(id&&key)return{id,key};
+  }catch(e){}
+  return null;
+}
+
+// Подключение к socket.io и получение init (полное состояние драфта).
+function fetchDraftState(id,key,timeoutMs=12000){
+  return new Promise((resolve,reject)=>{
+    if(typeof io==='undefined')return reject(new Error('socket.io не загружен'));
+    const sock=io('https://shiyu.darte.gg/draft',{
+      path:'/socket.io/draft',transports:['websocket'],
+      query:{session_id:id,session_key:key},reconnection:false,timeout:timeoutMs});
+    const done=(err,val)=>{try{sock.disconnect();}catch(_){}err?reject(err):resolve(val);};
+    const timer=setTimeout(()=>done(new Error('таймаут: init не пришёл (ссылка истекла?)')),timeoutMs);
+    sock.on('init',d=>{clearTimeout(timer);done(null,d);});
+    sock.on('connect_error',e=>{clearTimeout(timer);done(new Error('connect_error: '+(e?.message||e)));});
+  });
+}
+
+// init + id-карты → нормализованная структура драфта.
+// player0 всегда ходит первым (flow) = фп; player1 = дабл.
+function normalizeDraft(state,ids){
+  const aEnka=o=>baseEnka(ids.agents[o]);
+  const eEnka=o=>baseEnka(ids.engines[o]);
+  const side=p=>{
+    const roster={}; (p.roster?.agents||[]).forEach(a=>roster[a.agent]=a);
+    const engineByAgent={}; (p.teams||[]).forEach(t=>{ if(t.agent&&t.engine)engineByAgent[t.agent.agent]=eEnka(t.engine.engine); });
+    return {
+      name:p.fullName, clearTime:p.clearTime, restarts:p.restarts||0,
+      mindscapeByEnka:Object.fromEntries((p.roster?.agents||[]).map(a=>[aEnka(a.agent),a.mindscape||0])),
+      engineEnkaByAgentEnka:Object.fromEntries(Object.entries(engineByAgent).map(([oid,e])=>[aEnka(oid),e])),
+    };
+  };
+  const players={player0:side(state.players[0]),player1:side(state.players[1])};
+  // selectedAgents идут в порядке flow → слот = index+1 (совпадает с DRAFT_TEMPLATE)
+  const slots=(state.selectedAgents||[]).map((s,i)=>({
+    n:i+1,type:s.type==='BAN'?'ban':'pick',actor:s.actor,enka:aEnka(s.agent)}));
+  return {players,slots};
+}
+
+// Резолв enka → персонаж БД; движок enka + персонаж → has_signature.
+function charByEnka(enka){return D.chars.find(c=>baseEnka(c.enka_id)===enka);}
+function isSignature(charId,engineEnka){
+  if(!engineEnka)return false;
+  return D.sigs.some(s=>s.character_id===charId&&baseEnka(s.enka_id)===engineEnka);
+}
+
+// Заполнение DOM формы openMatch из нормализованного драфта.
+// Возвращает {filled, missing[]} для отчёта.
+function applyDraftToForm(norm){
+  const missing=[];
+  const fmt=sec=>sec==null?'':`${Math.floor(sec/60)}:${String(sec%60).padStart(2,'0')}`;
+  // player0 = фп (левая колонка, t1/r1), player1 = дабл (t2/r2)
+  const fp=norm.players.player0, dbl=norm.players.player1;
+  const set=(id,val)=>{const el=document.getElementById(id);if(el)el.value=val;};
+  set('t1',fmt(fp.clearTime)); set('r1',fp.restarts);
+  set('t2',fmt(dbl.clearTime)); set('r2',dbl.restarts);
+
+  norm.slots.forEach(slot=>{
+    const sel=document.querySelector(`.draft-char[data-slot="${slot.n}"]`);
+    if(!sel)return;
+    const ch=slot.enka?charByEnka(slot.enka):null;
+    if(slot.enka&&!ch){missing.push(`слот ${slot.n}: enka ${slot.enka} нет в БД`);}
+    sel.value=ch?ch.id:'';
+    if(slot.type==='pick'){
+      const pl=slot.actor==='player0'?fp:dbl;
+      const ms=document.querySelector(`.draft-ms[data-slot="${slot.n}"]`);
+      if(ms)ms.value=String(pl.mindscapeByEnka[slot.enka]??0);
+      const sig=document.querySelector(`.draft-sig[data-slot="${slot.n}"]`);
+      if(sig&&ch){sig.checked=isSignature(ch.id,pl.engineEnkaByAgentEnka[slot.enka]);}
+    }
+  });
+  return {missing,fpName:fp.name,dblName:dbl.name};
+}
+
+// Точка входа из UI (кнопка в openMatch).
+async function importDraftFromLink(){
+  const url=v('draft-link');
+  if(!url)return toast('Вставь ссылку на драфт','err');
+  const parsed=parseDraftLink(url);
+  if(!parsed)return toast('Не разобрал ссылку (нужны draft_id и session_key)','err');
+  const status=document.getElementById('draft-import-status');
+  if(status)status.textContent='Подключаюсь к драфту…';
+  try{
+    const ids=await loadShiyuIds();
+    const state=await fetchDraftState(parsed.id,parsed.key);
+    if(!state||!state.players)throw new Error('пустой init');
+    const norm=normalizeDraft(state,ids);
+    const{missing,fpName,dblName}=applyDraftToForm(norm);
+    let msg=`Загружено: ${fpName} (фп) vs ${dblName}`;
+    if(missing.length)msg+=` · ⚠ ${missing.length} не сопоставлено`;
+    if(status)status.textContent=msg+(missing.length?'  ['+missing.join('; ')+']':'');
+    toast(missing.length?'Импорт с предупреждениями':'Драфт импортирован',missing.length?'err':'ok');
+  }catch(e){
+    if(status)status.textContent='Ошибка: '+e.message;
+    toast('Ошибка импорта: '+e.message,'err');
+  }
+}

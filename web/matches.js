@@ -81,6 +81,17 @@ async function openMatch(encId,num,p1Id,p2Id){
   html(`<button class="btn btn-g" style="margin-bottom:16px" onclick="go('matches')">← Назад к встречам</button>
 
   <div class="card" style="margin-bottom:12px">
+    <h3>Импорт драфта по ссылке</h3>
+    <div style="display:flex;gap:8px;align-items:flex-end">
+      <div style="flex:1"><label>Ссылка shiyu.darte.gg (draft_id + session_key)</label>
+        <input id="draft-link" type="text" placeholder="https://shiyu.darte.gg/draft?draft_id=…&session_key=…"></div>
+      <button class="btn btn-y" onclick="importDraftFromLink()">Загрузить</button>
+    </div>
+    <div id="draft-import-status" style="font-size:12px;color:var(--sub);margin-top:8px"></div>
+    <div style="font-size:11px;color:var(--sub);margin-top:4px">player0 (ходит первым) → фп/левая колонка. Проверь имена в статусе и сохрани вручную.</div>
+  </div>
+
+  <div class="card" style="margin-bottom:12px">
     <h3>Результат матча</h3>
     <div class="grid2" style="margin-bottom:12px">
       <div>
