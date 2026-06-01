@@ -70,7 +70,8 @@ function isSignature(charId,engineEnka){
 
 // Заполнение DOM формы openMatch из нормализованного драфта.
 // Возвращает {filled, missing[]} для отчёта.
-function applyDraftToForm(norm){
+function applyDraftToForm(norm,pen){
+  pen=pen||[];
   const missing=[];
   const fmt=sec=>sec==null?'':`${Math.floor(sec/60)}:${String(sec%60).padStart(2,'0')}`;
   const ctx=window._matchCtx||{};
@@ -84,7 +85,6 @@ function applyDraftToForm(norm){
   // actor player0 = первый ходящий = фп формы; player1 = дабл.
   const sideForActor={player0:fp,player1:dbl};
   // Штраф за рестарты (накопительная сумма первых N инкрементов).
-  const pen=ctx.penalties||[];
   const penSum=r=>{let s=0;for(let i=0;i<(r||0)&&i<pen.length;i++)s+=(+pen[i]||0);return s;};
   const eff=p=>p.clearTime==null?null:p.clearTime+penSum(p.restarts);
 
@@ -129,9 +129,17 @@ async function importDraftFromLink(){
     const state=await fetchDraftState(parsed.id,parsed.key);
     if(!state||!state.players)throw new Error('пустой init');
     const norm=normalizeDraft(state,ids);
-    const{missing,fpName,dblName,oriented}=applyDraftToForm(norm);
+    // Штраф за рестарты: оверрайд турнира → правило системы драфта → дефолт.
+    const ctx=window._matchCtx||{};
+    const ruleToArr=r=>r?Array(r.free||0).fill(0).concat(r.paid||[]):[];
+    let pen,penSrc;
+    if(ctx.penalties&&ctx.penalties.length){pen=ctx.penalties;penSrc='оверрайд турнира';}
+    else{const rule=(ids.restartRules||{})[state.system];
+      if(rule){pen=ruleToArr(rule);penSrc='правило системы'+(rule.title?` «${rule.title}»`:'');}
+      else{pen=ruleToArr(ids.defaultRestartRule);penSrc='дефолт';}}
+    const{missing,fpName,dblName,oriented}=applyDraftToForm(norm,pen);
     const warn=oriented.includes('!');
-    let msg=`Загружено: ${fpName} (фп) vs ${dblName} · стороны ${oriented}`;
+    let msg=`Загружено: ${fpName} (фп) vs ${dblName} · стороны ${oriented} · штраф: ${penSrc} [${pen.join(',')||'нет'}]`;
     if(missing.length)msg+=` · ⚠ ${missing.length} не сопоставлено`;
     if(status)status.textContent=msg+(missing.length?'  ['+missing.join('; ')+']':'');
     toast((missing.length||warn)?'Импорт с предупреждениями':'Драфт импортирован',(missing.length||warn)?'err':'ok');
