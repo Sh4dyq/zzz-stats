@@ -97,14 +97,15 @@ h3{font-size:16px;font-weight:600;margin-bottom:14px;letter-spacing:.04em}
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
         <button class="btn btn-g" style="padding:5px 12px;font-size:12px" onclick="resetZones()">Сбросить к стандартным</button>
-        <button class="btn btn-g" style="padding:5px 12px;font-size:12px" onclick="rememberAnchors()">📍 Запомнить якоря</button>
+        <button class="btn btn-g" style="padding:5px 12px;font-size:12px" onclick="rememberAnchors()">📍 Запомнить бейдж</button>
+        <button class="btn btn-g" style="padding:5px 12px;font-size:12px" onclick="seedEmbeddings()">🧬 Сгенерировать эмбеддинги</button>
         <label style="display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--sub);cursor:pointer;margin:0">
-          <input type="checkbox" id="auto-align" style="accent-color:var(--accent)" onchange="setAutoAlign(this.checked)"> Авто-привязка по якорям
+          <input type="checkbox" id="auto-align" style="accent-color:var(--accent)" onchange="setAutoAlign(this.checked)"> Авто-привязка по бейджу
         </label>
         <span id="calib-status" style="font-size:11px;color:var(--sub);align-self:center"></span>
       </div>
       <div style="font-size:10px;color:var(--sub);padding:6px 2px 0">
-        Якорь = две красные плашки таймеров по бокам центрального бейджа. «Запомнить якоря» на скрине, где зоны откалиброваны → дальше зоны сами подстраиваются под сдвиг/масштаб других скринов.
+        Привязка = оранжевый бейдж «04» в верхнем центре. Зоны пересчитываются пиксельным сдвигом от него (UI shiyu не зумит — реверсит при фикс-размерах). «🧬» считает эталонные эмбеддинги всех иконок и скачивает <code>character_embeddings.json</code> — положите его в корень репо (тогда распознавание не ждёт пересчёт ~30с).
       </div>
     </div>
     <button id="analyze-btn" class="btn btn-y" style="min-width:150px" onclick="runAnalysis()">Анализировать</button>
@@ -229,6 +230,27 @@ h3{font-size:16px;font-weight:600;margin-bottom:14px;letter-spacing:.04em}
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<!-- DINOv2-small embeddings (image-feature-extraction) для распознавания иконок сетки.
+     Решение из бенчмарка: all-gray bank, мануальный mean-pool 3D + L2 (см. calib/embed_bench.html). -->
+<script type="module">
+import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.3.1';
+env.allowLocalModels=false; env.useBrowserCache=true;
+const l2=a=>{let s=0;for(let i=0;i<a.length;i++)s+=a[i]*a[i];s=Math.sqrt(s)||1;return a.map(x=>x/s);};
+let _extractor=null;
+window.__embedReady=(async()=>{
+  _extractor=await pipeline('image-feature-extraction','Xenova/dinov2-small');
+  return true;
+})().catch(e=>{console.warn('[embed] load failed:',e);return false;});
+// canvas (уже grayscale) → 384-dim L2-нормированный вектор. mean-pool токенов (pooling:'mean' игнорится).
+window.embedGray=async function(canvas){
+  if(!_extractor)return null;
+  const out=await _extractor(canvas.toDataURL('image/png'),{pooling:'mean',normalize:true});
+  let v=Array.from(out.data); const dims=out.dims||[];
+  if(dims.length===3){const T=dims[1],D=dims[2],p=new Float64Array(D);
+    for(let t=0;t<T;t++)for(let d=0;d<D;d++)p[d]+=v[t*D+d]; v=Array.from(p,x=>x/T);}
+  return l2(v);
+};
+</script>
 <script>
 const SB_URL='https://zoavnckfbfiejxfjakue.supabase.co';
 const SB_KEY='sb_publishable_37RZBsmdp3O1i795EuEfeg_vFpdPTFZ';
@@ -592,10 +614,12 @@ function pickRows(side,team,list){
     const char=findChar(p.name||'');
     const uid=`${side}-${team}-${i}`;
     const unmatched=!char&&p.name?';border-color:#f87171;background:#1a0808':'';
+    const lowMark=(!unmatched&&p.lowConf&&char)?';border-color:#fbbf24;background:#1a1408':'';
+    const lowTitle=lowMark?' title="Низкая уверенность распознавания — проверьте"':'';
     const sig=sigForChar(char?.id);
     html+=`<div class="row">
       <span id="pi-${uid}">${charImg(char,28)}</span>
-      <select id="pc-${uid}" onchange="updatePickImg('${uid}')" style="flex:1;font-size:12px;padding:4px 6px${unmatched}">
+      <select id="pc-${uid}" onchange="updatePickImg('${uid}')"${lowTitle} style="flex:1;font-size:12px;padding:4px 6px${unmatched}${lowMark}">
         ${setSel(charOpts(),char?.id||'')}
       </select>
       <select id="pm-${uid}" style="font-size:12px;padding:4px 5px;width:58px">
@@ -876,30 +900,37 @@ const DEFAULT_ZONES={
 };
 // Сгенерировать дефолтные зоны иконок сетки из регулярной модели (4 кол × 2 ряда + 1 нижняя на сторону).
 function GRID_DEFAULT_ZONES(){
-  const w=0.045,h=0.082, Lx=[0.278,0.332,0.386,0.440], Rx=[0.527,0.581,0.635,0.689], Ry=[0.225,0.330,0.435];
-  // [slot, x, y]
+  // Откалибровано на g1 (calib/final_poc.py). Lx/Rx/Ry — ЦЕНТРЫ слотов (доли); конвертим в top-left (-w/2,-h/2).
+  const w=0.040,h=0.082, Lx=[0.3033,0.3503,0.3935,0.4426], Rx=[0.5571,0.6092,0.6514,0.7013], Ry=[0.2654,0.3574,0.4493];
+  // [slot, cx, cy]
   const cells=[
     // left fp: row1 8 5 4 1
     [8,Lx[0],Ry[0]],[5,Lx[1],Ry[0]],[4,Lx[2],Ry[0]],[1,Lx[3],Ry[0]],
     // left fp: row2 16 13 12 9
     [16,Lx[0],Ry[1]],[13,Lx[1],Ry[1]],[12,Lx[2],Ry[1]],[9,Lx[3],Ry[1]],
-    // left fp: row3 17 (под 3-й колонкой)
-    [17,Lx[2],Ry[2]],
+    // left fp: row3 17 (под 4-й колонкой)
+    [17,Lx[3],Ry[2]],
     // right dbl: row1 2 3 6 7
     [2,Rx[0],Ry[0]],[3,Rx[1],Ry[0]],[6,Rx[2],Ry[0]],[7,Rx[3],Ry[0]],
     // right dbl: row2 10 11 14 15
     [10,Rx[0],Ry[1]],[11,Rx[1],Ry[1]],[14,Rx[2],Ry[1]],[15,Rx[3],Ry[1]],
-    // right dbl: row3 18 (под 2-й колонкой)
-    [18,Rx[1],Ry[2]]
+    // right dbl: row3 18 (под 1-й колонкой)
+    [18,Rx[0],Ry[2]]
   ];
-  const o={}; cells.forEach(([n,x,y])=>o['G'+n]={x,y,w,h}); return o;
+  const o={}; cells.forEach(([n,cx,cy])=>o['G'+n]={x:cx-w/2,y:cy-h/2,w,h}); return o;
 }
 function gridKey(slot){return 'G'+slot;}
+// Версия схемы зон. При смене калибровки/раскладки (badge-align + g1-центры) старые
+// сохранённые калибровки СБРАСЫВАЮТСЯ — иначе stale zzz_zones перекрывает новые дефолты и ломает кроп.
+const ZONES_VERSION='2';
+(function migrateZones(){ if(localStorage.getItem('zzz_zones_v')!==ZONES_VERSION){
+  localStorage.removeItem('zzz_zones'); localStorage.removeItem('zzz_ref_anchors');
+  localStorage.setItem('zzz_zones_v',ZONES_VERSION); }})();
 function getZones(){
   try{const s=JSON.parse(localStorage.getItem('zzz_zones'));if(s)return {...structuredClone(DEFAULT_ZONES),...s};}catch(e){}
   return structuredClone(DEFAULT_ZONES);
 }
-function saveZones(z){localStorage.setItem('zzz_zones',JSON.stringify(z));}
+function saveZones(z){localStorage.setItem('zzz_zones',JSON.stringify(z));localStorage.setItem('zzz_zones_v',ZONES_VERSION);}
 function resetZones(){localStorage.removeItem('zzz_zones');drawZoneOverlay();document.getElementById('calib-status').textContent='Сброшено';}
 
 // =====================================================================
@@ -918,49 +949,28 @@ function autoAlign(){return localStorage.getItem('zzz_autoalign')!=='0';}  // п
 function setAutoAlign(on){localStorage.setItem('zzz_autoalign',on?'1':'0');}
 // Якорь = центральный бейдж номера комнаты {cx,cy,d}: cx/cy — центр (доли), d — диаметр (доля высоты).
 // Валиден, если центр в верхней половине и диаметр осмысленный.
-function validAnchor(a){
-  return !!(a&&typeof a.cx==='number'&&a.cy<0.55&&a.d>0.015&&a.d<0.5&&
-    [a.cx,a.cy].every(v=>v>=0&&v<=1));
-}
-function getRefAnchor(){try{const a=JSON.parse(localStorage.getItem('zzz_ref_anchors'));return validAnchor(a)?a:null;}catch(e){return null;}}
+// Эталонный бейдж (g1, кадр 1873×957). shiyu UI НЕ зумит — реверсит фикс-px → выравниваем
+// чистым ПИКСЕЛЬНЫМ сдвигом центра бейджа; размер кропа иконки тоже фикс-px.
+const REF_BADGE={cx:0.4986,cy:0.1168,W:1873,H:957};
+function getRefBadge(){try{const a=JSON.parse(localStorage.getItem('zzz_ref_badge'));if(a&&a.cx>0&&a.W)return a;}catch(e){} return REF_BADGE;}
 
-// Найти центральный бейдж комнаты как САМЫЙ КРУПНЫЙ «тёплый» (оранжево-красный) связный
-// блоб в верхне-центральной области. Связность изолирует бейдж от красных часов/полосы костов/
-// огненных иконок (они отдельные, меньшие блобы или вне окна). Возвращает {cx,cy,d} или null.
-function detectAnchor(img){
+// Найти оранжевый бейдж «04» (диск в верхнем центре). resize до W=720 (на 320 бейдж <30px),
+// окно top-center x[0.40,0.60] y[0,0.20] (выше пиков), оранжевая маска (g-b>35 исключает
+// красные часы рестартов). Центр = середина 2/98-перцентильного бокса. Возвращает {cx,cy} или null.
+function detectBadge(img){
   if(!img||!img.naturalWidth)return null;
-  const W=240, H=Math.max(1,Math.round(W*img.naturalHeight/img.naturalWidth));
+  const W=720,H=Math.max(1,Math.round(W*img.naturalHeight/img.naturalWidth));
   const cv=document.createElement('canvas');cv.width=W;cv.height=H;
   cv.getContext('2d').drawImage(img,0,0,W,H);
   const d=cv.getContext('2d').getImageData(0,0,W,H).data;
-  const warm=(x,y)=>{const i=(y*W+x)*4,r=d[i],g=d[i+1],b=d[i+2];return r>120&&r-b>40&&g<r-12;};
-  const x0=Math.round(W*0.38), x1=Math.round(W*0.62);   // центр; часы/рестарты по краям вне окна
-  const y1=Math.round(H*0.48);                          // выше драфт-сетки/пиков
-  const seen=new Uint8Array(W*H);
-  let best=null;                                        // {n,minx,maxx,miny,maxy}
-  const stack=[];
-  for(let sy=0;sy<y1;sy++)for(let sx=x0;sx<x1;sx++){
-    const s0=sy*W+sx;
-    if(seen[s0]||!warm(sx,sy))continue;
-    // BFS связной компоненты в пределах окна
-    let n=0,mnx=sx,mxx=sx,mny=sy,mxy=sy;
-    stack.length=0;stack.push(s0);seen[s0]=1;
-    while(stack.length){
-      const p=stack.pop(),px=p%W,py=(p/W)|0;
-      n++;if(px<mnx)mnx=px;if(px>mxx)mxx=px;if(py<mny)mny=py;if(py>mxy)mxy=py;
-      const nb=[[px-1,py],[px+1,py],[px,py-1],[px,py+1]];
-      for(const[nx,ny] of nb){
-        if(nx<x0||nx>=x1||ny<0||ny>=y1)continue;
-        const q=ny*W+nx;
-        if(!seen[q]&&warm(nx,ny)){seen[q]=1;stack.push(q);}
-      }
-    }
-    if(!best||n>best.n)best={n,mnx,mxx,mny,mxy};
-  }
-  if(!best||best.n<20)return null;                      // бейдж не найден / слишком мелкий блоб
-  const cx=((best.mnx+best.mxx)/2)/W, cy=((best.mny+best.mxy)/2)/H, dia=(best.mxy-best.mny)/H;
-  if(cx<0.42||cx>0.58||dia<0.02)return null;            // должен быть по центру
-  return {cx, cy, d:dia};
+  const x0=(W*0.40)|0,x1=(W*0.60)|0,y1=(H*0.20)|0;
+  const xs=[],ys=[];
+  for(let y=0;y<y1;y++)for(let x=x0;x<x1;x++){const i=(y*W+x)*4,r=d[i],g=d[i+1],b=d[i+2];
+    if(r>180&&g>95&&g<215&&b<120&&(r-b)>90&&(g-b)>35&&(r-g)>40){xs.push(x);ys.push(y);}}
+  if(xs.length<30)return null;
+  xs.sort((a,b)=>a-b);ys.sort((a,b)=>a-b);
+  const pc=(a,p)=>a[Math.min(a.length-1,Math.max(0,Math.round((a.length-1)*p)))];
+  return {cx:(pc(xs,.02)+pc(xs,.98))/2/W, cy:(pc(ys,.02)+pc(ys,.98))/2/H};
 }
 
 // Вернуть зоны, выровненные по якорю-бейджу (или сырые, если выключено/нет эталона/не найден).
@@ -968,17 +978,19 @@ function alignedZones(img){
   _lastAlign=null;
   const raw=getZones();
   if(!autoAlign())return raw;
-  const ref=getRefAnchor();                  // нужен сохранённый эталон (кнопка «Запомнить якоря»)
-  if(!ref)return raw;
-  const cur=detectAnchor(img);
-  if(!cur)return raw;
-  const s=cur.d/ref.d;
-  if(!isFinite(s)||s<0.3||s>3)return raw;     // защита от мусорного детекта
+  const cur=detectBadge(img);
+  if(!cur)return raw;                            // бейдж не найден → сырые зоны (фолбэк)
+  const ref=getRefBadge();
+  const W=img.naturalWidth,H=img.naturalHeight;
+  const bx=cur.cx*W, by=cur.cy*H, rbx=ref.cx*ref.W, rby=ref.cy*ref.H;
+  // Доли зон z.* — относительно ЭТАЛОННОГО кадра. Тот же ПИКСЕЛЬНЫЙ сдвиг от бейджа (UI фикс-px).
   const out={};
   for(const k in raw){const z=raw[k];
-    out[k]={x:cur.cx+(z.x-ref.cx)*s, y:cur.cy+(z.y-ref.cy)*s, w:z.w*s, h:z.h*s};
+    const zcx=(z.x+z.w/2)*ref.W, zcy=(z.y+z.h/2)*ref.H, wpx=z.w*ref.W, hpx=z.h*ref.H;
+    const cx=bx+(zcx-rbx), cy=by+(zcy-rby);
+    out[k]={x:(cx-wpx/2)/W, y:(cy-hpx/2)/H, w:wpx/W, h:hpx/H};
   }
-  _lastAlign={s,dx:cur.cx-ref.cx,dy:cur.cy-ref.cy};
+  _lastAlign={dx:cur.cx-ref.cx,dy:cur.cy-ref.cy};
   return out;
 }
 
@@ -986,11 +998,11 @@ function alignedZones(img){
 function rememberAnchors(){
   const st=document.getElementById('calib-status');
   if(!fullImg){st.textContent='Сначала выберите скриншот';return;}
-  const a=detectAnchor(fullImg);
-  if(!a){st.style.color='#f87171';st.textContent='Центральный бейдж не найден — проверьте скрин';return;}
-  localStorage.setItem('zzz_ref_anchors',JSON.stringify(a));
+  const a=detectBadge(fullImg);
+  if(!a){st.style.color='#f87171';st.textContent='Бейдж «04» не найден — проверьте скрин';return;}
+  localStorage.setItem('zzz_ref_badge',JSON.stringify({cx:a.cx,cy:a.cy,W:fullImg.naturalWidth,H:fullImg.naturalHeight}));
   st.style.color='#4ade80';
-  st.textContent=`Якорь запомнен (центр ${(a.cx*100|0)}%/${(a.cy*100|0)}%, Ø ${(a.d*100).toFixed(1)}%)`;
+  st.textContent=`Референс запомнен (бейдж ${(a.cx*100|0)}%/${(a.cy*100|0)}%)`;
   if(calibOn)drawZoneOverlay();
 }
 
@@ -1025,14 +1037,14 @@ function drawZoneOverlay(){
   // Кружок размером с диаметр бейджа — видно, попал ли детект на бейдж.
   const mark=(a,color,title)=>{
     if(!a)return;
-    const dia=a.d*100; // % высоты overlay; overlay квадратно по картинке, конвертим в px при рендере браузером
+    const dia=2.5; // фикс-радиус маркера (% высоты overlay); detectBadge не даёт диаметр
     const m=document.createElement('div');
     m.title=title;
     m.style.cssText=`position:absolute;left:${a.cx*100}%;top:${a.cy*100}%;height:${dia}%;aspect-ratio:1;transform:translate(-50%,-50%);border-radius:50%;border:2px solid ${color};box-shadow:0 0 5px ${color};pointer-events:none`;
     ov.appendChild(m);
   };
-  mark(getRefAnchor(),'#4ade80','эталон (бейдж)');
-  if(fullImg)mark(detectAnchor(fullImg),'#38bdf8','детект (бейдж)');
+  mark(getRefBadge(),'#4ade80','эталон (бейдж)');
+  if(fullImg)mark(detectBadge(fullImg),'#38bdf8','детект (бейдж)');
 }
 function makeDraggable(d,handle,key){
   const stage=document.getElementById('preview-stage');
@@ -1226,22 +1238,132 @@ function recognizeGrid(img,refs){
   return {picks,bans};
 }
 
-// Самообучение: после успешного сохранения хэшируем реальные кропы всех 18 слотов с подтверждёнными
-// персонажами (из селектов) и дописываем в icon_hashes (kind='char'). Best-effort.
-async function learnIcons(){
-  if(!fullImg||!fullImg.naturalWidth)return;
-  curZones=alignedZones(fullImg);          // те же выровненные зоны, что при распознавании
-  const Z=AZ(), rows=[];
-  [['left','t1',FP_T1],['left','t2',FP_T2],['right','t1',DBL_T1],['right','t2',DBL_T2]].forEach(([side,team,slots])=>{
-    slots.forEach((n,i)=>{const v=gPick(side,team,i), z=Z[gridKey(n)];
-      if(v.charId&&z)rows.push({character_id:v.charId,kind:'char',hash:hashIcon(fullImg,z)});});
+// === Этап 2b: распознавание сетки через эмбеддинги (DINOv2-small, all-gray bank, cosine) ===
+// Решение из бенчмарка (calib/embed_bench.html): bans 96%, picks 86%, total 88% на 8 играх.
+// Заменяет aHash-распознавание; aHash остаётся фолбэком, если transformers.js не загрузился.
+const EMB_LOW_CONF=0.80;       // ниже — флаг на ручную проверку (не хард-реджект)
+let _embBank=null;             // [{character_id,name,vec}] — кэш эталонного банка на сессию
+
+// СЫРОЙ цветной кроп зоны (без OCR-инверсии/контраста). gray=true → перевод в оттенки серого.
+function cropRaw(img,z,gray){
+  const sx=z.x*img.naturalWidth, sy=z.y*img.naturalHeight;
+  const sw=Math.max(1,z.w*img.naturalWidth), sh=Math.max(1,z.h*img.naturalHeight);
+  const cv=document.createElement('canvas'); cv.width=Math.round(sw); cv.height=Math.round(sh);
+  const ctx=cv.getContext('2d'); ctx.drawImage(img,sx,sy,sw,sh,0,0,cv.width,cv.height);
+  if(gray){const id=ctx.getImageData(0,0,cv.width,cv.height),d=id.data;
+    for(let i=0;i<d.length;i+=4){const v=0.299*d[i]+0.587*d[i+1]+0.114*d[i+2];d[i]=d[i+1]=d[i+2]=v;}
+    ctx.putImageData(id,0,0);}
+  return cv;
+}
+function grayWhole(img){const cv=document.createElement('canvas');cv.width=img.naturalWidth;cv.height=img.naturalHeight;
+  const ctx=cv.getContext('2d');ctx.drawImage(img,0,0);
+  const id=ctx.getImageData(0,0,cv.width,cv.height),d=id.data;
+  for(let i=0;i<d.length;i+=4){const v=0.299*d[i]+0.587*d[i+1]+0.114*d[i+2];d[i]=d[i+1]=d[i+2]=v;}
+  ctx.putImageData(id,0,0);return cv;}
+const _cos=(a,b)=>{let s=0;for(let i=0;i<a.length;i++)s+=a[i]*b[i];return s;};  // векторы L2-нормированы
+
+// Построить эталонный банк: сначала пробуем готовый character_embeddings.json (статика репо);
+// иначе считаем эмбеддинги из web/icons/characters/*.webp на лету (gray). Кэш на сессию.
+async function loadEmbBank(progress){
+  if(_embBank)return _embBank;
+  const byName=new Map(dbChars.map(c=>[c.name,c.id]));
+  // 1) предсчитанный json (сидируется кнопкой/скриптом, коммитится в репо)
+  try{
+    const r=await fetch('character_embeddings.json',{cache:'no-store'});
+    if(r.ok){const j=await r.json(); const bank=[];
+      for(const name in j){const id=byName.get(name); if(id)bank.push({character_id:id,name,vec:j[name]});}
+      if(bank.length){progress&&progress(`Банк эмбеддингов: ${bank.length} (json)`); return _appendLearned(bank);}
+    }
+  }catch(e){}
+  // 2) на лету из webp
+  const bank=[]; let done=0;
+  for(const c of dbChars){
+    const im=await loadImg('web/icons/characters/'+encodeURIComponent(c.name)+'.webp');
+    if(im&&im.naturalWidth){const v=await window.embedGray(grayWhole(im)); if(v)bank.push({character_id:c.id,name:c.name,vec:v});}
+    if(progress&&(++done%8===0))progress(`Считаю эталоны (эмбеддинги) ${done}/${dbChars.length}...`);
+  }
+  return _appendLearned(bank);
+}
+// Подмешать выученные эмбеддинги (kind='emb') как доп. эталоны — несколько векторов на персонажа,
+// argmax по всем. Закрывает hard-cases реальными кропами. Имя берём из dbChars по character_id.
+async function _appendLearned(bank){
+  try{
+    const idName=new Map(dbChars.map(c=>[c.id,c.name]));
+    const{data}=await sb.from('icon_hashes').select('character_id,hash').eq('kind','emb');
+    (data||[]).forEach(r=>{const nm=idName.get(r.character_id); if(!nm)return;
+      try{const vec=JSON.parse(r.hash); if(Array.isArray(vec)&&vec.length)bank.push({character_id:r.character_id,name:nm,vec});}catch(e){}});
+  }catch(e){}
+  _embBank=bank; return bank;
+}
+
+// Seed-инструмент: посчитать эталонные эмбеддинги всех иконок персонажей и скачать
+// character_embeddings.json ({name:[vec384]}). Запускается один раз; файл кладётся в корень репо.
+// Модель/препроцесс ОБЯЗАНЫ совпадать с рантаймом (тот же window.embedGray, тот же gray-whole).
+async function seedEmbeddings(){
+  const st=document.getElementById('calib-status');
+  st.style.color='var(--sub)'; st.textContent='Загрузка модели эмбеддингов...';
+  if(!(await window.__embedReady)){st.style.color='#f87171';st.textContent='Модель эмбеддингов не загрузилась';return;}
+  // имена иконок: листинг каталога (работает без логина), иначе dbChars
+  let names=[];
+  try{const html=await (await fetch('web/icons/characters/')).text();
+    names=[...new Set([...html.matchAll(/href="([^"]+\.webp)"/g)].map(m=>decodeURIComponent(m[1].replace(/^.*\//,'').replace(/\.webp$/,''))))];}catch(e){}
+  if(!names.length)names=dbChars.map(c=>c.name);
+  names.sort();
+  const out={}; let done=0;
+  for(const nm of names){
+    const im=await loadImg('web/icons/characters/'+encodeURIComponent(nm)+'.webp');
+    if(im&&im.naturalWidth){const v=await window.embedGray(grayWhole(im)); if(v)out[nm]=v.map(x=>+x.toFixed(6));}
+    st.textContent=`Эмбеддинги ${++done}/${names.length}...`;
+  }
+  const blob=new Blob([JSON.stringify(out)],{type:'application/json'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+  a.download='character_embeddings.json'; a.click(); URL.revokeObjectURL(a.href);
+  st.style.color='#4ade80'; st.textContent=`Готово: ${Object.keys(out).length} иконок → character_embeddings.json (положите в корень репо)`;
+}
+
+// Распознать все 18 слотов через эмбеддинги. Тот же контракт, что recognizeGrid:
+// {picks:{left,right}, bans:{left,right}}. picks[side]=[{name,team,_charId,score,lowConf}].
+async function recognizeGridEmb(img,bank,progress){
+  const Z=AZ(), bySlot={};
+  const argmax=v=>{let bi=-1,bs=-2;for(let i=0;i<bank.length;i++){const s=_cos(v,bank[i].vec);if(s>bs){bs=s;bi=i;}}return bi>=0?{...bank[bi],score:bs}:null;};
+  for(let n=1;n<=18;n++){
+    const meta=GRID_SLOTS[n], z=Z[gridKey(n)];
+    if(!meta||!z)continue;
+    const v=await window.embedGray(cropRaw(img,z,true));
+    const m=v?argmax(v):null;
+    bySlot[n]={...meta,charId:m?m.character_id:'',name:m?m.name:'',score:m?m.score:null,
+      lowConf:m?m.score<EMB_LOW_CONF:true,redFrame:hasRedFrame(img,z)};
+    progress&&progress(`Иконки (эмбеддинги) ${n}/18...`);
+  }
+  const picks={left:[],right:[]}, bans={left:[],right:[]};
+  [['left',FP_T1,1],['left',FP_T2,2],['right',DBL_T1,1],['right',DBL_T2,2]].forEach(([side,slots,team])=>{
+    slots.forEach(n=>{const s=bySlot[n]; if(s)picks[side].push({name:s.name,team,_charId:s.charId,score:s.score,lowConf:s.lowConf});});
   });
   [['left',FP_BANS],['right',DBL_BANS]].forEach(([side,slots])=>{
-    slots.forEach((n,i)=>{const charId=gBan(side,i), z=Z[gridKey(n)];
-      if(charId&&z)rows.push({character_id:charId,kind:'char',hash:hashIcon(fullImg,z)});});
+    slots.forEach(n=>{const s=bySlot[n]; bans[side].push(s?s.name:'');});
   });
+  return {picks,bans};
+}
+
+// Самообучение: после успешного сохранения считаем ЭМБЕДДИНГИ реальных (gray) кропов всех 18 слотов
+// с подтверждёнными персонажами (из селектов) и дописываем в icon_hashes (kind='emb', hash=JSON вектора).
+// loadEmbBank подмешивает их в банк → закрывает hard-cases (Cissia-магнит, Vivian и т.п.). Best-effort.
+async function learnIcons(){
+  if(!fullImg||!fullImg.naturalWidth)return;
+  if(!(await window.__embedReady))return;  // без модели учить нечему (aHash-фолбэк не накапливаем)
+  curZones=alignedZones(fullImg);          // те же выровненные зоны, что при распознавании
+  const Z=AZ(), rows=[];
+  const add=async(charId,n)=>{const z=Z[gridKey(n)];
+    if(!charId||!z)return;
+    const v=await window.embedGray(cropRaw(fullImg,z,true));
+    if(v)rows.push({character_id:charId,kind:'emb',hash:JSON.stringify(v.map(x=>+x.toFixed(6)))});};
+  for(const[side,team,slots] of [['left','t1',FP_T1],['left','t2',FP_T2],['right','t1',DBL_T1],['right','t2',DBL_T2]])
+    for(let i=0;i<slots.length;i++){const v=gPick(side,team,i);await add(v.charId,slots[i]);}
+  for(const[side,slots] of [['left',FP_BANS],['right',DBL_BANS]])
+    for(let i=0;i<slots.length;i++)await add(gBan(side,i),slots[i]);
   if(!rows.length)return;
-  try{const{error}=await sb.from('icon_hashes').insert(rows);if(error)console.warn('learnIcons:',error.message);}
+  try{const{error}=await sb.from('icon_hashes').insert(rows);if(error)console.warn('learnIcons:',error.message);
+    else _embBank=null;}                   // сбросить кэш банка → следующий анализ подхватит выученное
   catch(e){console.warn('learnIcons:',e);}
 }
 
@@ -1252,8 +1374,8 @@ async function runLocalAnalysis(progress){
 
   // A2: выровнять зоны по якорям (красные плашки таймеров). Дальше всё распознавание идёт по AZ().
   curZones=alignedZones(img);
-  if(_lastAlign)progress&&progress(`Якоря найдены: масштаб ×${_lastAlign.s.toFixed(2)}, сдвиг (${(_lastAlign.dx*100).toFixed(1)}%, ${(_lastAlign.dy*100).toFixed(1)}%)`);
-  else if(autoAlign())console.warn('[align] якоря не найдены — использую сырые зоны');
+  if(_lastAlign)progress&&progress(`Бейдж найден: сдвиг (${(_lastAlign.dx*100).toFixed(1)}%, ${(_lastAlign.dy*100).toFixed(1)}%)`);
+  else if(autoAlign())console.warn('[align] бейдж не найден — использую сырые зоны');
 
   progress&&progress('Загрузка OCR-движка (один раз)...');
   await getWorker();
@@ -1276,9 +1398,17 @@ async function runLocalAnalysis(progress){
     }
   }
 
-  // Идентичность пиков и банов — pHash всей сетки иконок.
-  progress&&progress('Распознаю иконки сетки (pHash)...');
-  const grid=recognizeGrid(img,await loadIconRefs(progress));
+  // Идентичность пиков и банов — эмбеддинги (DINOv2). Фолбэк на aHash, если модель не загрузилась.
+  let grid;
+  const embOk=await window.__embedReady;
+  if(embOk){
+    progress&&progress('Распознаю иконки сетки (эмбеддинги)...');
+    grid=await recognizeGridEmb(img,await loadEmbBank(progress),progress);
+  }else{
+    console.warn('[icons] эмбеддинги недоступны — фолбэк на aHash');
+    progress&&progress('Распознаю иконки сетки (pHash, фолбэк)...');
+    grid=recognizeGrid(img,await loadIconRefs(progress));
+  }
 
   // Слить: идентичность из сетки (pHash) + mindscape из OCR-карточек. Сопоставление по личности
   // персонажа (карточки внизу идут не в порядке очереди сетки), с позиционным запасным вариантом.
@@ -1289,7 +1419,7 @@ async function runLocalAnalysis(progress){
     grid.picks[side].forEach((g,k)=>{
       const o=ocr[side][k]||{};
       const ms=(g._charId&&msByChar[g._charId]!=null)?msByChar[g._charId]:(o.mindscape||0);
-      picks[side].push({name:g.name||o.name||'',mindscape:ms,has_signature:false,team:g.team});
+      picks[side].push({name:g.name||o.name||'',mindscape:ms,has_signature:false,team:g.team,lowConf:!!g.lowConf});
     });
   }
 

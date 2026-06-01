@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Embedding benchmark (multi-game, set-scored)</title>
+<style>body{background:#111;color:#ddd;font:12px monospace;padding:16px;white-space:pre-wrap}</style>
+</head>
+<body>
+<div id="log">loading…</div>
+<script type="module">
+import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.3.1';
+env.allowLocalModels=false; env.useBrowserCache=true;
+
+const logEl=document.getElementById('log');
+const log=(...a)=>{const s=a.join(' ');logEl.textContent+='\n'+s;console.log(s);};
+window.BENCH={done:false,result:null,error:null,progress:'init'};
+const setP=p=>{window.BENCH.progress=p;log(p);};
+
+// ---- calibrated zones (calib/final_poc.py) ----
+const Lx=[0.3033,0.3503,0.3935,0.4426],Rx=[0.5571,0.6092,0.6514,0.7013],Ry=[0.2654,0.3574,0.4493];
+const W_=0.040,H_=0.082;
+const C=(cx,cy)=>({cx,cy});   // slot CENTER (fractions, calibrated on g1)
+const CEN={8:C(Lx[0],Ry[0]),5:C(Lx[1],Ry[0]),4:C(Lx[2],Ry[0]),1:C(Lx[3],Ry[0]),
+ 16:C(Lx[0],Ry[1]),13:C(Lx[1],Ry[1]),12:C(Lx[2],Ry[1]),9:C(Lx[3],Ry[1]),17:C(Lx[3],Ry[2]),
+ 2:C(Rx[0],Ry[0]),3:C(Rx[1],Ry[0]),6:C(Rx[2],Ry[0]),7:C(Rx[3],Ry[0]),
+ 10:C(Rx[0],Ry[1]),11:C(Rx[1],Ry[1]),14:C(Rx[2],Ry[1]),15:C(Rx[3],Ry[1]),18:C(Rx[0],Ry[2])};
+
+// ---- badge "04" anchor: orange disc in top-center. shiyu UI reflows (fixed px sizes), NOT zoom →
+//      align by PIXEL translation of badge center; icon crop size is constant px. ----
+function detectBadge(img,W){
+  W=W||720; const H=Math.max(1,Math.round(W*img.naturalHeight/img.naturalWidth));
+  const cv=document.createElement('canvas');cv.width=W;cv.height=H;
+  cv.getContext('2d').drawImage(img,0,0,W,H);
+  const d=cv.getContext('2d').getImageData(0,0,W,H).data;
+  const x0=(W*0.40)|0,x1=(W*0.60)|0,y1=(H*0.20)|0;   // top-center, above picks
+  const xs=[],ys=[];
+  for(let y=0;y<y1;y++)for(let x=x0;x<x1;x++){const i=(y*W+x)*4,r=d[i],g=d[i+1],b=d[i+2];
+    if(r>180&&g>95&&g<215&&b<120&&(r-b)>90&&(g-b)>35&&(r-g)>40){xs.push(x);ys.push(y);}}
+  if(xs.length<30)return null;
+  xs.sort((a,b)=>a-b);ys.sort((a,b)=>a-b);
+  const pc=(arr,p)=>arr[Math.min(arr.length-1,Math.max(0,Math.round((arr.length-1)*p)))];
+  const cx=(pc(xs,.02)+pc(xs,.98))/2/W, cy=(pc(ys,.02)+pc(ys,.98))/2/H;
+  return {cx,cy,n:xs.length};
+}
+// ref geometry from g1: per-slot PIXEL offset from badge center + constant icon px size
+let REF=null;   // {ox:{n},oy:{n},iw,ih,bx,by}
+function buildRef(g1img){
+  const Wg=g1img.naturalWidth,Hg=g1img.naturalHeight,b=detectBadge(g1img);
+  const bx=b.cx*Wg,by=b.cy*Hg,ox={},oy={};
+  for(const n in CEN){ox[n]=CEN[n].cx*Wg-bx;oy[n]=CEN[n].cy*Hg-by;}
+  REF={ox,oy,iw:W_*Wg,ih:H_*Hg};
+}
+// crop zone {x,y,w,h} (fractions) for slot n in img, anchored on its detected badge
+function slotZone(n,img,badge){
+  const W=img.naturalWidth,H=img.naturalHeight,bx=badge.cx*W,by=badge.cy*H;
+  const cx=bx+REF.ox[n],cy=by+REF.oy[n];
+  return {x:(cx-REF.iw/2)/W,y:(cy-REF.ih/2)/H,w:REF.iw/W,h:REF.ih/H};
+}
+// slot groups (number=draft order)
+const G={L_T1:[5,8,9],L_T2:[12,16,17],L_BAN:[1,4,13],R_T1:[6,7,10],R_T2:[11,15,18],R_BAN:[2,3,14]};
+
+// ---- ground truth per game (left=fp, right=dbl). pick names from bottom cards; g1/g2 bans from PoC/memory ----
+// groups omitted = no GT (skipped in scoring). Names match web/icons/characters/*.webp exactly.
+const GAMES={
+ g1:{file:'g1.jpg', tf:{dx:0,dy:0,s:1}, gt:{
+   L_T1:['Yanagi','Burnice','Yuzuha'],L_T2:['Nangong Yu','Rina','Soukaku'],
+   R_T1:['Astra','Alice','Nicole'],R_T2:['Ellen','Lycaon','Trigger'],
+   L_BAN:['Promeia','Vivian','Jane Doe'],R_BAN:['Aria','Miyabi','Piper']}},
+ g2:{file:'g2.jpg', tf:{dx:0,dy:0,s:1}, gt:{   // only bans known (memory)
+   L_BAN:['Miyabi','Aria','Yuzuha'],R_BAN:['Promeia','Vivian','Lighter']}},
+ g3:{file:'g3.jpg', tf:{dx:0,dy:-0.060,s:1}, gt:{   // no host toolbar → grid shifted up; HANAMORI(L) vs KAZUTO(R)
+   L_T1:['Yidhari','Lycaon','Lucy'],L_T2:['Ye Shunguang','Zhao','Seed'],
+   R_T1:['Aria','Promeia','Soukaku'],R_T2:['Yanagi','Vivian','Nicole'],
+   L_BAN:['Yuzuha','Nangong Yu','Burnice'],R_BAN:['Sunna','S Anby','Pan Yinhu']}},
+ g4:{file:'g4.jpg', tf:{dx:0,dy:-0.060,s:1}, gt:{   // KAZUTO(L) vs HANAMORI(R)
+   L_T1:['Promeia','Vivian','Lucy'],L_T2:['Yanagi','Burnice','Nicole'],
+   R_T1:['Aria','Lycaon','Soukaku'],R_T2:['Ye Shunguang','Trigger','Zhao'],
+   L_BAN:['S Anby','Sunna','Seed'],R_BAN:['Nangong Yu','Yuzuha','Rina']}},
+ g5:{file:'g5.jpg', gt:{   // no toolbar, w1862; XARLAUSS(L) vs KAZUTO(R)
+   L_T1:['Aria','Lycaon','Nicole'],L_T2:['Alice','Piper','Yuzuha'],
+   R_T1:['Burnice','Nangong Yu','Lucy'],R_T2:['Yanagi','Rina','Soukaku']}},
+ g6:{file:'g6.jpg', gt:{   // no toolbar, w1855; KAZUTO(L) vs XARLAUSS(R)
+   L_T1:['Aria','Pulchra','Lucy'],L_T2:['Alice','Lycaon','Yuzuha'],
+   R_T1:['Jane Doe','Nangong Yu','Nicole'],R_T2:['Yanagi','Burnice','Rina']}},
+ g7:{file:'g7.jpg', gt:{   // WITH toolbar, narrow w1399; SAMBRERO(L) vs XARLAUSS(R)
+   L_T1:['Jane Doe','Vivian','Lycaon'],L_T2:['Yanagi','Burnice','Rina'],
+   R_T1:['Piper','Nangong Yu','Soukaku'],R_T2:['Alice','Nicole','Astra']}},
+ g8:{file:'g8.jpg', gt:{   // WITH toolbar, w1628; XARLAUSS(L) vs SAMBRERO(R)
+   L_T1:['Jane Doe','Seth','Yuzuha'],L_T2:['Yanagi','Burnice','Rina'],
+   R_T1:['Piper','Vivian','Nicole'],R_T2:['Alice','Lycaon','Astra']}},
+};
+const BAN_GROUPS=new Set(['L_BAN','R_BAN']);
+
+// ---- helpers ----
+function loadImg(src){return new Promise((res,rej)=>{const im=new Image();im.crossOrigin='anonymous';im.onload=()=>res(im);im.onerror=()=>rej(new Error('img '+src));im.src=src;});}
+function cropCanvas(img,z,gray){
+  const sx=z.x*img.naturalWidth,sy=z.y*img.naturalHeight;
+  const sw=Math.max(1,z.w*img.naturalWidth),sh=Math.max(1,z.h*img.naturalHeight);
+  const cv=document.createElement('canvas');cv.width=Math.round(sw);cv.height=Math.round(sh);
+  const ctx=cv.getContext('2d');ctx.drawImage(img,sx,sy,sw,sh,0,0,cv.width,cv.height);
+  if(gray){const id=ctx.getImageData(0,0,cv.width,cv.height),d=id.data;
+    for(let i=0;i<d.length;i+=4){const v=0.299*d[i]+0.587*d[i+1]+0.114*d[i+2];d[i]=d[i+1]=d[i+2]=v;}ctx.putImageData(id,0,0);}
+  return cv;
+}
+function wholeCanvas(img,gray){const cv=document.createElement('canvas');cv.width=img.naturalWidth;cv.height=img.naturalHeight;
+  const ctx=cv.getContext('2d');ctx.drawImage(img,0,0);
+  if(gray){const id=ctx.getImageData(0,0,cv.width,cv.height),d=id.data;
+    for(let i=0;i<d.length;i+=4){const v=0.299*d[i]+0.587*d[i+1]+0.114*d[i+2];d[i]=d[i+1]=d[i+2]=v;}ctx.putImageData(id,0,0);}
+  return cv;}
+const dot=(a,b)=>{let s=0;for(let i=0;i<a.length;i++)s+=a[i]*b[i];return s;};
+function l2(a){let s=0;for(let i=0;i<a.length;i++)s+=a[i]*a[i];s=Math.sqrt(s)||1;return a.map(x=>x/s);}
+
+let extractor=null;
+async function embed(canvas){
+  const out=await extractor(canvas.toDataURL('image/png'),{pooling:'mean',normalize:true});
+  let v=Array.from(out.data);const dims=out.dims||[];
+  if(dims.length===3){const T=dims[1],D=dims[2],p=new Float64Array(D);
+    for(let t=0;t<T;t++)for(let d=0;d<D;d++)p[d]+=v[t*D+d];v=Array.from(p,x=>x/T);}
+  return l2(v);
+}
+async function listNames(){
+  const html=await (await fetch('../web/icons/characters/')).text();
+  return [...new Set([...html.matchAll(/href="([^"]+\.webp)"/g)].map(m=>decodeURIComponent(m[1].replace(/^.*\//,'').replace(/\.webp$/,''))))].sort();
+}
+// greedy multiset intersection size
+function setHits(pred,gt){const g=[...gt];let h=0;for(const p of pred){const i=g.indexOf(p);if(i>=0){h++;g.splice(i,1);}}return h;}
+
+async function run(model){
+  setP('loading '+model);
+  extractor=await pipeline('image-feature-extraction',model);
+  const names=await listNames();
+  setP('refs for '+names.length+' chars');
+  const Rc=[],Rg=[];
+  for(let i=0;i<names.length;i++){
+    const im=await loadImg('../web/icons/characters/'+encodeURIComponent(names[i])+'.webp');
+    Rc.push(await embed(wholeCanvas(im,false)));Rg.push(await embed(wholeCanvas(im,true)));
+    if((i+1)%14===0)setP('refs '+(i+1)+'/'+names.length);
+  }
+  const amax=(v,bank)=>{let bi=-1,bs=-2;for(let i=0;i<bank.length;i++){const s=dot(v,bank[i]);if(s>bs){bs=s;bi=i;}}return{name:names[bi],score:bs};};
+
+  buildRef(await loadImg(GAMES.g1.file));   // g1 = geometry reference (badge + slot px offsets)
+
+  const strat={dual:{pick:[0,0],ban:[0,0]},allGray:{pick:[0,0],ban:[0,0]},allColor:{pick:[0,0],ban:[0,0]}};
+  const detail=[];
+  for(const[gk,game] of Object.entries(GAMES)){
+    const img=await loadImg(game.file);
+    const badge=detectBadge(img);
+    if(!badge){log(gk+' NO BADGE — skipped');continue;}
+    const SZ=n=>slotZone(n,img,badge);   // pixel translation from detected badge
+    // predict each slot under each strategy
+    const pred={dual:{},allGray:{},allColor:{}};
+    for(const[grp,slots] of Object.entries(G)){
+      if(!game.gt[grp])continue;
+      const isBan=BAN_GROUPS.has(grp);
+      for(const n of slots){
+        const vc=await embed(cropCanvas(img,SZ(n),false));
+        const vg=await embed(cropCanvas(img,SZ(n),true));
+        const c=amax(vc,Rc),g2=amax(vg,Rg);
+        pred.dual[n]=isBan?(c.score>=g2.score?c:g2):c;
+        pred.allGray[n]=g2; pred.allColor[n]=c;
+        setP(`${gk} ${grp} G${n}: dual=${pred.dual[n].name}`);
+      }
+    }
+    // score per group (multiset)
+    for(const[grp,slots] of Object.entries(G)){
+      if(!game.gt[grp])continue;
+      const kind=BAN_GROUPS.has(grp)?'ban':'pick';
+      const gt=game.gt[grp];
+      for(const S of ['dual','allGray','allColor']){
+        const names3=slots.map(n=>pred[S][n].name);
+        const h=setHits(names3,gt);
+        strat[S][kind][0]+=h; strat[S][kind][1]+=gt.length;
+      }
+      detail.push({game:gk,grp,gt,dual:slots.map(n=>pred.dual[n].name),
+        allGray:slots.map(n=>pred.allGray[n].name),allColor:slots.map(n=>pred.allColor[n].name)});
+    }
+  }
+  const pct=([h,t])=>t?`${h}/${t} (${Math.round(h/t*100)}%)`:'-';
+  const summary={};for(const S of ['dual','allGray','allColor'])summary[S]={pick:pct(strat[S].pick),ban:pct(strat[S].ban),
+    total:pct([strat[S].pick[0]+strat[S].ban[0],strat[S].pick[1]+strat[S].ban[1]])};
+  const res={model,summary,detail,dim:Rc[0].length};
+  window.BENCH.result=res;window.BENCH.done=true;
+  log('\n==== '+model+' ===='); log(JSON.stringify(summary,null,1));
+  for(const d of detail)log(`${d.game} ${d.grp} gt=[${d.gt}] dual=[${d.dual}]${JSON.stringify(d.dual)===JSON.stringify(d.allGray)?'':' gray=['+d.allGray+']'}`);
+  return res;
+}
+const model=new URLSearchParams(location.search).get('model')||'Xenova/dinov2-small';
+run(model).catch(e=>{window.BENCH.error=String(e);window.BENCH.done=true;log('ERROR '+e+'\n'+(e.stack||''));});
+</script>
+</body>
+</html>
