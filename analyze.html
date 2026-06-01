@@ -892,6 +892,10 @@ const DEFAULT_ZONES={
   R_T2_0:{x:0.5254022988505748,y:0.883715652201639,w:0.04981609195402299,h:0.054},
   R_T2_1:{x:0.6385057471264368,y:0.8877968944297421,w:0.052114942528735636,h:0.04991875777189682},
   R_T2_2:{x:0.7504597701149426,y:0.8877968944297421,w:0.05326436781609196,h:0.04787813665784523},
+  // Плашки рестартов внизу (серые=нет, оранж/красн=нажатые). Откалибровано на g1; badge-align
+  // переносит их на безтулбарную раскладку (UI уезжает вверх). Считаем число НЕ-серых плашек.
+  L_RESTART_PLATES:{x:0.283,y:0.950,w:0.067,h:0.042},
+  R_RESTART_PLATES:{x:0.689,y:0.950,w:0.067,h:0.042},
   // ИКОНКИ драфт-сетки (Этап 2, pHash) — все 18 слотов по фикс-раскладке. Ключ G<slot> = № хода.
   // Координаты СТАРТОВЫЕ (под ~финальный драфт shiyu) — откалибруйте через «⚙ Калибровка зон».
   // Левая сторона (fp):   ряд1 8 5 4 1 / ряд2 16 13 12 9 / ряд3 17
@@ -922,7 +926,7 @@ function GRID_DEFAULT_ZONES(){
 function gridKey(slot){return 'G'+slot;}
 // Версия схемы зон. При смене калибровки/раскладки (badge-align + g1-центры) старые
 // сохранённые калибровки СБРАСЫВАЮТСЯ — иначе stale zzz_zones перекрывает новые дефолты и ломает кроп.
-const ZONES_VERSION='2';
+const ZONES_VERSION='3';
 (function migrateZones(){ if(localStorage.getItem('zzz_zones_v')!==ZONES_VERSION){
   localStorage.removeItem('zzz_zones'); localStorage.removeItem('zzz_ref_anchors');
   localStorage.setItem('zzz_zones_v',ZONES_VERSION); }})();
@@ -971,6 +975,39 @@ function detectBadge(img){
   xs.sort((a,b)=>a-b);ys.sort((a,b)=>a-b);
   const pc=(a,p)=>a[Math.min(a.length-1,Math.max(0,Math.round((a.length-1)*p)))];
   return {cx:(pc(xs,.02)+pc(xs,.98))/2/W, cy:(pc(ys,.02)+pc(ys,.98))/2/H};
+}
+
+// Раскладка результата: С верхней плашкой судьи (бейдж низко, cy~0.12) или БЕЗ неё (UI уехал вверх,
+// cy~0.05). Без плашки цифр рестартов вверху нет — считаем рестарты по нижним плашкам.
+function hasToolbar(img){const b=detectBadge(img);return !!(b&&b.cy>0.085);}
+
+// Сосчитать НЕ-серые (оранжевые/красные) плашки рестартов в зоне. Оранжевый+красный = нажатые
+// рестарты; серые = пустые. Цифры «+N» внутри не важны. Возвращает число цветных плашек (0..4).
+function countRestartPlates(img,z){
+  if(!z)return 0;
+  const sx=z.x*img.naturalWidth, sy=z.y*img.naturalHeight, sw=Math.max(1,z.w*img.naturalWidth), sh=Math.max(1,z.h*img.naturalHeight);
+  const W=Math.round(sw),H=Math.round(sh);
+  const cv=document.createElement('canvas');cv.width=W;cv.height=H;
+  cv.getContext('2d').drawImage(img,sx,sy,sw,sh,0,0,W,H);
+  const d=cv.getContext('2d').getImageData(0,0,W,H).data;
+  // для каждого столбца — есть ли оранжевый/красный пиксель (цвет плашки, не серый/белый)
+  const colored=new Uint8Array(W);
+  for(let x=0;x<W;x++){let hit=0;
+    for(let y=0;y<H;y++){const i=(y*W+x)*4,r=d[i],g=d[i+1],b=d[i+2];
+      const orange=r>180&&g>110&&g<205&&b<130&&(r-b)>80&&(g-b)>30;
+      const red=r>150&&(r-g)>70&&(r-b)>70&&g<120;
+      if(orange||red){hit=1;break;}}
+    colored[x]=hit;}
+  // серии цветных столбцов = плашки. Малые разрывы (белый «+2» внутри красной плашки) сглаживаем.
+  const minRun=Math.max(2,Math.floor(W*0.05)), maxGap=Math.max(2,Math.floor(W*0.04));
+  let count=0,x=0;
+  while(x<W){
+    if(!colored[x]){x++;continue;}
+    let len=0,gap=0,end=x;
+    while(x<W){ if(colored[x]){len++;end=x;gap=0;} else {gap++; if(gap>maxGap)break;} x++; }
+    if(len>=minRun)count++;
+  }
+  return count;
 }
 
 // Вернуть зоны, выровненные по якорю-бейджу (или сырые, если выключено/нет эталона/не найден).
@@ -1323,18 +1360,34 @@ async function seedEmbeddings(){
 
 // Распознать все 18 слотов через эмбеддинги. Тот же контракт, что recognizeGrid:
 // {picks:{left,right}, bans:{left,right}}. picks[side]=[{name,team,_charId,score,lowConf}].
+// Все 18 персонажей УНИКАЛЬНЫ → глобальное жадное назначение по убыванию cosine (каждый персонаж
+// занимает ≤1 клетку). При конфликте увереннейшая клетка забирает персонажа, остальные получают
+// следующий лучший не-дубликат и помечаются lowConf.
 async function recognizeGridEmb(img,bank,progress){
-  const Z=AZ(), bySlot={};
-  const argmax=v=>{let bi=-1,bs=-2;for(let i=0;i<bank.length;i++){const s=_cos(v,bank[i].vec);if(s>bs){bs=s;bi=i;}}return bi>=0?{...bank[bi],score:bs}:null;};
+  const Z=AZ();
+  const slots=[];   // {n,meta,redFrame,scores:Map(charId->{score,name}),top}
   for(let n=1;n<=18;n++){
     const meta=GRID_SLOTS[n], z=Z[gridKey(n)];
     if(!meta||!z)continue;
     const v=await window.embedGray(cropRaw(img,z,true));
-    const m=v?argmax(v):null;
-    bySlot[n]={...meta,charId:m?m.character_id:'',name:m?m.name:'',score:m?m.score:null,
-      lowConf:m?m.score<EMB_LOW_CONF:true,redFrame:hasRedFrame(img,z)};
+    const sc=new Map();   // лучший cosine на каждого персонажа (банк может иметь несколько векторов на id)
+    if(v)for(const b of bank){const s=_cos(v,b.vec),cur=sc.get(b.character_id);if(!cur||s>cur.score)sc.set(b.character_id,{score:s,name:b.name});}
+    let top=null; sc.forEach((o,id)=>{if(!top||o.score>top.score)top={id,...o};});
+    slots.push({n,meta,redFrame:hasRedFrame(img,z),scores:sc,top});
     progress&&progress(`Иконки (эмбеддинги) ${n}/18...`);
   }
+  // глобальное жадное назначение с уникальностью
+  const triples=[];
+  slots.forEach((s,si)=>s.scores.forEach((o,id)=>triples.push({si,id,score:o.score,name:o.name})));
+  triples.sort((a,b)=>b.score-a.score);
+  const usedChar=new Set(), assigned=new Array(slots.length).fill(null);
+  for(const t of triples){ if(assigned[t.si]||usedChar.has(t.id))continue; assigned[t.si]={charId:t.id,name:t.name,score:t.score}; usedChar.add(t.id); }
+  const bySlot={};
+  slots.forEach((s,si)=>{const a=assigned[si]||{charId:'',name:'',score:null};
+    const displaced=!!(s.top&&a.charId&&s.top.id!==a.charId);   // уступил топ-выбор из-за уникальности
+    bySlot[s.n]={...s.meta,charId:a.charId,name:a.name,score:a.score,
+      lowConf:a.score==null||a.score<EMB_LOW_CONF||displaced, redFrame:s.redFrame};
+  });
   const picks={left:[],right:[]}, bans={left:[],right:[]};
   [['left',FP_T1,1],['left',FP_T2,2],['right',DBL_T1,1],['right',DBL_T2,2]].forEach(([side,slots,team])=>{
     slots.forEach(n=>{const s=bySlot[n]; if(s)picks[side].push({name:s.name,team,_charId:s.charId,score:s.score,lowConf:s.lowConf});});
@@ -1385,8 +1438,10 @@ async function runLocalAnalysis(progress){
   const right_player=cleanNick(await ocrZone(img,'right_name',W_NICK,'7'));
   const left_timer=parseTimer(await ocrZone(img,'left_timer',W_TIME,'7'));
   const right_timer=parseTimer(await ocrZone(img,'right_timer',W_TIME,'7'));
-  const left_restarts=parseInt0(await ocrZone(img,'p1_restarts',W_DIG,'7'));
-  const right_restarts=parseInt0(await ocrZone(img,'p2_restarts',W_DIG,'7'));
+  // Рестарты: с верхней плашкой судьи — читаем цифру OCR; без неё цифры нет — считаем нижние плашки.
+  const _tb=hasToolbar(img);
+  const left_restarts =_tb?parseInt0(await ocrZone(img,'p1_restarts',W_DIG,'7')):countRestartPlates(img,AZ().L_RESTART_PLATES);
+  const right_restarts=_tb?parseInt0(await ocrZone(img,'p2_restarts',W_DIG,'7')):countRestartPlates(img,AZ().R_RESTART_PLATES);
 
   // OCR карточек пиков (имя + mindscape) — источник mindscape; собираем в team-порядке (T1, затем T2).
   const ocr={left:[],right:[]};
@@ -1414,12 +1469,15 @@ async function runLocalAnalysis(progress){
   // персонажа (карточки внизу идут не в порядке очереди сетки), с позиционным запасным вариантом.
   const picks={left:[],right:[]};
   for(const side of ['left','right']){
-    const msByChar={};
-    ocr[side].forEach(o=>{const c=findChar(o.name); if(c)msByChar[c.id]=o.mindscape;});
+    const msByChar={}; const ocrIds=new Set();
+    ocr[side].forEach(o=>{const c=findChar(o.name); if(c){msByChar[c.id]=o.mindscape; ocrIds.add(c.id);}});
     grid.picks[side].forEach((g,k)=>{
       const o=ocr[side][k]||{};
       const ms=(g._charId&&msByChar[g._charId]!=null)?msByChar[g._charId]:(o.mindscape||0);
-      picks[side].push({name:g.name||o.name||'',mindscape:ms,has_signature:false,team:g.team,lowConf:!!g.lowConf});
+      // Кросс-валидация: иконка (эмбеддинг) vs тексты карточек. Если икона дала персонажа,
+      // OCR прочитал >=2 имени на стороне, но среди них этого персонажа НЕТ → расхождение → флаг.
+      const disagree=!!g._charId && ocrIds.size>=2 && !ocrIds.has(g._charId);
+      picks[side].push({name:g.name||o.name||'',mindscape:ms,has_signature:false,team:g.team,lowConf:!!g.lowConf||disagree});
     });
   }
 
