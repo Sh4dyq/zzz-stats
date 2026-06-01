@@ -92,6 +92,13 @@ function applyDraftToForm(norm){
       const sig=document.querySelector(`.draft-sig[data-slot="${slot.n}"]`);
       if(sig&&ch){sig.checked=isSignature(ch.id,pl.engineEnkaByAgentEnka[slot.enka]);}
     }
+    // обновить портрет/амплификатор под новый выбор (без авто-M6 из draftCharChanged)
+    const img=document.querySelector(`.pk-img[data-imgslot="${slot.n}"]`);
+    if(img&&typeof iconChar==='function')img.innerHTML=iconChar(ch,48);
+    const amp=document.querySelector(`.pk-amp[data-ampslot="${slot.n}"]`);
+    if(amp&&typeof sigForChar==='function'){const sg=ch?sigForChar(ch.id):null;amp.innerHTML=sg?sigImg(sg,18):'';}
+    const sig2=document.querySelector(`.draft-sig[data-slot="${slot.n}"]`);
+    if(sig2&&typeof draftSigChanged==='function')draftSigChanged(sig2);
   });
   return {missing,fpName:fp.name,dblName:dbl.name};
 }

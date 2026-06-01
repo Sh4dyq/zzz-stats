@@ -38,23 +38,41 @@ async function pgMatches(){
     </div>`;
   }).join('');
 
-  const pOpts=D.players.map(p=>`<option value="${p.id}">${p.nickname}</option>`).join('');
+  const plDatalist=`<datalist id="pl-list">${D.players.map(p=>`<option value="${escapeHtml(p.nickname)}"></option>`).join('')}</datalist>`;
   html(`<div class="card" style="margin-bottom:16px">
     <h3>Новая встреча (Bo2)</h3>
+    ${plDatalist}
     <div class="grid2" style="margin-bottom:12px">
       <div><label>Турнир</label>${sel('e-tour',D.tours,x=>x.id,x=>x.name)}</div>
-      <div><label>Игрок 1 (фп в матче 1)</label><select id="e-p1">${pOpts}</select></div>
-      <div><label>Игрок 2 (фп в матче 2)</label><select id="e-p2">${pOpts}</select></div>
+      <div><label>Игрок 1 (фп в матче 1)</label><input id="e-p1" list="pl-list" placeholder="ник игрока — впишите или выберите"></div>
+      <div><label>Игрок 2 (фп в матче 2)</label><input id="e-p2" list="pl-list" placeholder="ник игрока — впишите или выберите"></div>
     </div>
+    <div style="font-size:11px;color:var(--sub);margin-bottom:8px">Если ник новый — игрок создастся автоматически.</div>
     <button class="btn btn-y" onclick="addEnc()">Создать встречу</button>
   </div>
   <div class="space-y">${list||'<p style="color:var(--sub);font-size:14px">Встреч ещё нет</p>'}</div>`);
 }
 
+// Ник → id игрока: ищет существующего (без учёта регистра) или создаёт нового.
+async function resolvePlayerNick(nick){
+  nick=(nick||'').trim();
+  if(!nick)return null;
+  const ex=D.players.find(p=>p.nickname.toLowerCase()===nick.toLowerCase());
+  if(ex)return ex.id;
+  const{data,error}=await sb.from('players').insert({nickname:nick}).select().single();
+  if(error){dbErr(error,'создание игрока «'+nick+'»');return null;}
+  D.players.push(data);
+  return data.id;
+}
+
 async function addEnc(){
-  const t=v('e-tour'),p1=v('e-p1'),p2=v('e-p2');
+  const t=v('e-tour'),n1=v('e-p1'),n2=v('e-p2');
   if(!t)return toast('Выбери турнир','err');
-  if(p1===p2)return toast('Выбери разных игроков','err');
+  if(!n1||!n2)return toast('Впиши ники обоих игроков','err');
+  if(n1.toLowerCase()===n2.toLowerCase())return toast('Игроки должны быть разными','err');
+  const p1=await resolvePlayerNick(n1);if(!p1)return;
+  const p2=await resolvePlayerNick(n2);if(!p2)return;
+  if(p1===p2)return toast('Игроки должны быть разными','err');
   const{error}=await sb.from('encounters').insert({tournament_id:t,player1_id:p1,player2_id:p2});
   if(dbErr(error,'создание встречи'))return;
   toast('Встреча создана');pgMatches();
@@ -127,14 +145,70 @@ async function openMatch(encId,num,p1Id,p2Id){
     ${renderDraftBoard(template,fpId,dblId,fp?.nickname,dbl?.nickname,match)}
   </div>
 
-  ${renderPickMeta(template,fpId,dblId,fp?.nickname,dbl?.nickname,match)}
-
   <button class="btn btn-y" style="font-size:15px;padding:10px 28px" onclick="saveMatch('${encId}','${num}','${p1Id}','${p2Id}','${fpId}','${mid}')">
     Сохранить матч
   </button>`);
 }
 
 
+// Сигнатурный амплификатор персонажа (по character_id).
+function sigForChar(charId){return charId?D.sigs.find(s=>s.character_id===charId)||null:null;}
+
+const DRAFT_CSS=`<style>
+.dbrd{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.dcol{min-width:0}
+.dcol-head{text-align:center;font-size:14px;font-weight:700;color:var(--accent);padding:4px 0 8px}
+.dcol-head .sub{color:var(--sub);font-weight:400;font-size:11px}
+.dsec-lbl{font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;margin:10px 0 5px;color:var(--sub)}
+.dsec-lbl.ban{color:#f87171}
+.dsec-lbl.t1{color:#60a5fa}.dsec-lbl.t2{color:#f472b6}
+.ban-row{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.pk-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.pk-card{background:#0f1320;border:1px solid var(--border);border-radius:8px;padding:5px;display:flex;flex-direction:column;gap:4px}
+.pk-card.ban{background:#160c0f;border-color:#3a2025}
+.pk-thumb{position:relative;width:100%;aspect-ratio:1;border-radius:6px;overflow:hidden;background:#1c1f2e}
+.pk-thumb img,.pk-thumb .pic{width:100%!important;height:100%!important;border-radius:6px}
+.pk-card.ban .pk-thumb img{filter:grayscale(1) brightness(.7)}
+.pk-card.ban .pk-thumb{box-shadow:inset 0 0 0 2px #ef4444}
+.pk-num{position:absolute;top:2px;left:2px;z-index:2;min-width:16px;height:16px;padding:0 3px;border-radius:4px;background:rgba(0,0,0,.72);color:#fff;font-size:10px;font-weight:700;line-height:16px;text-align:center}
+.pk-card.ban .pk-num{background:#ef4444}
+.pk-card .draft-char{width:100%;font-size:11px;padding:3px 4px}
+.pk-meta{display:flex;align-items:center;gap:4px}
+.pk-meta .draft-ms{font-size:11px;padding:2px 3px;flex:1;min-width:0}
+.pk-meta .cb-label{display:flex;align-items:center;gap:3px;font-size:10px;color:var(--sub);margin:0;cursor:pointer;white-space:nowrap}
+.pk-amp img,.pk-amp .pic{width:18px!important;height:18px!important;border-radius:4px;vertical-align:middle}
+@media(max-width:720px){.dbrd{grid-template-columns:1fr}}
+</style>`;
+
+// Карточка пика: портрет + №очерёдности + селект персонажа + минскейп + sig + амп.
+function pickCardHtml(slot,ex,charOpts,setSel){
+  const ch=D.chars.find(c=>c.id===ex.character_id)||null;
+  const ms=ex.mindscape||0;
+  const sig=sigForChar(ex.character_id);
+  const ampOp=ex.has_signature?1:.35;
+  return`<div class="pk-card">
+    <div class="pk-thumb"><span class="pk-num">${slot.n}</span><span class="pk-img" data-imgslot="${slot.n}">${iconChar(ch,48)}</span></div>
+    <select class="draft-char" data-slot="${slot.n}" data-type="pick" data-pid="${slot.pid}" onchange="draftCharChanged(this)">
+      <option value="">—</option>${setSel(charOpts,ex.character_id)}</select>
+    <div class="pk-meta">
+      <select class="draft-ms" data-slot="${slot.n}">${setSel(msOpts,String(ms))}</select>
+      <label class="cb-label"><input type="checkbox" class="draft-sig" data-slot="${slot.n}" onchange="draftSigChanged(this)" ${ex.has_signature?'checked':''}>
+        <span class="pk-amp" data-ampslot="${slot.n}" style="opacity:${ampOp}">${sig?sigImg(sig,18):''}</span></label>
+    </div>
+  </div>`;
+}
+
+// Карточка бана: портрет (ч/б + красная рамка) + №очерёдности + селект.
+function banCardHtml(slot,ex,charOpts,setSel){
+  const ch=D.chars.find(c=>c.id===ex.character_id)||null;
+  return`<div class="pk-card ban">
+    <div class="pk-thumb"><span class="pk-num">${slot.n}</span><span class="pk-img" data-imgslot="${slot.n}">${iconChar(ch,48)}</span></div>
+    <select class="draft-char" data-slot="${slot.n}" data-type="ban" data-pid="${slot.pid}" onchange="draftCharChanged(this)">
+      <option value="">—</option>${setSel(charOpts,ex.character_id)}</select>
+  </div>`;
+}
+
+// Двухколоночный борд в духе сайта (компактно): баны · Team 01 · Team 02 на сторону.
 function renderDraftBoard(slots,fpId,dblId,fpName,dblName,match){
   const banMap={},pickMap={};
   (match?.bans||[]).forEach(b=>banMap[b.ban_order]=b);
@@ -143,96 +217,40 @@ function renderDraftBoard(slots,fpId,dblId,fpName,dblName,match){
   const charOpts=D.chars.map(c=>`<option value="${c.id}">${c.name}</option>`).join('');
   const setSel=(opts,val)=>val?opts.replace(`value="${val}"`,`value="${val}" selected`):opts;
 
-  const rows=slots.map(slot=>{
-    const isFp=slot.pid===fpId;
-    const isBan=slot.type==='ban';
-    const ex=isBan?(banMap[slot.n]||{}):(pickMap[slot.n]||{});
-
-    const cell=isBan
-      ?`<div style="display:flex;align-items:center;gap:3px;padding:2px 0">
-          <select class="draft-char" data-slot="${slot.n}" data-type="ban" data-pid="${slot.pid}"
-            style="flex:1;min-width:110px;font-size:12px;padding:4px 6px">
-            <option value="">—</option>${setSel(charOpts,ex.character_id)}
-          </select>
-        </div>`
-      :`<div style="display:flex;align-items:center;gap:3px;padding:2px 0">
-          <select class="draft-char" data-slot="${slot.n}" data-type="pick" data-pid="${slot.pid}" onchange="draftCharChanged(this)"
-            style="flex:1;min-width:110px;font-size:12px;padding:4px 6px">
-            <option value="">—</option>${setSel(charOpts,ex.character_id)}
-          </select>
-          <select class="draft-ms sm-sel" data-slot="${slot.n}" style="font-size:12px;padding:3px 5px">${msOpts.replace(`value="${ex.mindscape||0}"`,`value="${ex.mindscape||0}" selected`)}</select>
-        </div>`;
-    const empty=`<div></div>`;
-    const numCell=`<div style="text-align:center;padding:0 4px">
-      <div style="font-size:15px;font-weight:700;line-height:1.1;color:${isBan?'#f87171':'var(--accent)'}">${slot.n}</div>
-      <div style="font-size:9px;letter-spacing:.04em;color:${isBan?'#f87171':'var(--sub)'}">${isBan?'БАН':'ПИК'}</div>
+  const col=(pid,name,isFp)=>{
+    const bans=slots.filter(s=>s.type==='ban'&&s.pid===pid);
+    const picks=slots.filter(s=>s.type==='pick'&&s.pid===pid);
+    const t1=picks.slice(0,3),t2=picks.slice(3,6);
+    const banCells=bans.map(s=>banCardHtml(s,banMap[s.n]||{},charOpts,setSel)).join('');
+    const pk=arr=>arr.map(s=>pickCardHtml(s,pickMap[s.n]||{},charOpts,setSel)).join('');
+    return`<div class="dcol">
+      <div class="dcol-head">${name||(isFp?'ФП':'Дабл')}${isFp?' <span class="sub">(фп)</span>':''}</div>
+      <div class="dsec-lbl ban">Баны</div><div class="ban-row">${banCells}</div>
+      <div class="dsec-lbl t1">Team 01</div><div class="pk-grid">${pk(t1)}</div>
+      <div class="dsec-lbl t2">Team 02</div><div class="pk-grid">${pk(t2)}</div>
     </div>`;
+  };
 
-    return isFp
-      ?`${cell}${numCell}${empty}`
-      :`${empty}${numCell}${cell}`;
-  }).join('');
-
-  return`<div style="display:grid;grid-template-columns:1fr 44px 1fr;align-items:center;row-gap:3px">
-    <div style="text-align:center;font-size:13px;font-weight:600;color:var(--accent);padding:4px 0">${fpName||'ФП'} <span style="color:var(--sub);font-weight:400;font-size:11px">(фп)</span></div>
-    <div></div>
-    <div style="text-align:center;font-size:13px;font-weight:600;color:var(--accent);padding:4px 0">${dblName||'Дабл'}</div>
-    ${rows}
-  </div>`;
-}
-
-function renderPickMeta(slots,fpId,dblId,fpName,dblName,match){
-  const pickMap={};
-  (match?.picks||[]).forEach(p=>pickMap[p.pick_order]=p);
-
-  const fpSlots=slots.filter(s=>s.type==='pick'&&s.pid===fpId);
-  const dblSlots=slots.filter(s=>s.type==='pick'&&s.pid===dblId);
-  if(!fpSlots.length&&!dblSlots.length)return'';
-
-  // первые 3 пика игрока = Team 1, следующие 3 = Team 2
-  const teamLabel=(idx)=>idx<3?'T1':'T2';
-  const teamColor=(idx)=>idx<3?'#60a5fa':'#f472b6';
-
-  const makeCol=(playerSlots)=>playerSlots.map((slot,i)=>{
-    const ex=pickMap[slot.n]||{};
-    const showDivider=i===3;
-    const divider=showDivider?`<div style="font-size:10px;font-weight:600;letter-spacing:.06em;color:${teamColor(i)};padding:6px 0 2px">Team 2</div>`:'';
-    return`${divider}<div style="display:flex;align-items:center;gap:6px;padding:3px 0">
-      <span style="font-size:10px;font-weight:700;color:${teamColor(i)};min-width:14px">${teamLabel(i)}</span>
-      <span style="font-size:11px;color:var(--sub);min-width:18px">№${slot.n}</span>
-      <label class="cb-label" style="font-size:12px">
-        <input type="checkbox" class="draft-sig" data-slot="${slot.n}" ${ex.has_signature?'checked':''}>sig
-      </label>
-    </div>`;
-  }).join('');
-
-  const fpT1label=`<div style="font-size:10px;font-weight:600;letter-spacing:.06em;color:${teamColor(0)};padding:0 0 2px">Team 1</div>`;
-  const dblT1label=`<div style="font-size:10px;font-weight:600;letter-spacing:.06em;color:${teamColor(0)};padding:0 0 2px">Team 1</div>`;
-
-  return`<div class="card" style="margin-bottom:16px">
-    <h3 style="margin-bottom:12px">Половины и сигнатуры</h3>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 24px">
-      <div>
-        <div style="text-align:center;font-size:13px;font-weight:600;color:var(--accent);padding:4px 0;border-bottom:1px solid var(--border);margin-bottom:6px">
-          ${fpName||'ФП'} <span style="color:var(--sub);font-weight:400;font-size:11px">(фп)</span>
-        </div>
-        ${fpT1label}${makeCol(fpSlots)}
-      </div>
-      <div>
-        <div style="text-align:center;font-size:13px;font-weight:600;color:var(--accent);padding:4px 0;border-bottom:1px solid var(--border);margin-bottom:6px">
-          ${dblName||'Дабл'}
-        </div>
-        ${dblT1label}${makeCol(dblSlots)}
-      </div>
-    </div>
+  return DRAFT_CSS+`<div class="dbrd">
+    ${col(fpId,fpName,true)}
+    ${col(dblId,dblName,false)}
   </div>`;
 }
 
 function draftCharChanged(el){
   const slot=el.dataset.slot;
-  const char=D.chars.find(c=>c.id===el.value);
+  const char=D.chars.find(c=>c.id===el.value)||null;
   const msEl=document.querySelector(`.draft-ms[data-slot="${slot}"]`);
   if(msEl&&char?.rarity==='A')msEl.value='6';
+  const img=document.querySelector(`.pk-img[data-imgslot="${slot}"]`);
+  if(img)img.innerHTML=iconChar(char,48);
+  const amp=document.querySelector(`.pk-amp[data-ampslot="${slot}"]`);
+  if(amp){const sig=sigForChar(el.value);amp.innerHTML=sig?sigImg(sig,18):'';}
+}
+
+function draftSigChanged(cb){
+  const amp=document.querySelector(`.pk-amp[data-ampslot="${cb.dataset.slot}"]`);
+  if(amp)amp.style.opacity=cb.checked?1:.35;
 }
 
 function parseSec(s){if(!s)return null;const p=s.split(':').map(Number);if(p.length!==2||isNaN(p[0])||isNaN(p[1]))return null;return p[0]*60+p[1];}
