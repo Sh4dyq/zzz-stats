@@ -83,7 +83,9 @@ async function openMatch(encId,num,p1Id,p2Id){
   const fpId=num===1?p1Id:p2Id;
   const dblId=num===1?p2Id:p1Id;
   const fp=D.players.find(p=>p.id===fpId),dbl=D.players.find(p=>p.id===dblId);
-  const{data:match}=await sb.from('matches').select('*,picks:match_picks(*),bans:match_bans(*)').eq('encounter_id',encId).eq('match_number',num).maybeSingle();
+  const{data:match}=window.DEV_PREVIEW
+    ?{data:window.DEV_MATCH||null}
+    :await sb.from('matches').select('*,picks:match_picks(*),bans:match_bans(*)').eq('encounter_id',encId).eq('match_number',num).maybeSingle();
   const mid=match?.id||'';
 
   const template=DRAFT_TEMPLATE(fpId,dblId);
@@ -96,43 +98,44 @@ async function openMatch(encId,num,p1Id,p2Id){
 
   document.getElementById('page-title').textContent=`Матч ${num} — ${fp?.nickname} (фп) vs ${dbl?.nickname}`;
 
-  html(`<button class="btn btn-g" style="margin-bottom:16px" onclick="go('matches')">← Назад к встречам</button>
-
-  <div class="card" style="margin-bottom:12px">
-    <h3>Импорт драфта по ссылке</h3>
-    <div style="display:flex;gap:8px;align-items:flex-end">
-      <div style="flex:1"><label>Ссылка shiyu.darte.gg (draft_id + session_key)</label>
-        <input id="draft-link" type="text" placeholder="https://shiyu.darte.gg/draft?draft_id=…&session_key=…"></div>
-      <button class="btn btn-y" onclick="importDraftFromLink()">Загрузить</button>
-    </div>
-    <div id="draft-import-status" style="font-size:12px;color:var(--sub);margin-top:8px"></div>
-    <div style="font-size:11px;color:var(--sub);margin-top:4px">player0 (ходит первым) → фп/левая колонка. Проверь имена в статусе и сохрани вручную.</div>
+  const mlbl='font-size:11px;color:var(--sub);white-space:nowrap';
+  const minp='padding:5px 8px;text-align:center;font-size:13px;margin:0';
+  html(`<style>
+    .mbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+    .mbar input,.mbar .btn{margin:0}
+    .mres{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:13px}
+    .mres .side{display:flex;align-items:center;gap:6px}
+    .mres .nm{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;font-size:15px;text-transform:uppercase;letter-spacing:.02em;padding-right:.22em;flex-shrink:0}
+    .mres .side{gap:7px;flex-shrink:0}
+    .mres .div{width:1px;height:26px;background:var(--border)}
+  </style>
+  <div class="mbar">
+    <button class="btn btn-g" style="padding:6px 12px;font-size:13px" onclick="go('matches')">← Встречи</button>
+    <input id="draft-link" type="text" placeholder="ссылка shiyu.darte.gg (draft_id + session_key)…" style="flex:1;min-width:200px;padding:6px 10px;font-size:13px">
+    <button class="btn btn-g" style="padding:6px 14px;font-size:13px" onclick="importDraftFromLink()">Импорт</button>
+    <button class="btn btn-y" style="padding:6px 18px;font-size:13px" onclick="saveMatch('${encId}','${num}','${p1Id}','${p2Id}','${fpId}','${mid}')" style="padding:6px 18px;font-size:13px;white-space:nowrap">Сохранить матч</button>
   </div>
+  <div id="draft-import-status" style="font-size:11px;color:var(--sub);min-height:13px;margin-bottom:10px"></div>
 
-  <div class="card" style="margin-bottom:12px">
-    <h3>Результат матча</h3>
-    <div class="grid2" style="margin-bottom:12px">
-      <div>
-        <label>${fp?.nickname} (фп)</label>
-        <div style="display:flex;gap:8px">
-          <div style="flex:1"><label>Таймер (м:сс)</label><input id="t1" type="text" value="${fpTimer}" placeholder="3:28"></div>
-          <div><label>Рестарты</label><input id="r1" type="number" value="${fpR}" min="0" style="width:80px"></div>
-        </div>
+  <div class="card" style="padding:10px 14px;margin-bottom:12px">
+    <div class="mres">
+      <div class="side">
+        <span class="nm" style="color:var(--accent)">${fp?.nickname}</span><span style="font-size:9px;color:var(--sub);letter-spacing:.1em">ФП</span>
+        <span style="${mlbl}">таймер</span><input id="t1" type="text" value="${fpTimer}" placeholder="3:28" title="Итоговый таймер фп (м:сс)" style="width:72px;${minp};font-family:'JetBrains Mono',monospace">
+        <span style="${mlbl}">рест.</span><input id="r1" type="number" value="${fpR}" min="0" title="Рестарты фп" style="width:52px;${minp}">
       </div>
-      <div>
-        <label>${dbl?.nickname}</label>
-        <div style="display:flex;gap:8px">
-          <div style="flex:1"><label>Таймер (м:сс)</label><input id="t2" type="text" value="${dblTimer}" placeholder="3:45"></div>
-          <div><label>Рестарты</label><input id="r2" type="number" value="${dblR}" min="0" style="width:80px"></div>
-        </div>
+      <span class="div"></span>
+      <div class="side">
+        <span class="nm">${dbl?.nickname}</span>
+        <span style="${mlbl}">таймер</span><input id="t2" type="text" value="${dblTimer}" placeholder="3:45" title="Итоговый таймер (м:сс)" style="width:72px;${minp};font-family:'JetBrains Mono',monospace">
+        <span style="${mlbl}">рест.</span><input id="r2" type="number" value="${dblR}" min="0" title="Рестарты" style="width:52px;${minp}">
       </div>
-    </div>
-    <div style="display:flex;gap:16px;align-items:center">
-      <label class="cb-label"><input type="checkbox" id="m-draw" ${match?.is_draw?'checked':''}>Ничья</label>
-      <div style="display:flex;align-items:center;gap:8px">
-        <label style="display:inline;margin:0;color:var(--sub)">Победитель (если не авто):</label>
-        <select id="m-winner" style="width:auto">
-          <option value="">— авто по таймеру —</option>
+      <span style="flex:1;min-width:8px"></span>
+      <label class="cb-label" style="font-size:13px"><input type="checkbox" id="m-draw" ${match?.is_draw?'checked':''}>Ничья</label>
+      <div class="side">
+        <span style="${mlbl}">победитель</span>
+        <select id="m-winner" style="width:auto;padding:5px 8px;font-size:13px">
+          <option value="">авто (таймер)</option>
           <option value="${fpId}" ${match?.winner_id===fpId?'selected':''}>${fp?.nickname}</option>
           <option value="${dblId}" ${match?.winner_id===dblId?'selected':''}>${dbl?.nickname}</option>
         </select>
@@ -140,14 +143,9 @@ async function openMatch(encId,num,p1Id,p2Id){
     </div>
   </div>
 
-  <div class="card" style="margin-bottom:16px">
-    <h3 style="margin-bottom:14px">Драфт</h3>
+  <div class="card" style="padding:12px 14px">
     ${renderDraftBoard(template,fpId,dblId,fp?.nickname,dbl?.nickname,match)}
-  </div>
-
-  <button class="btn btn-y" style="font-size:15px;padding:10px 28px" onclick="saveMatch('${encId}','${num}','${p1Id}','${p2Id}','${fpId}','${mid}')">
-    Сохранить матч
-  </button>`);
+  </div>`);
 }
 
 
@@ -155,60 +153,82 @@ async function openMatch(encId,num,p1Id,p2Id){
 function sigForChar(charId){return charId?D.sigs.find(s=>s.character_id===charId)||null:null;}
 
 const DRAFT_CSS=`<style>
-.dbrd{display:grid;grid-template-columns:1fr 1fr;gap:14px}
-.dcol{min-width:0}
-.dcol-head{text-align:center;font-size:14px;font-weight:700;color:var(--accent);padding:4px 0 8px}
-.dcol-head .sub{color:var(--sub);font-weight:400;font-size:11px}
-.dsec-lbl{font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;margin:10px 0 5px;color:var(--sub)}
-.dsec-lbl.ban{color:#f87171}
-.dsec-lbl.t1{color:#60a5fa}.dsec-lbl.t2{color:#f472b6}
-.ban-row{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
-.pk-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
-.pk-card{background:#0f1320;border:1px solid var(--border);border-radius:8px;padding:5px;display:flex;flex-direction:column;gap:4px}
-.pk-card.ban{background:#160c0f;border-color:#3a2025}
-.pk-thumb{position:relative;width:100%;aspect-ratio:1;border-radius:6px;overflow:hidden;background:#1c1f2e}
-.pk-thumb img,.pk-thumb .pic{width:100%!important;height:100%!important;border-radius:6px}
-.pk-card.ban .pk-thumb img{filter:grayscale(1) brightness(.7)}
-.pk-card.ban .pk-thumb{box-shadow:inset 0 0 0 2px #ef4444}
-.pk-num{position:absolute;top:2px;left:2px;z-index:2;min-width:16px;height:16px;padding:0 3px;border-radius:4px;background:rgba(0,0,0,.72);color:#fff;font-size:10px;font-weight:700;line-height:16px;text-align:center}
-.pk-card.ban .pk-num{background:#ef4444}
-.pk-card .draft-char{width:100%;font-size:11px;padding:3px 4px}
-.pk-meta{display:flex;align-items:center;gap:4px}
-.pk-meta .draft-ms{font-size:11px;padding:2px 3px;flex:1;min-width:0}
-.pk-meta .cb-label{display:flex;align-items:center;gap:3px;font-size:10px;color:var(--sub);margin:0;cursor:pointer;white-space:nowrap}
-.pk-amp img,.pk-amp .pic{width:18px!important;height:18px!important;border-radius:4px;vertical-align:middle}
-@media(max-width:720px){.dbrd{grid-template-columns:1fr}}
+/* Драфт-борд в стиле shiyu: сетка-очередь — фп (слева, к центру) · PICKS · дабл (справа). */
+.dboard{max-width:1100px;margin:0 auto}
+.dgrid{display:grid;grid-template-columns:1fr auto 1fr;gap:18px;align-items:stretch}
+.dgcol{min-width:0}
+.dgname{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;text-transform:uppercase;font-size:20px;letter-spacing:.02em;color:var(--text);display:flex;align-items:baseline;gap:8px;margin-bottom:8px;min-width:0}
+.dgname b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dgname.dbl{justify-content:flex-end;text-align:right}
+.dgname .dtag{font-size:10px;font-style:normal;font-weight:700;letter-spacing:.1em;color:#fff;background:var(--grad);border-radius:3px;padding:1px 6px;flex-shrink:0}
+.dgcells{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;align-content:start}
+.dgmid{display:flex;align-items:center;justify-content:center;min-width:30px}
+.dgmid-lbl{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;font-size:14px;letter-spacing:.18em;color:var(--sub);white-space:nowrap;writing-mode:vertical-rl;transform:rotate(180deg)}
+
+/* универсальная ячейка драфта (бан=ч/б+рамка, пик=оверлеи минскейп/амп) */
+.dcell{display:flex;flex-direction:column;gap:4px;min-width:0}
+.dcell.empty{visibility:hidden}
+.dcell .pk-thumb{position:relative;width:100%;aspect-ratio:1;border-radius:9px;overflow:hidden;background:#11141f;border:1px solid var(--border)}
+.dcell .pk-thumb img,.dcell .pk-thumb .pic{width:100%!important;height:100%!important;border-radius:0!important;object-fit:cover;display:block}
+.pk-num{position:absolute;top:3px;left:3px;z-index:3;min-width:18px;height:18px;padding:0 4px;border-radius:5px;background:rgba(8,8,12,.8);color:#fff;font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;font-size:13px;line-height:18px;text-align:center}
+.dcell.ban .pk-thumb{border-color:#ef4444;box-shadow:inset 0 0 0 3px #ef4444}
+.dcell.ban .pk-thumb img,.dcell.ban .pk-thumb .pic{filter:grayscale(1) brightness(.62)}
+.dcell.ban .pk-num{background:#dc2626}
+
+/* движок-амплификатор: бейдж снизу-слева (чекбокс + иконка) — клик переключает sig */
+.pk-eng{position:absolute;left:3px;bottom:3px;z-index:3;display:flex;align-items:center;gap:3px;background:rgba(8,8,12,.82);border:1px solid #2a2d3a;border-radius:11px;padding:1px 5px 1px 3px;margin:0;cursor:pointer}
+.pk-eng input[type=checkbox]{width:11px;height:11px;margin:0;accent-color:var(--accent);cursor:pointer;flex-shrink:0}
+.pk-amp{display:inline-flex;align-items:center;line-height:0}
+.pk-amp img,.pk-amp .pic{width:18px!important;height:18px!important;border-radius:4px!important;object-fit:contain;background:transparent!important}
+
+/* минскейп: бейдж M0..M6 снизу-справа (нативный select без стрелки) */
+.pk-ms{position:absolute;right:3px;bottom:3px;z-index:3;appearance:none;-webkit-appearance:none;background:rgba(8,8,12,.82);border:1px solid #2a2d3a;color:#fff;border-radius:5px;font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;padding:2px 5px;width:auto;min-width:0;cursor:pointer;text-align:center;text-align-last:center}
+.pk-ms:hover,.pk-ms:focus{border-color:var(--accent)}
+
+/* селект персонажа под портретом */
+.dcell .draft-char{width:100%;font-size:11px;padding:3px 6px;border-radius:5px}
+
+@media(max-width:760px){
+  .dgrid{grid-template-columns:1fr;gap:18px}
+  .dgmid{display:none}
+  .dgname.dbl{justify-content:flex-start;text-align:left}
+}
 </style>`;
 
-// Карточка пика: портрет + №очерёдности + селект персонажа + минскейп + sig + амп.
-function pickCardHtml(slot,ex,charOpts,setSel){
+// Раскладка очереди как на сайте (4 колонки, фп зеркалит к центру).
+// Числа — это slot.n; null — пустая ячейка-распорка (чтобы последний пик
+// встал ближе к центру, как в референсе). Слоты фп/дабл из DRAFT_TEMPLATE фиксированы.
+const DRAFT_ORDER_FP =[8,5,4,1, 16,13,12,9, null,null,17,null];
+const DRAFT_ORDER_DBL=[2,3,6,7, 10,11,14,15, null,18,null,null];
+
+// Универсальная ячейка драфта. slot===null → пустая распорка.
+// Бан: портрет ч/б + красная рамка + №. Пик: + минскейп M0..M6, чекбокс sig и картинка амплификатора.
+function draftCellHtml(slot,banMap,pickMap,charOpts,setSel){
+  if(!slot)return`<div class="dcell empty"></div>`;
+  const isBan=slot.type==='ban';
+  const ex=(isBan?banMap:pickMap)[slot.n]||{};
   const ch=D.chars.find(c=>c.id===ex.character_id)||null;
-  const ms=ex.mindscape||0;
-  const sig=sigForChar(ex.character_id);
-  const ampOp=ex.has_signature?1:.35;
-  return`<div class="pk-card">
-    <div class="pk-thumb"><span class="pk-num">${slot.n}</span><span class="pk-img" data-imgslot="${slot.n}">${iconChar(ch,48)}</span></div>
-    <select class="draft-char" data-slot="${slot.n}" data-type="pick" data-pid="${slot.pid}" onchange="draftCharChanged(this)">
-      <option value="">—</option>${setSel(charOpts,ex.character_id)}</select>
-    <div class="pk-meta">
-      <select class="draft-ms" data-slot="${slot.n}">${setSel(msOpts,String(ms))}</select>
-      <label class="cb-label"><input type="checkbox" class="draft-sig" data-slot="${slot.n}" onchange="draftSigChanged(this)" ${ex.has_signature?'checked':''}>
+  let ov='';
+  if(!isBan){
+    const sig=sigForChar(ex.character_id);
+    const ampOp=ex.has_signature?1:.3;
+    ov=`<label class="pk-eng" title="Сигнатурный амплификатор">
+        <input type="checkbox" class="draft-sig" data-slot="${slot.n}" onchange="draftSigChanged(this)" ${ex.has_signature?'checked':''}>
         <span class="pk-amp" data-ampslot="${slot.n}" style="opacity:${ampOp}">${sig?sigImg(sig,18):''}</span></label>
-    </div>
-  </div>`;
-}
-
-// Карточка бана: портрет (ч/б + красная рамка) + №очерёдности + селект.
-function banCardHtml(slot,ex,charOpts,setSel){
-  const ch=D.chars.find(c=>c.id===ex.character_id)||null;
-  return`<div class="pk-card ban">
-    <div class="pk-thumb"><span class="pk-num">${slot.n}</span><span class="pk-img" data-imgslot="${slot.n}">${iconChar(ch,48)}</span></div>
-    <select class="draft-char" data-slot="${slot.n}" data-type="ban" data-pid="${slot.pid}" onchange="draftCharChanged(this)">
+      <select class="draft-ms pk-ms" data-slot="${slot.n}" title="Минскейп">${setSel(msOpts,String(ex.mindscape||0))}</select>`;
+  }
+  return`<div class="dcell ${isBan?'ban':'pick'}">
+    <div class="pk-thumb">
+      <span class="pk-img" data-imgslot="${slot.n}">${iconChar(ch,isBan?64:88)}</span>
+      <span class="pk-num">${slot.n}</span>
+      ${ov}</div>
+    <select class="draft-char" data-slot="${slot.n}" data-type="${slot.type}" data-pid="${slot.pid}" onchange="draftCharChanged(this)">
       <option value="">—</option>${setSel(charOpts,ex.character_id)}</select>
   </div>`;
 }
 
-// Двухколоночный борд в духе сайта (компактно): баны · Team 01 · Team 02 на сторону.
+// Борд в духе сайта: одна сетка-очередь, слоты в реальном порядке драфта,
+// фп слева (зеркалит к центру) · PICKS · дабл справа. Все элементы редактируемы.
 function renderDraftBoard(slots,fpId,dblId,fpName,dblName,match){
   const banMap={},pickMap={};
   (match?.bans||[]).forEach(b=>banMap[b.ban_order]=b);
@@ -217,23 +237,21 @@ function renderDraftBoard(slots,fpId,dblId,fpName,dblName,match){
   const charOpts=D.chars.map(c=>`<option value="${c.id}">${c.name}</option>`).join('');
   const setSel=(opts,val)=>val?opts.replace(`value="${val}"`,`value="${val}" selected`):opts;
 
-  const col=(pid,name,isFp)=>{
-    const bans=slots.filter(s=>s.type==='ban'&&s.pid===pid);
-    const picks=slots.filter(s=>s.type==='pick'&&s.pid===pid);
-    const t1=picks.slice(0,3),t2=picks.slice(3,6);
-    const banCells=bans.map(s=>banCardHtml(s,banMap[s.n]||{},charOpts,setSel)).join('');
-    const pk=arr=>arr.map(s=>pickCardHtml(s,pickMap[s.n]||{},charOpts,setSel)).join('');
-    return`<div class="dcol">
-      <div class="dcol-head">${name||(isFp?'ФП':'Дабл')}${isFp?' <span class="sub">(фп)</span>':''}</div>
-      <div class="dsec-lbl ban">Баны</div><div class="ban-row">${banCells}</div>
-      <div class="dsec-lbl t1">Team 01</div><div class="pk-grid">${pk(t1)}</div>
-      <div class="dsec-lbl t2">Team 02</div><div class="pk-grid">${pk(t2)}</div>
-    </div>`;
-  };
+  const byN={};slots.forEach(s=>byN[s.n]=s);
+  const cells=order=>order.map(n=>draftCellHtml(n?byN[n]:null,banMap,pickMap,charOpts,setSel)).join('');
 
-  return DRAFT_CSS+`<div class="dbrd">
-    ${col(fpId,fpName,true)}
-    ${col(dblId,dblName,false)}
+  return DRAFT_CSS+`<div class="dboard">
+    <div class="dgrid">
+      <div class="dgcol">
+        <div class="dgname"><b>${fpName||'ФП'}</b><span class="dtag">ФП</span></div>
+        <div class="dgcells">${cells(DRAFT_ORDER_FP)}</div>
+      </div>
+      <div class="dgmid"><span class="dgmid-lbl">PICKS</span></div>
+      <div class="dgcol">
+        <div class="dgname dbl"><b>${dblName||'Дабл'}</b></div>
+        <div class="dgcells">${cells(DRAFT_ORDER_DBL)}</div>
+      </div>
+    </div>
   </div>`;
 }
 

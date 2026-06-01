@@ -95,6 +95,7 @@
         <button class="btn btn-g" style="flex:1" onclick="signUp()">Регистрация</button>
       </div>
       <button class="btn btn-g" style="width:100%;margin-top:10px;font-size:13px" onclick="enableDevPreview()">Dev preview</button>
+      <button class="btn btn-g" style="width:100%;margin-top:8px;font-size:13px" onclick="devDraft()">Dev: драфт матча</button>
     </div>
   </div>
 
@@ -108,11 +109,10 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 <script>
 // cache-busting: всегда грузим свежие web/*.js (без необходимости хард-рефреша).
 // document.write сохраняет порядок и синхронность загрузки.
-['web/icons.js','web/core.js','web/characters.js','web/signatures.js','web/players.js','web/tournaments.js','web/draft-import.js','web/matches.js']
+['web/icons.js','web/core.js','web/characters.js','web/signatures.js','web/players.js','web/tournaments.js','web/matches.js']
   .forEach(function(s){document.write('<script src="'+s+'?v='+Date.now()+'"><\/script>');});
 </script>
 <script>
@@ -127,6 +127,25 @@ function enableDevPreview(){
   document.querySelectorAll('.nav-a').forEach(a=>a.classList.toggle('on',a.dataset.page==='signatures'));
   document.getElementById('page-title').textContent='Амплификаторы (Dev)';
   if(typeof pgSignatures==='function')pgSignatures();
+}
+// Dev-превью самого драфт-борда (без логина/Supabase): мокаем данные и открываем матч.
+function devDraft(){
+  window.DEV_PREVIEW=true;
+  const NAMES=['Yanagi','Lucy','Lycaon','Zhao Hua','Seed','Astra','Vivian','Miyabi','Ellen','Nicole','Soukaku','Promela','Yidhari','Aria','Hugo','Burnice','Caesar','Anby'];
+  D.chars=NAMES.map((n,i)=>({id:'c'+i,name:n,role:['atk','stun','sup','ano'][i%4],rarity:i%5===0?'A':'S'}));
+  D.sigs=D.chars.map(c=>({id:'s'+c.id,name:c.name+' Sig',character_id:c.id}));
+  D.players=[{id:'p1',nickname:'HANAMORI'},{id:'p2',nickname:'KAZUTO'}];
+  // мок-драфт: заполняем все слоты, чтобы видеть портреты/минскейпы/амплификаторы/рестарты/таймеры
+  const tpl=DRAFT_TEMPLATE('p1','p2');
+  const bans=tpl.filter(s=>s.type==='ban').map((s,i)=>({ban_order:s.n,player_id:s.pid,character_id:'c'+i}));
+  const picks=tpl.filter(s=>s.type==='pick').map((s,i)=>({pick_order:s.n,player_id:s.pid,character_id:'c'+(i+6),mindscape:[0,6,0,1][i%4],has_signature:i%2===0,team_slot:1,is_fp:s.pid==='p1'}));
+  window.DEV_MATCH={id:'dev-m',is_draw:false,winner_id:null,player1_timer_sec:208,player2_timer_sec:221,player1_restarts:2,player2_restarts:0,picks,bans};
+  document.getElementById('login-screen').style.display='none';
+  document.getElementById('admin-area').style.display='flex';
+  document.getElementById('sidebar').style.display='flex';
+  document.getElementById('user-email').textContent='dev@local';
+  document.querySelectorAll('.nav-a').forEach(a=>a.classList.toggle('on',a.dataset.page==='matches'));
+  openMatch('dev-enc',1,'p1','p2');
 }
 if(document.readyState==='loading'){
   document.addEventListener('DOMContentLoaded',()=>{
