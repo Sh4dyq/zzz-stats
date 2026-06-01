@@ -176,10 +176,10 @@ const DRAFT_CSS=`<style>
 .dcell.ban .pk-num{background:#dc2626}
 
 /* движок-амплификатор: бейдж снизу-слева (чекбокс + иконка) — клик переключает sig */
-.pk-eng{position:absolute;left:3px;bottom:3px;z-index:3;display:flex;align-items:center;gap:2px;background:rgba(8,8,12,.82);border:1px solid #2a2d3a;border-radius:8px;padding:0px 3px;margin:0;cursor:pointer}
-.pk-eng input[type=checkbox]{width:9px;height:9px;margin:0;accent-color:var(--accent);cursor:pointer;flex-shrink:0}
+.pk-eng{position:absolute;left:3px;bottom:3px;z-index:3;display:flex;align-items:center;gap:3px;background:rgba(8,8,12,.82);border:1px solid #2a2d3a;border-radius:11px;padding:1px 5px 1px 3px;margin:0;cursor:pointer}
+.pk-eng input[type=checkbox]{width:11px;height:11px;margin:0;accent-color:var(--accent);cursor:pointer;flex-shrink:0}
 .pk-amp{display:inline-flex;align-items:center;line-height:0}
-.pk-amp img,.pk-amp .pic{width:14px!important;height:14px!important;border-radius:3px!important;object-fit:contain;background:transparent!important}
+.pk-amp img,.pk-amp .pic{width:18px!important;height:18px!important;border-radius:4px!important;object-fit:contain;background:transparent!important}
 
 /* минскейп: бейдж M0..M6 снизу-справа (нативный select без стрелки) */
 .pk-ms{position:absolute;right:3px;bottom:3px;z-index:3;appearance:none;-webkit-appearance:none;background:rgba(8,8,12,.82);border:1px solid #2a2d3a;color:#fff;border-radius:5px;font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;padding:2px 5px;width:auto;min-width:0;cursor:pointer;text-align:center;text-align-last:center}
@@ -214,7 +214,7 @@ function draftCellHtml(slot,banMap,pickMap,charOpts,setSel){
     const ampOp=ex.has_signature?1:.3;
     ov=`<label class="pk-eng" title="Сигнатурный амплификатор">
         <input type="checkbox" class="draft-sig" data-slot="${slot.n}" onchange="draftSigChanged(this)" ${ex.has_signature?'checked':''}>
-        <span class="pk-amp" data-ampslot="${slot.n}" style="opacity:${ampOp}">${sig?sigImg(sig,18):''}</span></label>
+        <span class="pk-amp" data-ampslot="${slot.n}" style="opacity:${ampOp}">${sig?sigImg(sig,12):''}</span></label>
       <select class="draft-ms pk-ms" data-slot="${slot.n}" title="Минскейп">${setSel(msOpts,String(ex.mindscape||0))}</select>`;
   }
   return`<div class="dcell ${isBan?'ban':'pick'}">
@@ -263,7 +263,7 @@ function draftCharChanged(el){
   const img=document.querySelector(`.pk-img[data-imgslot="${slot}"]`);
   if(img)img.innerHTML=iconChar(char,48);
   const amp=document.querySelector(`.pk-amp[data-ampslot="${slot}"]`);
-  if(amp){const sig=sigForChar(el.value);amp.innerHTML=sig?sigImg(sig,18):'';}
+  if(amp){const sig=sigForChar(el.value);amp.innerHTML=sig?sigImg(sig,12):'';}
 }
 
 function draftSigChanged(cb){
