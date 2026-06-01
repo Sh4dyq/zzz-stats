@@ -113,6 +113,7 @@
   .seasons{display:flex;gap:10px;flex-wrap:wrap}
   .sbtn{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;
     font-size:15px;letter-spacing:.03em;line-height:1.05;padding:13px 24px;cursor:pointer;border:none;
+    text-decoration:none;text-align:left;display:inline-block;
     background:var(--panel-2);color:var(--sub);transition:.15s;clip-path:polygon(10px 0,100% 0,100% 100%,0 100%,0 10px)}
   .sbtn small{display:block;font-size:11px;font-weight:700;margin-top:1px;opacity:.7}
   .sbtn:hover{color:var(--text);background:var(--panel-3)}
@@ -426,10 +427,10 @@
     <p class="lede">Аналитика турниров <b>Nexus Shiyu</b> по Zenless Zone Zero — рейтинги игроков, пики и баны агентов, история матчей и разбор драфтов.</p>
 
     <div class="seasons" id="seasons">
-      <button class="sbtn on" data-tour="Qualifiers II">Qualifiers<small>II · текущий</small></button>
-      <button class="sbtn" data-tour="Proxy Rush 6">Proxy Rush<small>6th</small></button>
-      <button class="sbtn" data-tour="Qualifiers I">Qualifiers<small>I</small></button>
-      <button class="sbtn" id="all-tournaments" data-tour="">Все<small>турниры</small></button>
+      <a class="sbtn on" href="index.html?t=Qualifiers%20II" data-tour="Qualifiers II">Qualifiers<small>II · текущий</small></a>
+      <a class="sbtn" href="index.html?t=Proxy%20Rush%206" data-tour="Proxy Rush 6">Proxy Rush<small>6th</small></a>
+      <a class="sbtn" href="index.html?t=Qualifiers%20I" data-tour="Qualifiers I">Qualifiers<small>I</small></a>
+      <a class="sbtn" id="all-tournaments" href="index.html" data-tour="">Все<small>турниры</small></a>
     </div>
   </section>
 
@@ -658,14 +659,8 @@
   }
   document.querySelectorAll('.num').forEach(n=>setTimeout(()=>animateNum(n),600));
 
-  // season selector — каждая кнопка ведёт на index с выбранным турниром (?t=)
-  // «Все турниры» → index без параметра (общая статистика по умолчанию)
-  document.querySelectorAll('#seasons .sbtn').forEach(b=>{
-    b.addEventListener('click',()=>{
-      const t=(b.dataset.tour||'').trim();
-      window.location.href = t ? ('index.html?t='+encodeURIComponent(t)) : 'index.html';
-    });
-  });
+  // season selector — каждая кнопка теперь обычная ссылка <a href="index.html?t=…">,
+  // навигацию выполняет браузер (так превью корректно сохраняет свой токен).
 
   // live-статус Twitch: переключает Live ⇄ Offline (публичный CORS-эндпоинт decapi.me)
   (function(){
