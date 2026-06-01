@@ -109,10 +109,11 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 <script>
 // cache-busting: всегда грузим свежие web/*.js (без необходимости хард-рефреша).
 // document.write сохраняет порядок и синхронность загрузки.
-['web/icons.js','web/core.js','web/characters.js','web/signatures.js','web/players.js','web/tournaments.js','web/matches.js']
+['web/icons.js','web/core.js','web/characters.js','web/signatures.js','web/players.js','web/tournaments.js','web/draft-import.js','web/matches.js']
   .forEach(function(s){document.write('<script src="'+s+'?v='+Date.now()+'"><\/script>');});
 </script>
 <script>
