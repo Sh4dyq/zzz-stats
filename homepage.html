@@ -1,0 +1,703 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Nexus Shiyu — Статистика турниров</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Saira+Condensed:ital,wght@0,600;0,700;0,800;0,900;1,700;1,800;1,900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="image-slot.js"></script>
+<style>
+  :root{
+    --bg:#0b0b0d;--card:#161618;--panel-2:#1c1c20;--panel-3:#242429;
+    --border:#26262c;--line:rgba(255,255,255,.07);
+    --red:#ff1f44;--pink:#ec1862;--grad:linear-gradient(95deg,#ff1f44,#ec1862);
+    --gold:#f5c842;--gold-grad:linear-gradient(180deg,#f8d36a,#d99a16);
+    --lime:#c4f500;--purple:#a970ff;
+    --text:#f3f3f5;--sub:#8a8a93;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{min-height:100%}
+  body{background:var(--bg);color:var(--text);font-family:'Rajdhani',sans-serif;overflow-x:hidden}
+  ::-webkit-scrollbar{width:6px;height:6px}
+  ::-webkit-scrollbar-track{background:var(--card)}
+  ::-webkit-scrollbar-thumb{background:#34343b;border-radius:3px}
+  ::-webkit-scrollbar-thumb:hover{background:var(--red)}
+  a{text-decoration:none;color:inherit}
+  .disp{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;text-transform:uppercase;letter-spacing:.01em}
+  section{position:relative}
+
+  /* faceted brand background */
+  .facets{position:fixed;inset:0;z-index:0;pointer-events:none}
+  .glow{position:fixed;z-index:0;pointer-events:none;border-radius:50%;filter:blur(120px)}
+  .glow.a{top:-160px;left:-120px;width:560px;height:560px;background:radial-gradient(circle,rgba(255,31,68,.22),transparent 70%)}
+  .glow.b{top:120px;right:-160px;width:520px;height:520px;background:radial-gradient(circle,rgba(236,24,98,.16),transparent 70%)}
+  .topstripe{height:4px;background:var(--grad);position:sticky;top:0;z-index:50}
+  .wrap{position:relative;z-index:1}
+  .cont{max-width:1280px;margin:0 auto;padding-left:40px;padding-right:40px}
+
+  /* header */
+  .hdr{display:flex;align-items:center;justify-content:space-between;gap:24px;
+    padding:14px 40px;border-bottom:1px solid var(--border);
+    background:rgba(11,11,13,.72);backdrop-filter:blur(12px);position:sticky;top:4px;z-index:40}
+  .brand{display:flex;align-items:center;gap:13px}
+  .brand .mk{height:40px;width:auto;display:block}
+  .brand .div{width:1px;height:26px;background:var(--border)}
+  .brand .wm{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;
+    font-size:25px;letter-spacing:.02em;text-transform:uppercase;display:inline-block;padding-right:.12em;white-space:nowrap}
+  .brand .wm .wm-n{color:#fff}
+  .brand .wm .wm-s{color:var(--red)}
+
+  .nav{display:flex;align-items:center;gap:4px;margin-left:14px}
+  .nav a{position:relative;font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;
+    text-transform:uppercase;font-size:18px;letter-spacing:.02em;color:var(--sub);padding:8px 16px;transition:.15s}
+  .nav a:hover{color:var(--text)}
+  .nav a.active{color:#fff}
+  .nav a.active::after{content:"";position:absolute;left:16px;right:16px;bottom:-2px;height:3px;border-radius:3px;background:var(--grad)}
+
+  .hdr-right{display:flex;align-items:center;gap:14px}
+  /* combined LIVE + Twitch pill */
+  .livetw{display:flex;align-items:center;gap:10px;padding:9px 16px;border-radius:10px;
+    background:rgba(145,70,255,.12);border:1px solid rgba(145,70,255,.4);
+    font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;
+    font-size:15px;letter-spacing:.04em;color:#fff;transition:.15s}
+  .livetw:hover{background:rgba(145,70,255,.22)}
+  .livetw .dot{width:9px;height:9px;border-radius:50%;background:var(--red);flex-shrink:0;
+    box-shadow:0 0 0 0 rgba(255,31,68,.6);animation:pulse 1.8s infinite}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(255,31,68,.5)}70%{box-shadow:0 0 0 7px rgba(255,31,68,0)}100%{box-shadow:0 0 0 0 rgba(255,31,68,0)}}
+  .livetw .lv{color:#fff}
+  .livetw .vbar{width:1px;height:18px;background:rgba(255,255,255,.18)}
+  .livetw svg{width:17px;height:17px;fill:var(--purple)}
+  .livetw .tw{color:var(--purple)}
+  .livetw:hover .tw{color:#c4a6ff}
+  .livetw.offline .dot{background:#5e5e66;box-shadow:none;animation:none}
+  .livetw.offline .lv{color:var(--sub)}
+
+  /* hero top row: kicker + sponsor */
+  .hero-top{display:flex;align-items:flex-end;justify-content:space-between;gap:24px;flex-wrap:wrap;margin-bottom:30px}
+  .kicker{display:flex;align-items:center;gap:13px;font-family:'Saira Condensed',sans-serif;font-style:italic;
+    font-weight:800;text-transform:uppercase;font-size:16px;letter-spacing:.05em}
+  .kicker .kdot{width:9px;height:9px;border-radius:50%;background:var(--red);flex-shrink:0;
+    box-shadow:0 0 0 0 rgba(255,31,68,.6);animation:pulse 1.8s infinite}
+  .kicker .kbrand{color:#fff}
+  .kicker .ksep{width:16px;height:3px;background:var(--grad);transform:skewX(-24deg);border-radius:1px}
+  .kicker .kmuted{color:var(--sub)}
+  .sponsor{display:flex;flex-direction:column;gap:7px;align-items:flex-end;text-align:right;
+    background:var(--card);border:1px solid var(--border);border-radius:12px;padding:11px 18px}
+  .sponsor .sp-top{display:flex;align-items:center;gap:14px}
+  .sponsor .slabel{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;
+    font-size:11px;letter-spacing:.08em;color:var(--sub)}
+  .sponsor .hblogo{height:24px;width:auto;display:block;mix-blend-mode:lighten}
+  .sponsor .sslogan{font-size:13px;font-weight:600;font-style:italic;color:var(--text)}
+
+  /* hero */
+  .hero{padding:30px 40px 30px;max-width:1280px;margin:0 auto;position:relative}
+  .hero-art{position:absolute;top:0;right:0;width:46%;max-width:620px;height:100%;z-index:-1;
+    -webkit-mask-image:linear-gradient(90deg,transparent,#000 46%);mask-image:linear-gradient(90deg,transparent,#000 46%)}
+  .hero-art image-slot{width:100%;height:100%;--slot-bg:transparent}
+  .hero>*{position:relative}
+  .tags{display:flex;gap:10px;margin-bottom:24px}
+  .tag{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;
+    font-size:14px;letter-spacing:.04em;padding:8px 18px;line-height:1.05;
+    clip-path:polygon(0 0,100% 0,calc(100% - 12px) 100%,0 100%)}
+  .tag.brand{background:var(--grad);color:#fff;padding-right:26px}
+  .tag.season{background:var(--panel-2);border:1px solid var(--border);color:var(--sub);padding-right:26px}
+  .tag small{display:block;font-size:11px;opacity:.85;font-weight:700}
+
+  h1.title{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;text-transform:uppercase;
+    line-height:.84;letter-spacing:.005em;font-size:clamp(58px,10vw,140px);margin-bottom:26px}
+  h1.title .l1{display:block;color:#fff}
+  h1.title .l2{display:block;background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent;padding-right:.08em;width:fit-content}
+  .lede{max-width:620px;font-size:19px;font-weight:500;line-height:1.5;color:var(--sub);margin-bottom:36px}
+  .lede b{color:var(--text);font-weight:600}
+
+  .seasons{display:flex;gap:10px;flex-wrap:wrap}
+  .sbtn{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;
+    font-size:15px;letter-spacing:.03em;line-height:1.05;padding:13px 24px;cursor:pointer;border:none;
+    background:var(--panel-2);color:var(--sub);transition:.15s;clip-path:polygon(10px 0,100% 0,100% 100%,0 100%,0 10px)}
+  .sbtn small{display:block;font-size:11px;font-weight:700;margin-top:1px;opacity:.7}
+  .sbtn:hover{color:var(--text);background:var(--panel-3)}
+  .sbtn.on{background:var(--grad);color:#fff}
+  .sbtn.on small{opacity:.9}
+
+  /* section heading */
+  .sec-head{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:22px}
+  .sec-head h2{position:relative;padding-left:24px;font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;text-transform:uppercase;
+    font-size:clamp(36px,5vw,60px);line-height:.9;color:#fff}
+  .sec-head h2::before{content:"";position:absolute;left:0;top:9%;bottom:9%;width:8px;background:var(--grad);
+    clip-path:polygon(40% 0,100% 0,60% 100%,0 100%)}
+  .sec-head h2 em{font-style:italic;background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent;padding-right:.1em}
+  .sec-head .link{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;
+    font-size:15px;letter-spacing:.03em;color:var(--sub);transition:.15s;white-space:nowrap}
+  .sec-head .link:hover{color:var(--red)}
+
+  /* featured tournament banner */
+  .featured{max-width:1280px;margin:0 auto 64px;padding:0 40px}
+  .fcard{display:grid;grid-template-columns:minmax(0,1fr) 1.05fr;background:var(--card);
+    border:1px solid var(--border);border-radius:20px;overflow:hidden}
+  .fart{position:relative;min-height:340px;
+    background:repeating-linear-gradient(135deg,#1b1b1f 0 12px,#161619 12px 24px)}
+  .fart image-slot{position:absolute;inset:0;width:100%;height:100%}
+  .fart .ph{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+    font-family:'JetBrains Mono',monospace;font-size:12px;letter-spacing:.1em;color:#4a4a52;text-transform:uppercase}
+  .fart::after{content:"";position:absolute;top:0;right:0;bottom:0;width:90px;background:linear-gradient(90deg,transparent,var(--card));pointer-events:none;z-index:2}
+  .ribbon{position:absolute;top:18px;left:18px;display:inline-flex;align-items:center;gap:8px;
+    background:var(--grad);color:#fff;font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;
+    text-transform:uppercase;font-size:13px;letter-spacing:.05em;padding:7px 16px;
+    clip-path:polygon(10px 0,100% 0,100% 100%,0 100%,0 10px)}
+  .ribbon .pin{width:7px;height:7px;border-radius:50%;background:#fff;animation:pulse2 1.6s infinite}
+  @keyframes pulse2{50%{opacity:.35}}
+  .finfo{padding:38px 44px;display:flex;flex-direction:column;justify-content:center;gap:18px}
+  .finfo .kick{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;
+    font-size:14px;letter-spacing:.08em;color:var(--red)}
+  .finfo h3{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;text-transform:uppercase;
+    line-height:.86;font-size:clamp(44px,5vw,74px)}
+  .finfo h3 .l2{background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent;padding-right:.08em;display:inline-block}
+  .fmeta{display:flex;gap:30px;flex-wrap:wrap;border-top:1px solid var(--border);padding-top:18px}
+  .fmeta .k{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;
+    font-size:11px;letter-spacing:.07em;color:var(--sub);margin-bottom:3px}
+  .fmeta .v{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;text-transform:uppercase;font-size:21px;color:#fff}
+  .fbottom{display:flex;align-items:center;justify-content:space-between;gap:18px;flex-wrap:wrap}
+  .fprize .k{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;
+    font-size:12px;letter-spacing:.07em;color:var(--sub)}
+  .fprize .v{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;font-size:46px;line-height:.9;
+    background:var(--gold-grad);-webkit-background-clip:text;background-clip:text;color:transparent;padding-right:.14em}
+  .fcta{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;
+    font-size:18px;letter-spacing:.03em;color:#fff;background:var(--grad);padding:15px 34px;
+    clip-path:polygon(12px 0,100% 0,100% 100%,0 100%,0 12px);transition:.15s}
+  .fcta:hover{filter:brightness(1.12)}
+
+  /* stat cards */
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:64px}
+  .stat{position:relative;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:22px 24px;overflow:hidden}
+  .stat::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--grad);opacity:.85}
+  .stat .lbl{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;
+    font-size:13px;letter-spacing:.05em;color:var(--sub);margin-bottom:8px}
+  .stat .num{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;font-size:54px;line-height:.92;color:#fff}
+  .stat .num u{text-decoration:none;font-size:26px;color:var(--sub);margin-left:2px}
+  .stat .sub{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--sub);margin-top:8px;font-weight:500}
+  .stat .sub.up{color:#46d369}
+
+  /* leaderboard */
+  .board{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:64px}
+  .row{display:flex;align-items:center;gap:18px;background:var(--card);border:1px solid var(--border);
+    border-radius:12px;padding:16px 20px;transition:.15s}
+  .row:hover{border-color:#3a3a42;transform:translateX(3px)}
+  .rk{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;font-size:34px;
+    min-width:54px;text-align:center;color:var(--panel-3);line-height:1}
+  .row.g1 .rk{color:var(--gold)}
+  .row.g2 .rk{color:#cdd2da}
+  .row.g3 .rk{color:#e08b53}
+  .av{width:50px;height:50px;border-radius:10px;flex-shrink:0;background:var(--panel-3);
+    display:flex;align-items:center;justify-content:center;
+    font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;font-size:22px;color:var(--sub)}
+  .row.g1 .av{background:var(--gold-grad);color:#231703}
+  .row.g2 .av{background:linear-gradient(160deg,#eef1f6,#aeb4c0);color:#1a1c22}
+  .row.g3 .av{background:linear-gradient(160deg,#f0a06b,#c46a32);color:#231201}
+  .pl{flex:1;min-width:0}
+  .pl .nm{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;font-size:20px;color:#fff;line-height:1}
+  .pl .meta{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--sub);margin-top:4px}
+  .prize{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;font-size:22px;
+    background:var(--gold-grad);-webkit-background-clip:text;background-clip:text;color:transparent;white-space:nowrap;
+    padding-right:.18em;flex-shrink:0}
+  .row:not(.g1):not(.g2):not(.g3) .prize{background:none;color:var(--text)}
+  .wl{display:flex;gap:6px;font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:600}
+  .wl .w{color:#46d369}.wl .l{color:#ff6b7d}
+
+  /* podium (top-3, в духе постеров WINNERS) */
+  .podium{display:grid;grid-template-columns:1fr 1.12fr 1fr;gap:16px;align-items:end;margin-bottom:16px}
+  .pod{position:relative;background:var(--card);border:1px solid var(--border);border-radius:16px;
+    padding:46px 22px 22px;display:flex;flex-direction:column;align-items:center;text-align:center;overflow:hidden}
+  .pod::before{content:"";position:absolute;left:0;right:0;top:0;height:4px}
+  .pod.p1{padding-top:58px}
+  .pod.p1::before{background:var(--gold-grad)}
+  .pod.p2::before{background:linear-gradient(90deg,#eef1f6,#aeb4c0)}
+  .pod.p3::before{background:linear-gradient(90deg,#f0a06b,#c46a32)}
+  .pod .place{position:absolute;top:8px;right:14px;font-family:'Saira Condensed',sans-serif;font-style:italic;
+    font-weight:900;font-size:74px;line-height:.8;color:#fff;opacity:.07}
+  .pod-av{width:104px;height:104px;border-radius:16px;overflow:hidden;margin-bottom:14px;
+    border:2px solid var(--border);background:var(--panel-3)}
+  .pod.p1 .pod-av{width:120px;height:120px;border-color:var(--gold)}
+  .pod.p2 .pod-av{border-color:#cdd2da}
+  .pod.p3 .pod-av{border-color:#e08b53}
+  .pod-av image-slot{width:100%;height:100%;display:block}
+  .medal{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;text-transform:uppercase;
+    font-size:14px;letter-spacing:.05em;padding:5px 22px 5px 16px;margin-bottom:12px;color:#1a1410;white-space:nowrap;
+    clip-path:polygon(9px 0,100% 0,calc(100% - 9px) 100%,0 100%)}
+  .pod.p1 .medal{background:var(--gold-grad)}
+  .pod.p2 .medal{background:linear-gradient(90deg,#eef1f6,#aeb4c0)}
+  .pod.p3 .medal{background:linear-gradient(90deg,#f0a06b,#c46a32)}
+  .pod .nm{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;text-transform:uppercase;
+    font-size:clamp(22px,2.4vw,30px);line-height:.95;color:#fff;margin-bottom:5px}
+  .pod .meta{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--sub);margin-bottom:12px;letter-spacing:.03em}
+  .pod .pwl{display:flex;gap:8px;font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:600;margin-bottom:14px}
+  .pod .pwl .w{color:#46d369}.pod .pwl .l{color:#ff6b7d}
+  .pod .pprize{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;font-size:34px;line-height:1;
+    background:var(--gold-grad);-webkit-background-clip:text;background-clip:text;color:transparent;padding-right:.16em}
+  .pod .stage{margin-top:12px;font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;
+    text-transform:uppercase;font-size:12px;letter-spacing:.06em;color:var(--lime);
+    border:1px solid rgba(196,245,0,.4);background:rgba(196,245,0,.08);padding:6px 14px;border-radius:7px}
+  @media (max-width:680px){.podium{grid-template-columns:1fr}.pod.p1{padding-top:46px}.pod.p1 .pod-av{width:104px;height:104px}}
+
+  /* sections breakdown (реальные разделы приложения) */
+  .modes{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:64px}
+  .mode{position:relative;display:flex;flex-direction:column;background:var(--card);border:1px solid var(--border);
+    border-radius:14px;padding:24px 24px 22px;overflow:hidden;text-decoration:none;color:inherit;transition:.16s}
+  .mode::before{content:"";position:absolute;left:0;top:0;right:0;height:3px;background:var(--grad);
+    transform:scaleX(0);transform-origin:left;transition:.25s}
+  .mode:hover{border-color:#3a3a42;transform:translateY(-3px)}
+  .mode:hover::before{transform:scaleX(1)}
+  .mode .mhd{display:flex;align-items:center;gap:14px;margin-bottom:16px}
+  .mico{width:46px;height:46px;flex-shrink:0;display:flex;align-items:center;justify-content:center;
+    background:var(--panel-2);border:1px solid var(--border);border-radius:11px;color:var(--red)}
+  .mico svg{width:24px;height:24px;stroke:currentColor;stroke-width:2;fill:none}
+  .mode .mt{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;text-transform:uppercase;
+    font-size:30px;line-height:.9;color:#fff}
+  .mode .mt small{display:block;font-family:'JetBrains Mono',monospace;font-style:normal;font-weight:500;
+    font-size:11px;letter-spacing:.08em;color:var(--sub);margin-top:5px}
+  .mode p{font-size:15px;font-weight:500;line-height:1.45;color:var(--sub);margin-bottom:18px}
+  .chips{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:20px}
+  .chip{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;
+    font-size:12px;letter-spacing:.03em;color:var(--text);background:var(--panel-2);border:1px solid var(--border);
+    padding:6px 11px;clip-path:polygon(7px 0,100% 0,100% 100%,0 100%,0 7px)}
+  .mopen{margin-top:auto;display:flex;align-items:center;justify-content:space-between;
+    padding-top:16px;border-top:1px solid var(--line)}
+  .mopen .go{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;
+    font-size:15px;letter-spacing:.03em;color:#fff}
+  .mopen .arr{color:var(--red);font-size:20px;transition:.16s}
+  .mode:hover .mopen .arr{transform:translateX(4px)}
+
+  /* recent matches */
+  .matches{margin-bottom:72px}
+  .mgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+  .match{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px 18px;display:flex;flex-direction:column;gap:14px}
+  .mtop{display:flex;align-items:center;justify-content:space-between;
+    font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--sub);letter-spacing:.04em}
+  .mtop .rnd{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;
+    font-size:13px;letter-spacing:.03em;color:var(--text)}
+  .mbody{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:12px}
+  .mn{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;
+    font-size:18px;color:var(--sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+  .mn.r{text-align:right}
+  .mn.win{color:#fff}
+  .sc{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;font-size:16px;color:#fff;
+    background:var(--grad);border-radius:8px;padding:8px 14px;white-space:nowrap}
+
+  /* stream online band (в духе постеров «STREAM ONLINE!») */
+  .stream{max-width:1280px;margin:0 auto 84px;padding:0 40px}
+  .sband{position:relative;display:flex;align-items:center;gap:30px;flex-wrap:wrap;
+    background:linear-gradient(100deg,#15151a 0%,#1d1320 60%,#1a1020 100%);
+    border:1px solid var(--border);border-radius:20px;padding:36px 44px;overflow:hidden;transition:.18s}
+  .sband:hover{border-color:rgba(145,70,255,.5)}
+  .sband::after{content:"";position:absolute;right:-60px;top:-40px;width:300px;height:300px;border-radius:50%;
+    background:radial-gradient(circle,rgba(145,70,255,.18),transparent 70%);pointer-events:none}
+  .ldot{width:60px;height:60px;border-radius:50%;background:var(--red);flex-shrink:0;position:relative;
+    box-shadow:0 0 0 0 rgba(255,31,68,.5);animation:pulse3 1.8s infinite}
+  @keyframes pulse3{0%{box-shadow:0 0 0 0 rgba(255,31,68,.45)}70%{box-shadow:0 0 0 20px rgba(255,31,68,0)}100%{box-shadow:0 0 0 0 rgba(255,31,68,0)}}
+  .stxt{flex:1;min-width:230px}
+  .stxt h3{font-family:'Saira Condensed',sans-serif;font-style:italic;
+    font-weight:900;text-transform:uppercase;font-size:clamp(30px,4vw,52px);line-height:1;color:#fff;white-space:nowrap}
+  .stxt h3 span{background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent;padding-right:.08em}
+  .stxt p{font-size:16px;font-weight:500;color:var(--sub);margin-top:14px}
+  .stxt p em{font-style:normal;color:var(--purple);font-weight:600}
+  .slink{display:inline-flex;align-items:center;gap:11px;flex-shrink:0;
+    background:rgba(145,70,255,.14);border:1px solid rgba(145,70,255,.45);border-radius:12px;padding:16px 22px;
+    font-family:'JetBrains Mono',monospace;font-size:16px;font-weight:600;color:#fff;transition:.16s}
+  .sband:hover .slink{background:rgba(145,70,255,.24)}
+  .slink svg{width:22px;height:22px;fill:var(--purple)}
+  .slink b{color:var(--red);font-weight:700}
+
+  /* footer */
+  footer{border-top:1px solid var(--border);background:#08080a;position:relative;z-index:1}
+  .foot{max-width:1280px;margin:0 auto;padding:38px 40px 22px;display:flex;flex-direction:column;align-items:center;gap:22px;text-align:center}
+  .lockup{display:inline-flex;align-items:center;gap:22px;background:#121215;padding:14px 28px;
+    clip-path:polygon(16px 0,100% 0,100% calc(100% - 16px),calc(100% - 16px) 100%,0 100%,0 16px)}
+  .lockup .mk{height:42px;width:auto;display:block}
+  .lockup .hbmk{height:26px;width:auto;display:block;mix-blend-mode:lighten}
+  .lockup .spark{width:20px;height:20px;fill:#fff;flex-shrink:0;opacity:.9}
+  .partners .hb{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;text-transform:uppercase;
+    font-size:24px;letter-spacing:.01em;color:var(--lime)}
+  .fnav{display:flex;gap:6px;flex-wrap:wrap;justify-content:center}
+  .fnav a{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;
+    font-size:15px;letter-spacing:.03em;color:var(--sub);padding:6px 12px;transition:.15s}
+  .fnav a:hover{color:#fff}
+  .fcopy{max-width:1280px;margin:0 auto;padding:16px 40px 30px;border-top:1px solid var(--border);
+    font-family:'JetBrains Mono',monospace;font-size:11px;color:#5e5e66;letter-spacing:.03em;text-align:center}
+
+  @media (max-width:980px){
+    .stats{grid-template-columns:repeat(2,1fr)}
+    .board{grid-template-columns:1fr}
+    .modes{grid-template-columns:1fr}
+    .mgrid{grid-template-columns:1fr}
+    .fcard{grid-template-columns:1fr}
+    .fart{min-height:200px}.fart::after{display:none}
+    .nav{display:none}
+  }
+  @media (max-width:560px){
+    .hdr{padding:12px 18px}.hero{padding:40px 18px 24px}
+    .cont,.featured,.foot,.fcopy{padding-left:18px;padding-right:18px}
+    .stats{grid-template-columns:1fr 1fr;gap:10px}
+    .stat .num{font-size:40px}
+    .live .t{display:none}
+    .finfo{padding:26px 22px}
+  }
+</style>
+</head>
+<body>
+
+<!-- faceted brand background -->
+<svg class="facets" preserveAspectRatio="xMidYMid slice" viewBox="0 0 1440 900">
+  <defs>
+    <pattern id="poly" width="240" height="210" patternUnits="userSpaceOnUse">
+      <rect width="240" height="210" fill="#0b0b0d"/>
+      <polygon points="0,0 130,55 0,120" fill="#0e0e11"/>
+      <polygon points="130,55 240,0 240,110 150,140" fill="#0d0d10"/>
+      <polygon points="0,120 150,140 70,210 0,210" fill="#101014"/>
+      <polygon points="150,140 240,110 240,210 130,210" fill="#0c0c0f"/>
+      <polygon points="70,210 130,210 150,140" fill="#0f0f13"/>
+    </pattern>
+  </defs>
+  <rect width="1440" height="900" fill="url(#poly)"/>
+</svg>
+<div class="glow a"></div>
+<div class="glow b"></div>
+
+<div class="topstripe"></div>
+
+<div class="wrap">
+  <!-- Header -->
+  <header class="hdr" data-screen-label="Header">
+    <div style="display:flex;align-items:center;gap:6px">
+      <div class="brand">
+        <img class="mk" src="nexus-logo.png" alt="NEXUS">
+        <span class="div"></span>
+        <span class="wm"><span class="wm-n">Nexus</span> <span class="wm-s">Stats</span></span>
+      </div>
+      <nav class="nav">
+        <a href="#" class="active">Главная</a>
+        <a href="index.html#chars">Персонажи</a>
+        <a href="index.html#players">Игроки</a>
+        <a href="index.html#ext">Расширенная</a>
+      </nav>
+    </div>
+    <div class="hdr-right">
+      <a href="https://twitch.tv/Nexus_Shiyu" target="_blank" class="livetw">
+        <svg viewBox="0 0 24 24"><path d="M4 2 2 6v14h5v3l3-3h4l6-6V2H4zm16 11-3 3h-4l-3 3v-3H6V4h14v9z"/><path d="M15 7h2v5h-2zM10 7h2v5h-2z"/></svg>
+        <span class="tw">Twitch</span>
+        <span class="vbar"></span>
+        <span class="lv">Live</span>
+        <span class="dot"></span>
+      </a>
+    </div>
+  </header>
+
+  <!-- Hero -->
+  <section class="hero" data-screen-label="Hero">
+    <div class="hero-art">
+      <image-slot id="hero-art" shape="rect" fit="cover" placeholder="Перетащите арт персонажа ZZZ"></image-slot>
+    </div>
+    <div class="hero-top">
+      <div class="kicker">
+        <span class="kdot"></span>
+        <span class="kbrand">Nexus Shiyu</span>
+        <span class="ksep"></span>
+        <span class="kmuted">Qualifiers II</span>
+      </div>
+      <div class="sponsor" data-screen-label="Sponsor" style="gap: 4px; padding: 11px 18px">
+        <div class="sp-top">
+          <span class="slabel" style="font-size: 14px; color: rgb(186, 255, 0); letter-spacing: 1px; height: 22px; margin: 2px 0px 0px; font-family: &quot;Saira Condensed&quot;">Генеральный спонсор</span>
+          <a href="https://hornybox.ru/?r=Nexus_Shiyu" target="_blank" rel="noopener noreferrer">
+            <img class="hblogo" src="hornybox-logo.png" alt="HornyBox">
+          </a>
+        </div>
+        <div class="sslogan">«Экономишь — значит зарабатываешь»</div>
+      </div>
+    </div>
+
+    <h1 class="title">
+      <span class="l1">Статистика</span>
+      <span class="l2">Турниров</span>
+    </h1>
+
+    <p class="lede">Аналитика турниров <b>Nexus Shiyu</b> по Zenless Zone Zero — рейтинги игроков, пики и баны агентов, история матчей и разбор драфтов.</p>
+
+    <div class="seasons" id="seasons">
+      <button class="sbtn on">Qualifiers<small>II · текущий</small></button>
+      <button class="sbtn">Proxy Rush<small>6th</small></button>
+      <button class="sbtn">Qualifiers<small>I</small></button>
+      <button class="sbtn" id="all-tournaments">Все<small>турниры</small></button>
+    </div>
+  </section>
+
+  <!-- Featured tournament -->
+  <section class="featured" data-screen-label="Featured tournament">
+    <div class="fcard">
+      <div class="fart" style="height: 405px; width: 405px">
+        <a href="https://t.me/nexus_shiyu/1087" target="_blank" rel="noopener noreferrer" style="display:block;width:100%;height:100%">
+          <img id="feat-art-img" src="nspr6-announce.jpg" alt="Key art турнира" style="height:405px;width:405px;display:block;object-fit:cover;padding:0;margin:0" onerror="this.onerror=null;this.src='nexus-logo.png';this.style.objectFit='contain';">
+        </a>
+        <span class="ribbon" style="padding: 7px 16px; margin-top: 6px"><span class="pin"></span> Upcoming</span>
+      </div>
+      <div class="finfo" style="height: 405px">
+        <div class="kick" style="text-align: left; font-weight: 800">ДАТА ПРОВЕДЕНИЯ: 02-03 МАЯ</div>
+        <h3 style="margin: 0px 150px 0px 0px">Nexus Shiyu:<br><span class="l2" style="width: 470px">Proxy Rush 6th</span></h3>
+        <div class="fmeta" style="width: 470px">
+          <div><div class="k">Формат</div><div class="v">DE</div></div>
+          <div><div class="k">Сетка</div><div class="v"><a href="https://challonge.com/ru/NSPR6" target="_blank" rel="noopener noreferrer">CHALLONGE/NSPR6</a></div></div>
+          <div><div class="k">Стрим</div><div class="v"><a href="https://twitch.tv/Nexus_Shiyu" target="_blank" rel="noopener noreferrer">TWITCH.TV/NEXUS_SHIYU</a></div></div>
+        </div>
+        <div class="fbottom">
+          <div class="fprize"><div class="k">Prize Pool</div><div class="v">5 000 ₽</div></div>
+          <a href="https://t.me/nexus_shiyu/1087" class="fcta" style="margin: 0px 135px 0px 0px">Подробнее</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Stats + leaderboard -->
+  <section class="cont" data-screen-label="Stats &amp; leaderboard">
+    <div class="stats">
+      <div class="stat">
+        <div class="lbl">Турниров</div>
+        <div class="num" data-to="6">0</div>
+        <div class="sub up">сезон 2026</div>
+      </div>
+      <div class="stat">
+        <div class="lbl">Участников</div>
+        <div class="num" data-to="48">0</div>
+        <div class="sub up">+12 новых</div>
+      </div>
+      <div class="stat">
+        <div class="lbl">КРУПНЕЙШИЙ ПРИЗОВОЙ</div>
+        <div class="num" data-to="100000">100 000</div>
+        <div class="sub">Nexus Shiyu Incineration</div>
+      </div>
+      <div class="stat">
+        <div class="lbl">Сыграно матчей</div>
+        <div class="num" data-to="240">0</div>
+        <div class="sub">формат Bo2</div>
+      </div>
+    </div>
+
+    <div class="sec-head">
+      <h2>Топ <em>турнира</em></h2>
+      <a href="index.html#players" class="link">Qualifiers II · полный рейтинг →</a>
+    </div>
+    <div class="podium" id="podium"></div>
+
+    <!-- Sections breakdown (реальные разделы приложения) -->
+    <div class="sec-head">
+      <h2>Разделы <em>статистики</em></h2>
+      <a href="index.html" class="link">Открыть приложение →</a>
+    </div>
+    <div class="modes">
+      <a href="index.html#chars" class="mode" data-screen-label="Section · Персонажи">
+        <div class="mhd">
+          <span class="mico"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"></circle><path d="M4 21c0-4 3.6-7 8-7s8 3 8 7"></path></svg></span>
+          <div class="mt">Персонажи<small>CHARACTERS · WINRATE / PICKRATE</small></div>
+        </div>
+        <p>Винрейт, частота пиков и банов по агентам за выбранный турнир или за всё время.</p>
+        <div class="chips">
+          <span class="chip">WINRATE</span>
+          <span class="chip">Pick %</span>
+          <span class="chip">Ban %</span>
+        </div>
+        <div class="mopen"><span class="go">Открыть раздел</span><span class="arr">→</span></div>
+      </a>
+
+      <a href="index.html#players" class="mode" data-screen-label="Section · Игроки">
+        <div class="mhd">
+          <span class="mico"><svg viewBox="0 0 24 24"><path d="M3 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2"></path><circle cx="9" cy="7" r="3"></circle><path d="M16 3.5a3 3 0 0 1 0 6M21 21v-2a4 4 0 0 0-3-3.8"></path></svg></span>
+          <div class="mt">Игроки<small>PLAYERS · MATCHES / ROSTERS</small></div>
+        </div>
+        <p>Личная статистика участников: составы ростеров, винрейты и призовые.</p>
+        <div class="chips">
+          <span class="chip">По встречам</span>
+          <span class="chip">По матчам</span>
+          <span class="chip">Ростеры</span>
+        </div>
+        <div class="mopen"><span class="go">Открыть раздел</span><span class="arr">→</span></div>
+      </a>
+
+      <a href="index.html#ext" class="mode" data-screen-label="Section · Расширенная">
+        <div class="mhd">
+          <span class="mico"><svg viewBox="0 0 24 24"><path d="M3 3v18h18"></path><path d="M7 14l3-4 3 3 4-6"></path></svg></span>
+          <div class="mt">Расширенная<small>EXTENDED · DRAFTS / TIMERS</small></div>
+        </div>
+        <p>Глубокая аналитика драфтов, таймеров и рестартов — данные с турнирной сцены.</p>
+        <div class="chips">
+          <span class="chip">Драфты</span>
+          <span class="chip">Таймер</span>
+          <span class="chip">Рестарты</span>
+        </div>
+        <div class="mopen"><span class="go">Открыть раздел</span><span class="arr">→</span></div>
+      </a>
+    </div>
+
+    <!-- Recent matches -->
+    <div class="matches">
+      <div class="sec-head">
+        <h2>Последние <em>матчи</em></h2>
+        <a href="#" class="link">Все матчи →</a>
+      </div>
+      <div class="mgrid" id="mgrid"></div>
+    </div>
+  </section>
+
+  <!-- Stream online band -->
+  <section class="stream" data-screen-label="Stream CTA">
+    <a class="sband" href="https://twitch.tv/Nexus_Shiyu" target="_blank">
+      <span class="ldot"></span>
+      <div class="stxt">
+        <h3><span style="color:#fff;-webkit-text-fill-color:#fff">Stream</span> <span>Online!</span></h3>
+        <p>Матчи Nexus Shiyu в прямом эфире на <em>Twitch</em></p>
+      </div>
+      <span class="slink">
+        <svg viewBox="0 0 24 24"><path d="M4 2 2 6v14h5v3l3-3h4l6-6V2H4zm16 11-3 3h-4l-3 3v-3H6V4h14v9z"></path><path d="M15 7h2v5h-2zM10 7h2v5h-2z"></path></svg>
+        twitch.tv/<b>Nexus_Shiyu</b>
+      </span>
+    </a>
+  </section>
+</div>
+
+<!-- Footer -->
+<footer data-screen-label="Footer">
+  <div class="foot">
+    <div class="lockup">
+      <img class="mk" src="nexus-logo.png" alt="NEXUS">
+      <svg class="spark" viewBox="0 0 24 24"><path d="M12 0c.6 6 5.4 10.8 12 12-6.6 1.2-11.4 6-12 12-.6-6-5.4-10.8-12-12C6.6 10.8 11.4 6 12 0z"></path></svg>
+      <a href="https://hornybox.ru/?r=Nexus_Shiyu" target="_blank" rel="noopener noreferrer">
+        <img class="hbmk" src="hornybox-logo.png" alt="HornyBox">
+      </a>
+    </div>
+    <nav class="fnav">
+      <a href="#">Главная</a>
+      <a href="index.html#chars">Персонажи</a>
+      <a href="index.html#players">Игроки</a>
+      <a href="index.html#ext">Расширенная</a>
+      <a href="https://twitch.tv/Nexus_Shiyu" target="_blank">Twitch</a>
+    </nav>
+  </div>
+  <div class="fcopy" style="padding: 16px 40px">NEXUS SHIYU © 2026 · Турнирный организатор по Zenless Zone Zero<br>
+    <a href="https://twitch.tv/Nexus_Shiyu" target="_blank" rel="noopener noreferrer">twitch.tv/Nexus_Shiyu</a> ·
+    <a href="https://t.me/nexus_shiyu" target="_blank" rel="noopener noreferrer">t.me/nexus_shiyu</a> ·
+    <a href="https://discord.gg/6nKP7kWR78" target="_blank" rel="noopener noreferrer">discord.gg/6nKP7kWR78</a>
+  </div>
+</footer>
+
+<script>
+  // leaderboard data — победители Nexus Shiyu: Qualifiers II (имена/призовые реальные, W/L — пример)
+  const PLAYERS=[
+    {nm:'Sambrero', prize:'5 000 ₽', w:18,l:4,  tag:'S'},
+    {nm:'Xarlauss', prize:'2 500 ₽', w:16,l:6,  tag:'S'},
+    {nm:'Kazuto',   prize:'1 500 ₽', w:14,l:7,  tag:'A'},
+    {nm:'Hanamori', prize:'1 000 ₽', w:13,l:8,  tag:'A'},
+  ];
+  const ini=n=>n.replace(/[^A-Za-zА-Яа-я$]/g,'').slice(0,2).toUpperCase();
+  const wrp=(w,l)=>Math.round(w/(w+l)*100);
+
+  // podium — top 3 (порядок 2 · 1 · 3)
+  const podium=document.getElementById('podium');
+  [1,0,2].forEach(idx=>{
+    const p=PLAYERS[idx], place=idx+1;
+    const d=document.createElement('div');
+    d.className='pod p'+place;
+    d.innerHTML=`
+      <span class="place">${place}</span>
+      <div class="pod-av"><image-slot id="win-${place}" shape="rect" fit="cover" placeholder="Фото"></image-slot></div>
+      <div class="medal">${place} место</div>
+      <div class="nm">${p.nm}</div>
+      <div class="meta">RANK ${p.tag} · WIN RATE ${wrp(p.w,p.l)}%</div>
+      <div class="pwl"><span class="w">${p.w}W</span><span class="l">${p.l}L</span></div>
+      <div class="pprize">${p.prize}</div>
+      <span class="stage">Main stage</span>`;
+    podium.appendChild(d);
+  });
+
+  // recent matches
+  const MATCHES=[
+    {rnd:'Qualifiers II',date:'28.05',a:'Xarlauss',b:'Sambrero',sc:'4:15  -  4:01',win:'b'},
+    {rnd:'Qualifiers II',date:'28.05',a:'Xarlauss',b:'Kazuto',sc:'3:39  -  3:50',win:'a'},
+    {rnd:'Qualifiers II',date:'27.05',a:'Hanamori',b:'Kazuto',sc:'4:02  -  3:24',win:'b'},
+  ];
+  const mgrid=document.getElementById('mgrid');
+  MATCHES.forEach(m=>{
+    const el=document.createElement('div');
+    el.className='match';
+    el.innerHTML=`
+      <div class="mtop"><span class="rnd">${m.rnd}</span><span>${m.date}</span></div>
+      <div class="mbody">
+        <span class="mn ${m.win==='a'?'win':''}">${m.a}</span>
+        <span class="sc">${m.sc}</span>
+        <span class="mn r ${m.win==='b'?'win':''}">${m.b}</span>
+      </div>`;
+    mgrid.appendChild(el);
+  });
+
+  // count-up animation
+  const fmt=(s)=>s.replace(/\B(?=(\d{3})+(?!\d))/g,' ');
+  function animateNum(el){
+    const to=parseFloat(el.dataset.to), dec=+(el.dataset.dec||0);
+    const u=el.querySelector('u'); const suffix=u?u.outerHTML:'';
+    const start=performance.now(), dur=1100;
+    function tick(t){
+      const k=Math.min(1,(t-start)/dur); const e=1-Math.pow(1-k,3);
+      const v=(to*e).toFixed(dec);
+      el.innerHTML=(dec?v:fmt(v))+suffix;
+      if(k<1)requestAnimationFrame(tick);
+      else el.innerHTML=(dec?to.toFixed(dec):fmt(String(to)))+suffix;
+    }
+    requestAnimationFrame(tick);
+  }
+  document.querySelectorAll('.num').forEach(n=>setTimeout(()=>animateNum(n),600));
+
+  // season selector
+  document.querySelectorAll('#seasons .sbtn').forEach(b=>{
+    b.addEventListener('click',()=>{
+      const allBtn=document.getElementById('all-tournaments');
+      if(b===allBtn){
+        window.location.href='https://sh4dyq.github.io/zzz-stats/index.html';
+        return;
+      }
+      document.querySelector('#seasons .sbtn.on').classList.remove('on');
+      b.classList.add('on');
+    });
+  });
+
+  // live-статус Twitch: переключает Live ⇄ Offline (публичный CORS-эндпоинт decapi.me)
+  (function(){
+    const TWITCH='Nexus_Shiyu';
+    const el=document.querySelector('.livetw');
+    const lv=el && el.querySelector('.lv');
+    if(!el||!lv)return;
+    const set=on=>{el.classList.toggle('offline',!on);lv.textContent=on?'Live':'Offline';};
+    set(false); // по умолчанию офлайн, пока не подтверждён эфир
+    fetch('https://decapi.me/twitch/uptime/'+TWITCH,{cache:'no-store'})
+      .then(r=>r.ok?r.text():Promise.reject())
+      .then(t=>set(!/offline|not found|error|unable/i.test(t)))
+      .catch(()=>{});
+  })();
+</script>
+</body>
+</html>
+
+<style id="__om-edit-overrides">
+#mgrid >div:nth-child(1) >.mbody >span:nth-child(3) { margin: 0px 2px 0px 0px !important }
+#mgrid >div:nth-child(1) >.mbody >span:nth-child(3) { margin: 0px 5px 0px 0px !important }
+#mgrid >div:nth-child(1) >.mbody >span:nth-child(3) { margin: 0px 2px 0px 0px !important }
+#mgrid >div:nth-child(1) >.mbody >span:nth-child(3) { margin: 0px !important }
+#mgrid >div:nth-child(1) >.mbody >span:nth-child(3) { padding: 0px 2px 0px 0px !important }
+#mgrid >div:nth-child(2) >.mbody >span:nth-child(3) { padding: 0px 2px 0px 0px !important }
+#mgrid >div:nth-child(3) .win { padding: 0px 2px 0px 0px !important }
+#mgrid >div:nth-child(1) >.mbody >span:nth-child(3) { padding: 0px 3px 0px 0px !important }
+#mgrid >div:nth-child(2) >.mbody >span:nth-child(3) { padding: 0px 3px 0px 0px !important }
+#mgrid >div:nth-child(3) .win { padding: 0px 3px 0px 0px !important }
+#mgrid :is(h1,h2,h3,h4,h5,h6,p,li,dt,dd,blockquote,figcaption,label,span,a,em,strong,small,td,th,caption) >:is(h1,h2,h3,h4,h5,h6,p,li,dt,dd,blockquote,figcaption,label,span,a,em,strong,small,td,th,caption) { color: rgb(138, 138, 147) !important }
+#mgrid :is(h1,h2,h3,h4,h5,h6,p,li,dt,dd,blockquote,figcaption,label,span,a,em,strong,small,td,th,caption) >:is(h1,h2,h3,h4,h5,h6,p,li,dt,dd,blockquote,figcaption,label,span,a,em,strong,small,td,th,caption) { color: rgb(22, 22, 24) !important }
+#mgrid :is(h1,h2,h3,h4,h5,h6,p,li,dt,dd,blockquote,figcaption,label,span,a,em,strong,small,td,th,caption) >:is(h1,h2,h3,h4,h5,h6,p,li,dt,dd,blockquote,figcaption,label,span,a,em,strong,small,td,th,caption) { color: rgb(38, 38, 44) !important }
+#mgrid :is(h1,h2,h3,h4,h5,h6,p,li,dt,dd,blockquote,figcaption,label,span,a,em,strong,small,td,th,caption) >:is(h1,h2,h3,h4,h5,h6,p,li,dt,dd,blockquote,figcaption,label,span,a,em,strong,small,td,th,caption) { color: rgb(44, 44, 48) !important }
+#mgrid >div:nth-child(1) .sc >:is(h1,h2,h3,h4,h5,h6,p,li,dt,dd,blockquote,figcaption,label,span,a,em,strong,small,td,th,caption) { color: rgb(138, 138, 147) !important }
+#mgrid >div:nth-child(1) .sc >:is(h1,h2,h3,h4,h5,h6,p,li,dt,dd,blockquote,figcaption,label,span,a,em,strong,small,td,th,caption) { color: rgb(44, 44, 48) !important }
+#mgrid >div:nth-child(1) .sc { margin: 0px 0px 2px !important }
+#mgrid >div:nth-child(1) .sc { margin: 0px !important }
+</style>
