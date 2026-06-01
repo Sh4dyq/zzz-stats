@@ -84,6 +84,32 @@
   .admin-link{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;font-size:14px;text-transform:uppercase;letter-spacing:.03em;color:var(--sub);text-decoration:none;padding:7px 14px;border:1px solid var(--border);border-radius:8px;transition:.15s}
   .admin-link:hover{color:#fff;border-color:var(--red)}
   .tabrow{border-bottom:1px solid var(--border);padding:0 22px;display:flex;background:rgba(11,11,13,.4)}
+  /* tournament scope tabs */
+  body>.tourrow{position:relative;z-index:40;display:flex;align-items:stretch;padding:0 22px;border-bottom:1px solid var(--border);background:rgba(16,16,20,.55)}
+  .tour-tab{position:relative;display:flex;flex-direction:column;justify-content:center;gap:3px;border:none;background:none;padding:11px 22px;cursor:pointer;text-align:left;transition:.15s;min-height:58px}
+  .tour-tab+.tour-tab{border-left:1px solid var(--line)}
+  .tour-tab .tt-main{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;font-size:17px;letter-spacing:.02em;color:var(--sub);transition:.15s;line-height:1}
+  .tour-tab .tt-sub{font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:500;color:#62626c;letter-spacing:.01em;max-width:230px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:1.1}
+  .tour-tab:hover .tt-main{color:var(--text)}
+  .tour-tab.active .tt-main{color:#fff}
+  .tour-tab.active .tt-sub{color:#ff7587}
+  .tour-tab.active::after{content:"";position:absolute;left:22px;right:22px;bottom:-1px;height:3px;border-radius:3px 3px 0 0;background:var(--grad)}
+  .tour-pick{padding-right:56px}
+  .tour-pick .tt-chev{position:absolute;right:15px;top:50%;transform:translateY(-50%);width:30px;height:15px;color:var(--sub);transition:color .15s,transform .2s;pointer-events:none;z-index:1}
+  .tour-pick:hover .tt-chev,.tour-pick.open .tt-chev{color:var(--red)}
+  .tour-pick.open .tt-chev{transform:translateY(-50%) rotate(180deg)}
+  /* custom tournament dropdown */
+  .tour-menu{position:absolute;top:calc(100% + 7px);left:-1px;min-width:260px;background:var(--card);border:1px solid var(--border);border-radius:11px;padding:6px;z-index:60;box-shadow:0 20px 46px rgba(0,0,0,.6),0 0 0 1px rgba(255,31,68,.08);display:flex;flex-direction:column;gap:2px;cursor:default;animation:menuIn .14s ease}
+  .tour-menu[hidden]{display:none}
+  @keyframes menuIn{from{opacity:0;transform:translateY(-5px)}to{opacity:1;transform:translateY(0)}}
+  .tour-menu .tm-head{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;font-size:11px;letter-spacing:.07em;color:var(--sub);padding:5px 11px 6px;border-bottom:1px solid var(--line);margin-bottom:3px}
+  .tour-menu .tm-item{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:8px;cursor:pointer;font-family:'Rajdhani',sans-serif;font-weight:600;font-size:15px;color:var(--text);transition:.12s;white-space:nowrap}
+  .tour-menu .tm-item::before{content:"";width:7px;height:7px;border-radius:50%;background:#3a3a42;flex-shrink:0;transition:.12s}
+  .tour-menu .tm-item:hover{background:var(--panel-2);color:#fff}
+  .tour-menu .tm-item:hover::before{background:var(--sub)}
+  .tour-menu .tm-item.sel{background:rgba(255,31,68,.13);color:#fff}
+  .tour-menu .tm-item.sel::before{background:var(--red);box-shadow:0 0 8px rgba(255,31,68,.7)}
+  .tour-menu .tm-empty{padding:14px 12px;text-align:center;color:var(--sub);font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:700;text-transform:uppercase;font-size:13px;letter-spacing:.03em}
 </style>
 </head>
 <body>
@@ -112,13 +138,28 @@
       <img class="mk" src="nexus-logo.png" alt="NEXUS">
       <span class="wm">ZZZ</span><span class="suf">STATS</span>
     </div>
-    <select id="tour-sel" style="min-width:200px">
-      <option value="">Загрузка...</option>
-    </select>
   </div>
   <div style="display:flex;align-items:center;gap:16px">
     <span class="live"><span class="dot"></span> NEXUS SHIYU</span>
     <a href="admin.html" class="admin-link">Управление →</a>
+  </div>
+</div>
+
+<!-- Tournament scope tabs (Liquipedia-style) -->
+<div class="tourrow">
+  <button class="tour-tab active" data-mode="all">
+    <span class="tt-main">Все турниры</span>
+    <span class="tt-sub">общая статистика</span>
+  </button>
+  <button class="tour-tab" data-mode="last">
+    <span class="tt-main">ТЕКУЩИЙ ТУРНИР</span>
+    <span class="tt-sub" id="last-tour-name">загрузка…</span>
+  </button>
+  <div class="tour-tab tour-pick" data-mode="pick">
+    <span class="tt-main">Выбрать турнир</span>
+    <span class="tt-sub" id="pick-sub">из прошедших</span>
+    <svg class="tt-chev" viewBox="0 0 28 14" aria-hidden="true"><path d="M3 3.5 L14 11 L25 3.5" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <div class="tour-menu" id="tour-menu" hidden></div>
   </div>
 </div>
 
@@ -567,13 +608,84 @@ function renderAll(){
 }
 
 // Init
+let TOURS=[];
+function activateTour(id,tab){
+  S.tour=id;
+  document.querySelectorAll('.tour-tab').forEach(t=>t.classList.remove('active'));
+  if(tab)tab.classList.add('active');
+  loadAll();
+}
 async function init(){
   const{data:tours}=await sb.from('tournaments').select('*').order('created_at',{ascending:false});
-  const sel=document.getElementById('tour-sel');
-  sel.innerHTML=`<option value="${ALL}">Все турниры</option>`+(tours||[]).map(t=>`<option value="${t.id}">${t.name}</option>`).join('');
-  sel.value=ALL;S.tour=ALL;
-  sel.onchange=()=>{S.tour=sel.value;loadAll();};
-  loadAll();
+  TOURS=tours||[];
+
+  const tabAll=document.querySelector('.tour-tab[data-mode="all"]');
+  const tabLast=document.querySelector('.tour-tab[data-mode="last"]');
+  const tabPick=document.querySelector('.tour-tab[data-mode="pick"]');
+  const menu=document.getElementById('tour-menu');
+  const pickSub=document.getElementById('pick-sub');
+
+  // подпись последнего турнира
+  document.getElementById('last-tour-name').textContent=TOURS[0]?.name||'нет данных';
+
+  const resetPick=()=>{pickSub.textContent='из прошедших';menu.querySelectorAll('.tm-item').forEach(i=>i.classList.remove('sel'));};
+  const closeMenu=()=>{menu.hidden=true;tabPick.classList.remove('open');};
+  const openMenu=()=>{menu.hidden=false;tabPick.classList.add('open');};
+
+  // наполняем кастомное меню
+  menu.innerHTML=`<div class="tm-head">Прошедшие турниры</div>`+
+    (TOURS.length
+      ? TOURS.map(t=>`<div class="tm-item" data-id="${t.id}">${t.name}</div>`).join('')
+      : `<div class="tm-empty">Нет сохранённых</div>`);
+
+  menu.onclick=e=>{
+    const it=e.target.closest('.tm-item');if(!it)return;
+    menu.querySelectorAll('.tm-item').forEach(i=>i.classList.toggle('sel',i===it));
+    pickSub.textContent=it.textContent;
+    closeMenu();
+    activateTour(it.dataset.id,tabPick);
+  };
+
+  tabAll.onclick=()=>{closeMenu();resetPick();activateTour(ALL,tabAll);};
+  tabLast.onclick=()=>{if(!TOURS.length)return;closeMenu();resetPick();activateTour(TOURS[0].id,tabLast);};
+  tabPick.onclick=e=>{if(e.target.closest('.tour-menu'))return;menu.hidden?openMenu():closeMenu();};
+  // клик вне меню — закрыть
+  document.addEventListener('click',e=>{if(!tabPick.contains(e.target))closeMenu();});
+
+  // выбор турнира по URL-параметру ?t= (deep-link с главной)
+  // токенизируем имена (порядковые суффиксы 6th→6) и ищем точное совпадение токенов,
+  // допуская лишние ведущие слова в имени из БД (напр. «Nexus Shiyu: Proxy Rush 6»).
+  // токенное сравнение исключает ложные совпадения римских цифр (I ⊄ II).
+  const toks=s=>(s||'').toLowerCase()
+    .replace(/(\d+)(st|nd|rd|th)/g,'$1')
+    .replace(/[^a-zа-я0-9]+/gi,' ').trim().split(/\s+/).filter(Boolean);
+  const sub=(w,n)=>{ // w — непрерывная подпоследовательность n?
+    if(!w.length||w.length>n.length)return false;
+    for(let i=0;i+w.length<=n.length;i++){
+      let ok=true;
+      for(let j=0;j<w.length;j++){if(n[i+j]!==w[j]){ok=false;break;}}
+      if(ok)return true;
+    }
+    return false;
+  };
+  const want=new URLSearchParams(location.search).get('t');
+  const wt=toks(want);
+  let picked=null;
+  if(wt.length && wt.join('')!=='all' && wt.join('')!=='vse'){
+    picked=TOURS.find(t=>{const n=toks(t.name);return sub(wt,n)||sub(n,wt);});
+  }
+  if(picked){
+    if(TOURS[0] && picked.id===TOURS[0].id){
+      resetPick();activateTour(picked.id,tabLast);
+    }else{
+      const it=menu.querySelector(`.tm-item[data-id="${picked.id}"]`);
+      if(it){menu.querySelectorAll('.tm-item').forEach(i=>i.classList.toggle('sel',i===it));pickSub.textContent=it.textContent;}
+      activateTour(picked.id,tabPick);
+    }
+  }else{
+    S.tour=ALL;
+    loadAll();
+  }
 }
 
 document.querySelectorAll('.tab-btn').forEach(btn=>{
@@ -584,6 +696,13 @@ document.querySelectorAll('.tab-btn').forEach(btn=>{
     const el=document.getElementById('tab-'+btn.dataset.tab);if(el)el.style.display='block';
   };
 });
+
+// open a tab from URL hash (#chars / #players / #ext) — used by deep links from главной
+(function(){
+  const h=(location.hash||'').replace('#','');
+  const b=document.querySelector('.tab-btn[data-tab="'+h+'"]');
+  if(b){document.querySelectorAll('.tab-btn').forEach(x=>x.classList.remove('active'));b.classList.add('active');}
+})();
 
 init();
 </script>

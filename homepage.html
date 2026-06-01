@@ -44,8 +44,8 @@
   .brand .div{width:1px;height:26px;background:var(--border)}
   .brand .wm{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;
     font-size:25px;letter-spacing:.02em;text-transform:uppercase;display:inline-block;padding-right:.12em;white-space:nowrap}
-  .brand .wm .wm-n{color:#fff}
-  .brand .wm .wm-s{color:var(--red)}
+  .brand .wm .wm-n{background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent;padding-right:.1em}
+  .brand .wm .wm-s{color:#fff}
 
   .nav{display:flex;align-items:center;gap:4px;margin-left:14px}
   .nav a{position:relative;font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;
@@ -426,10 +426,10 @@
     <p class="lede">Аналитика турниров <b>Nexus Shiyu</b> по Zenless Zone Zero — рейтинги игроков, пики и баны агентов, история матчей и разбор драфтов.</p>
 
     <div class="seasons" id="seasons">
-      <button class="sbtn on">Qualifiers<small>II · текущий</small></button>
-      <button class="sbtn">Proxy Rush<small>6th</small></button>
-      <button class="sbtn">Qualifiers<small>I</small></button>
-      <button class="sbtn" id="all-tournaments">Все<small>турниры</small></button>
+      <button class="sbtn on" data-tour="Qualifiers II">Qualifiers<small>II · текущий</small></button>
+      <button class="sbtn" data-tour="Proxy Rush 6">Proxy Rush<small>6th</small></button>
+      <button class="sbtn" data-tour="Qualifiers I">Qualifiers<small>I</small></button>
+      <button class="sbtn" id="all-tournaments" data-tour="">Все<small>турниры</small></button>
     </div>
   </section>
 
@@ -658,16 +658,12 @@
   }
   document.querySelectorAll('.num').forEach(n=>setTimeout(()=>animateNum(n),600));
 
-  // season selector
+  // season selector — каждая кнопка ведёт на index с выбранным турниром (?t=)
+  // «Все турниры» → index без параметра (общая статистика по умолчанию)
   document.querySelectorAll('#seasons .sbtn').forEach(b=>{
     b.addEventListener('click',()=>{
-      const allBtn=document.getElementById('all-tournaments');
-      if(b===allBtn){
-        window.location.href='https://sh4dyq.github.io/zzz-stats/index.html';
-        return;
-      }
-      document.querySelector('#seasons .sbtn.on').classList.remove('on');
-      b.classList.add('on');
+      const t=(b.dataset.tour||'').trim();
+      window.location.href = t ? ('index.html?t='+encodeURIComponent(t)) : 'index.html';
     });
   });
 
