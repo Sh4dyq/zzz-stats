@@ -900,8 +900,29 @@ const DEFAULT_ZONES={
   // Координаты СТАРТОВЫЕ (под ~финальный драфт shiyu) — откалибруйте через «⚙ Калибровка зон».
   // Левая сторона (fp):   ряд1 8 5 4 1 / ряд2 16 13 12 9 / ряд3 17
   // Правая сторона (dbl):  ряд1 2 3 6 7 / ряд2 10 11 14 15 / ряд3 18
-  ...GRID_DEFAULT_ZONES()
+  ...GRID_DEFAULT_ZONES(),
+  // Иконки ЭЛЕМЕНТА (сверху) + РОЛИ (снизу) справа от имени на КАЖДОЙ пик-карте (12 карт).
+  // Откалибровано на g1 (calib/cal_er.py). Для кросс-валидации иконки↔dbChar.element/.role.
+  ...ER_DEFAULT_ZONES()
 };
+// Зоны иконок элемента/роли на пик-картах. el над role (стопкой), x правее текста имени.
+// Раскладка L vs R игрока отличается только местом амплификатора; element/role одинаковы.
+function ER_DEFAULT_ZONES(){
+  const w=0.013,h=0.022;            // иконки маленькие (~14px); цветной эмбеддинг
+  // [prefix_i, el_cx, el_cy, ro_cx, ro_cy]
+  const cards=[
+    ['L_T1_0',.240,.695,.240,.711],['L_T1_1',.355,.695,.355,.711],['L_T1_2',.450,.695,.450,.711],
+    ['L_T2_0',.261,.909,.261,.925],['L_T2_1',.366,.909,.366,.925],['L_T2_2',.471,.909,.471,.925],
+    ['R_T1_0',.592,.694,.592,.712],['R_T1_1',.709,.694,.709,.712],['R_T1_2',.823,.694,.823,.712],
+    ['R_T2_0',.577,.908,.577,.926],['R_T2_1',.691,.908,.691,.926],['R_T2_2',.802,.908,.802,.926]
+  ];
+  const o={};
+  cards.forEach(([k,ex,ey,rx,ry])=>{
+    o['EL_'+k]={x:ex-w/2,y:ey-h/2,w,h};
+    o['RO_'+k]={x:rx-w/2,y:ry-h/2,w,h};
+  });
+  return o;
+}
 // Сгенерировать дефолтные зоны иконок сетки из регулярной модели (4 кол × 2 ряда + 1 нижняя на сторону).
 function GRID_DEFAULT_ZONES(){
   // Откалибровано на g1 (calib/final_poc.py). Lx/Rx/Ry — ЦЕНТРЫ слотов (доли); конвертим в top-left (-w/2,-h/2).
@@ -926,7 +947,7 @@ function GRID_DEFAULT_ZONES(){
 function gridKey(slot){return 'G'+slot;}
 // Версия схемы зон. При смене калибровки/раскладки (badge-align + g1-центры) старые
 // сохранённые калибровки СБРАСЫВАЮТСЯ — иначе stale zzz_zones перекрывает новые дефолты и ломает кроп.
-const ZONES_VERSION='3';
+const ZONES_VERSION='4';
 (function migrateZones(){ if(localStorage.getItem('zzz_zones_v')!==ZONES_VERSION){
   localStorage.removeItem('zzz_zones'); localStorage.removeItem('zzz_ref_anchors');
   localStorage.setItem('zzz_zones_v',ZONES_VERSION); }})();
@@ -1398,6 +1419,46 @@ async function recognizeGridEmb(img,bank,progress){
   return {picks,bans};
 }
 
+// ---- Кросс-валидация ЭЛЕМЕНТА/РОЛИ по иконкам пик-карт ----
+// Иконки маленькие и различаются ЦВЕТОМ → цветной эмбеддинг (cropRaw gray=false). Банк из 6 эталонов.
+const ELEM_KEYS=['ice','fire','electric','physical','ether','wind'];
+const ROLE_KEYS=['atk','stun','rupt','sup','def','ano'];
+const ER_CONF=0.62;            // ниже — иконка нечитаема, не флагуем рассогласование
+let _elemBank=null,_roleBank=null;
+async function loadIconBank(dir,keys){
+  const bank=[];
+  for(const k of keys){
+    const im=await loadImg('web/icons/'+dir+'/'+k+'.webp');
+    if(im&&im.naturalWidth){
+      const cv=document.createElement('canvas'); cv.width=im.naturalWidth; cv.height=im.naturalHeight;
+      cv.getContext('2d').drawImage(im,0,0);
+      const v=await window.embedGray(cv);          // цветной канвас → цветной эмбеддинг
+      if(v)bank.push({key:k,vec:v});
+    }
+  }
+  return bank;
+}
+const _argmaxKey=(v,bank)=>{ if(!v||!bank.length)return null;
+  let best=null; for(const b of bank){const s=_cos(v,b.vec); if(!best||s>best.score)best={key:b.key,score:s};} return best; };
+// Распознать element+role на 12 пик-картах. Порядок side→[6]: T1(0..2),T2(0..2) — совпадает с picks[side].
+async function recognizeElemRole(img,progress){
+  if(!(await window.__embedReady))return null;
+  if(!_elemBank)_elemBank=await loadIconBank('element',ELEM_KEYS);
+  if(!_roleBank)_roleBank=await loadIconBank('role',ROLE_KEYS);
+  if(!_elemBank.length||!_roleBank.length)return null;
+  const Z=AZ(), res={left:[],right:[]};
+  for(const[side,prefix] of [['left','L_T1'],['left','L_T2'],['right','R_T1'],['right','R_T2']]){
+    for(let i=0;i<3;i++){
+      const ez=Z['EL_'+prefix+'_'+i], rz=Z['RO_'+prefix+'_'+i];
+      const ev=ez?await window.embedGray(cropRaw(img,ez,false)):null;
+      const rv=rz?await window.embedGray(cropRaw(img,rz,false)):null;
+      res[side].push({element:_argmaxKey(ev,_elemBank),role:_argmaxKey(rv,_roleBank)});
+    }
+  }
+  progress&&progress('Element/role иконки распознаны');
+  return res;
+}
+
 // Самообучение: после успешного сохранения считаем ЭМБЕДДИНГИ реальных (gray) кропов всех 18 слотов
 // с подтверждёнными персонажами (из селектов) и дописываем в icon_hashes (kind='emb', hash=JSON вектора).
 // loadEmbBank подмешивает их в банк → закрывает hard-cases (Cissia-магнит, Vivian и т.п.). Best-effort.
@@ -1465,6 +1526,10 @@ async function runLocalAnalysis(progress){
     grid=recognizeGrid(img,await loadIconRefs(progress));
   }
 
+  // Кросс-валидация по иконкам элемента/роли пик-карт (12 карт). Расхождение с dbChar → флаг.
+  let er=null;
+  if(embOk){ progress&&progress('Распознаю иконки элемента/роли...'); er=await recognizeElemRole(img,progress); }
+
   // Слить: идентичность из сетки (pHash) + mindscape из OCR-карточек. Сопоставление по личности
   // персонажа (карточки внизу идут не в порядке очереди сетки), с позиционным запасным вариантом.
   const picks={left:[],right:[]};
@@ -1477,7 +1542,17 @@ async function runLocalAnalysis(progress){
       // Кросс-валидация: иконка (эмбеддинг) vs тексты карточек. Если икона дала персонажа,
       // OCR прочитал >=2 имени на стороне, но среди них этого персонажа НЕТ → расхождение → флаг.
       const disagree=!!g._charId && ocrIds.size>=2 && !ocrIds.has(g._charId);
-      picks[side].push({name:g.name||o.name||'',mindscape:ms,has_signature:false,team:g.team,lowConf:!!g.lowConf||disagree});
+      // Кросс-валидация по element/role: если уверенно распознанная иконка не совпадает с
+      // элементом/ролью персонажа из БД → вероятная ошибка распознавания лица → флаг.
+      let erMismatch=false;
+      if(er&&g._charId){
+        const dc=dbChars.find(c=>c.id===g._charId), e=er[side][k];
+        if(dc&&e){
+          if(e.element&&e.element.score>=ER_CONF&&dc.element&&e.element.key!==dc.element)erMismatch=true;
+          if(e.role&&e.role.score>=ER_CONF&&dc.role&&e.role.key!==dc.role)erMismatch=true;
+        }
+      }
+      picks[side].push({name:g.name||o.name||'',mindscape:ms,has_signature:false,team:g.team,lowConf:!!g.lowConf||disagree||erMismatch});
     });
   }
 
