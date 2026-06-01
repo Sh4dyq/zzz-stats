@@ -88,6 +88,15 @@ function renderCostsTable(tourId,tourName,existing,penalties){
   <button class="btn btn-g" style="font-size:12px;padding:5px 12px" onclick="copyCosts('${tourId}')">Скопировать косты</button>`:'<span style="color:var(--sub);font-size:13px">Нет других турниров для копирования</span>';
 
   html(`<button class="btn btn-g" style="margin-bottom:16px" onclick="go('tournaments')">← Назад</button>
+  <div class="card" style="margin-bottom:16px">
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <span style="font-weight:600;font-size:14px">Импорт из ссылки драфта:</span>
+      <input id="rs-link" type="text" placeholder="ссылка shiyu.darte.gg…" style="flex:1;min-width:220px;padding:6px 10px;font-size:13px">
+      <button class="btn btn-g" style="font-size:13px;padding:6px 14px" onclick="importTourRuleset('${tourId}')">Загрузить косты и штрафы</button>
+    </div>
+    <div id="rs-status" style="font-size:12px;color:var(--sub);margin-top:8px"></div>
+    <div style="font-size:11px;color:var(--sub);margin-top:4px">Заполнит косты персонажей по минскейпам и штрафы рестартов. Косты амплификаторов — позже (отдельная таблица). Проверь и нажми «Сохранить».</div>
+  </div>
   <div class="card" style="margin-bottom:16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
     <span style="font-weight:600;font-size:14px">Скопировать косты из турнира:</span>
     ${copySelect}
@@ -106,6 +115,43 @@ function renderCostsTable(tourId,tourName,existing,penalties){
   </div>
   <button class="btn btn-y" style="margin-top:16px" onclick="saveCosts('${tourId}')">Сохранить все косты</button>`);
   updatePenaltyHint();
+}
+
+// Снапшот рулсетов (косты+штрафы) из репо; draft_systems закрыт CORS из браузера.
+let _shiyuSystems=null;
+async function loadShiyuSystems(){
+  if(_shiyuSystems)return _shiyuSystems;
+  const r=await fetch('web/data/shiyu_systems.json?v='+Date.now());
+  if(!r.ok)throw new Error('shiyu_systems.json не загрузился');
+  _shiyuSystems=await r.json();return _shiyuSystems;
+}
+
+// Импорт костов персонажей (по минскейпам) + штрафов рестартов из ссылки драфта.
+async function importTourRuleset(tourId){
+  const st=document.getElementById('rs-status');
+  const set=m=>{if(st)st.textContent=m;};
+  const url=document.getElementById('rs-link')?.value?.trim();
+  if(!url)return set('Вставь ссылку на драфт');
+  if(typeof fetchDraftState!=='function')return set('draft-import.js не загружен');
+  const parsed=parseDraftLink(url);
+  if(!parsed)return set('Не разобрал ссылку (нужны draft_id и session_key)');
+  set('Загружаю рулсет…');
+  try{
+    const state=await fetchDraftState(parsed.id,parsed.key);
+    const sys=(await loadShiyuSystems()).systems?.[state.system];
+    if(!sys)return set('Система '+state.system+' не в кэше. Запусти: python tools/fetch_system.py "'+url+'"');
+    const base=e=>String(e).split('_')[0];
+    const byEnka={};D.chars.forEach(c=>{if(c.enka_id)byEnka[base(c.enka_id)]=c;});
+    let filled=0,miss=0;
+    Object.entries(sys.agents).forEach(([enka,costs])=>{
+      const c=byEnka[enka];if(!c){miss++;return;}
+      costs.forEach((cost,ms)=>{const el=document.querySelector(`.ci-ms[data-c="${c.id}"][data-m="${ms}"]`);if(el){el.value=cost;filled++;}});
+    });
+    const pen=Array(sys.restart?.free||0).fill(0).concat(sys.restart?.paid||[]);
+    document.querySelectorAll('.rp-in').forEach((el,i)=>{el.value=pen[i]??'';});
+    if(typeof updatePenaltyHint==='function')updatePenaltyHint();
+    set(`Заполнено ${filled} костов из «${sys.title}» (лимит ${sys.costLimit}), штрафы [${pen.join(',')||'нет'}]`+(miss?` · ${miss} агентов нет в БД`:'')+'. Проверь и нажми «Сохранить все косты».');
+  }catch(e){set('Ошибка: '+e.message);}
 }
 
 async function copyCosts(tourId){
