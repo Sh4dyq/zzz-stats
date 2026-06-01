@@ -6,7 +6,6 @@
 <title>Nexus Shiyu — Статистика турниров</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Saira+Condensed:ital,wght@0,600;0,700;0,800;0,900;1,700;1,800;1,900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<script src="image-slot.js"></script>
 <style>
   :root{
     --bg:#0b0b0d;--card:#161618;--panel-2:#1c1c20;--panel-3:#242429;
@@ -86,7 +85,7 @@
     background:var(--card);border:1px solid var(--border);border-radius:12px;padding:11px 18px}
   .sponsor .sp-top{display:flex;align-items:center;gap:14px}
   .sponsor .slabel{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;
-    font-size:11px;letter-spacing:.08em;color:var(--sub)}
+    font-size:13px;letter-spacing:.08em;color:var(--lime)}
   .sponsor .hblogo{height:24px;width:auto;display:block;mix-blend-mode:lighten}
   .sponsor .sslogan{font-size:13px;font-weight:600;font-style:italic;color:var(--text)}
 
@@ -94,7 +93,7 @@
   .hero{padding:30px 40px 30px;max-width:1280px;margin:0 auto;position:relative}
   .hero-art{position:absolute;top:0;right:0;width:46%;max-width:620px;height:100%;z-index:-1;
     -webkit-mask-image:linear-gradient(90deg,transparent,#000 46%);mask-image:linear-gradient(90deg,transparent,#000 46%)}
-  .hero-art image-slot{width:100%;height:100%;--slot-bg:transparent}
+  .hero-art img{width:100%;height:100%;object-fit:cover;display:block}
   .hero>*{position:relative}
   .tags{display:flex;gap:10px;margin-bottom:24px}
   .tag{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;
@@ -135,9 +134,9 @@
   .featured{max-width:1280px;margin:0 auto 64px;padding:0 40px}
   .fcard{display:grid;grid-template-columns:minmax(0,1fr) 1.05fr;background:var(--card);
     border:1px solid var(--border);border-radius:20px;overflow:hidden}
-  .fart{position:relative;min-height:340px;
+  .fart{position:relative;aspect-ratio:1/1;align-self:start;
     background:repeating-linear-gradient(135deg,#1b1b1f 0 12px,#161619 12px 24px)}
-  .fart image-slot{position:absolute;inset:0;width:100%;height:100%}
+  .fart img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block}
   .fart .ph{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
     font-family:'JetBrains Mono',monospace;font-size:12px;letter-spacing:.1em;color:#4a4a52;text-transform:uppercase}
   .fart::after{content:"";position:absolute;top:0;right:0;bottom:0;width:90px;background:linear-gradient(90deg,transparent,var(--card));pointer-events:none;z-index:2}
@@ -215,12 +214,17 @@
   .pod.p3::before{background:linear-gradient(90deg,#f0a06b,#c46a32)}
   .pod .place{position:absolute;top:8px;right:14px;font-family:'Saira Condensed',sans-serif;font-style:italic;
     font-weight:900;font-size:74px;line-height:.8;color:#fff;opacity:.07}
-  .pod-av{width:104px;height:104px;border-radius:16px;overflow:hidden;margin-bottom:14px;
+  .pod-av{position:relative;width:104px;height:104px;border-radius:16px;overflow:hidden;margin-bottom:14px;
     border:2px solid var(--border);background:var(--panel-3)}
   .pod.p1 .pod-av{width:120px;height:120px;border-color:var(--gold)}
   .pod.p2 .pod-av{border-color:#cdd2da}
   .pod.p3 .pod-av{border-color:#e08b53}
-  .pod-av image-slot{width:100%;height:100%;display:block}
+  .pod-av img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block;z-index:1}
+  .pod-av .ini{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+    font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;font-size:38px;color:var(--sub)}
+  .pod.p1 .pod-av .ini{background:var(--gold-grad);color:#231703}
+  .pod.p2 .pod-av .ini{background:linear-gradient(160deg,#eef1f6,#aeb4c0);color:#1a1c22}
+  .pod.p3 .pod-av .ini{background:linear-gradient(160deg,#f0a06b,#c46a32);color:#231201}
   .medal{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;text-transform:uppercase;
     font-size:14px;letter-spacing:.05em;padding:5px 22px 5px 16px;margin-bottom:12px;color:#1a1410;white-space:nowrap;
     clip-path:polygon(9px 0,100% 0,calc(100% - 9px) 100%,0 100%)}
@@ -330,7 +334,7 @@
     .modes{grid-template-columns:1fr}
     .mgrid{grid-template-columns:1fr}
     .fcard{grid-template-columns:1fr}
-    .fart{min-height:200px}.fart::after{display:none}
+    .fart{aspect-ratio:auto;height:280px}.fart::after{display:none}
     .nav{display:none}
   }
   @media (max-width:560px){
@@ -366,7 +370,7 @@
 
 <div class="wrap">
   <!-- Header -->
-  <header class="hdr" data-screen-label="Header">
+  <header class="hdr">
     <div style="display:flex;align-items:center;gap:6px">
       <div class="brand">
         <img class="mk" src="nexus-logo.png" alt="NEXUS">
@@ -392,9 +396,9 @@
   </header>
 
   <!-- Hero -->
-  <section class="hero" data-screen-label="Hero">
-    <div class="hero-art">
-      <image-slot id="hero-art" shape="rect" fit="cover" placeholder="Перетащите арт персонажа ZZZ"></image-slot>
+  <section class="hero">
+    <div class="hero-art" id="hero-art">
+      <!-- арт персонажа: <img src="..."> (необязательно; фон замаскирован градиентом) -->
     </div>
     <div class="hero-top">
       <div class="kicker">
@@ -403,9 +407,9 @@
         <span class="ksep"></span>
         <span class="kmuted">Qualifiers II</span>
       </div>
-      <div class="sponsor" data-screen-label="Sponsor" style="gap: 4px; padding: 11px 18px">
+      <div class="sponsor">
         <div class="sp-top">
-          <span class="slabel" style="font-size: 14px; color: rgb(186, 255, 0); letter-spacing: 1px; height: 22px; margin: 2px 0px 0px; font-family: &quot;Saira Condensed&quot;">Генеральный спонсор</span>
+          <span class="slabel">Генеральный спонсор</span>
           <a href="https://hornybox.ru/?r=Nexus_Shiyu" target="_blank" rel="noopener noreferrer">
             <img class="hblogo" src="hornybox-logo.png" alt="HornyBox">
           </a>
@@ -430,32 +434,32 @@
   </section>
 
   <!-- Featured tournament -->
-  <section class="featured" data-screen-label="Featured tournament">
+  <section class="featured">
     <div class="fcard">
-      <div class="fart" style="height: 405px; width: 405px">
+      <div class="fart">
         <a href="https://t.me/nexus_shiyu/1087" target="_blank" rel="noopener noreferrer" style="display:block;width:100%;height:100%">
-          <img id="feat-art-img" src="nspr6-announce.jpg" alt="Key art турнира" style="height:405px;width:405px;display:block;object-fit:cover;padding:0;margin:0" onerror="this.onerror=null;this.src='nexus-logo.png';this.style.objectFit='contain';">
+          <img id="feat-art-img" src="nspr6-announce.jpg" alt="Key art турнира" onerror="this.onerror=null;this.src='nexus-logo.png';this.style.objectFit='contain';">
         </a>
-        <span class="ribbon" style="padding: 7px 16px; margin-top: 6px"><span class="pin"></span> Upcoming</span>
+        <span class="ribbon"><span class="pin"></span> Upcoming</span>
       </div>
-      <div class="finfo" style="height: 405px">
-        <div class="kick" style="text-align: left; font-weight: 800">ДАТА ПРОВЕДЕНИЯ: 02-03 МАЯ</div>
-        <h3 style="margin: 0px 150px 0px 0px">Nexus Shiyu:<br><span class="l2" style="width: 470px">Proxy Rush 6th</span></h3>
-        <div class="fmeta" style="width: 470px">
+      <div class="finfo">
+        <div class="kick">ДАТА ПРОВЕДЕНИЯ: 02-03 МАЯ</div>
+        <h3>Nexus Shiyu:<br><span class="l2">Proxy Rush 6th</span></h3>
+        <div class="fmeta">
           <div><div class="k">Формат</div><div class="v">DE</div></div>
           <div><div class="k">Сетка</div><div class="v"><a href="https://challonge.com/ru/NSPR6" target="_blank" rel="noopener noreferrer">CHALLONGE/NSPR6</a></div></div>
           <div><div class="k">Стрим</div><div class="v"><a href="https://twitch.tv/Nexus_Shiyu" target="_blank" rel="noopener noreferrer">TWITCH.TV/NEXUS_SHIYU</a></div></div>
         </div>
         <div class="fbottom">
           <div class="fprize"><div class="k">Prize Pool</div><div class="v">5 000 ₽</div></div>
-          <a href="https://t.me/nexus_shiyu/1087" class="fcta" style="margin: 0px 135px 0px 0px">Подробнее</a>
+          <a href="https://t.me/nexus_shiyu/1087" class="fcta">Подробнее</a>
         </div>
       </div>
     </div>
   </section>
 
   <!-- Stats + leaderboard -->
-  <section class="cont" data-screen-label="Stats &amp; leaderboard">
+  <section class="cont">
     <div class="stats">
       <div class="stat">
         <div class="lbl">Турниров</div>
@@ -491,7 +495,7 @@
       <a href="index.html" class="link">Открыть приложение →</a>
     </div>
     <div class="modes">
-      <a href="index.html#chars" class="mode" data-screen-label="Section · Персонажи">
+      <a href="index.html#chars" class="mode">
         <div class="mhd">
           <span class="mico"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"></circle><path d="M4 21c0-4 3.6-7 8-7s8 3 8 7"></path></svg></span>
           <div class="mt">Персонажи<small>CHARACTERS · WINRATE / PICKRATE</small></div>
@@ -505,7 +509,7 @@
         <div class="mopen"><span class="go">Открыть раздел</span><span class="arr">→</span></div>
       </a>
 
-      <a href="index.html#players" class="mode" data-screen-label="Section · Игроки">
+      <a href="index.html#players" class="mode">
         <div class="mhd">
           <span class="mico"><svg viewBox="0 0 24 24"><path d="M3 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2"></path><circle cx="9" cy="7" r="3"></circle><path d="M16 3.5a3 3 0 0 1 0 6M21 21v-2a4 4 0 0 0-3-3.8"></path></svg></span>
           <div class="mt">Игроки<small>PLAYERS · MATCHES / ROSTERS</small></div>
@@ -519,7 +523,7 @@
         <div class="mopen"><span class="go">Открыть раздел</span><span class="arr">→</span></div>
       </a>
 
-      <a href="index.html#ext" class="mode" data-screen-label="Section · Расширенная">
+      <a href="index.html#ext" class="mode">
         <div class="mhd">
           <span class="mico"><svg viewBox="0 0 24 24"><path d="M3 3v18h18"></path><path d="M7 14l3-4 3 3 4-6"></path></svg></span>
           <div class="mt">Расширенная<small>EXTENDED · DRAFTS / TIMERS</small></div>
@@ -545,7 +549,7 @@
   </section>
 
   <!-- Stream online band -->
-  <section class="stream" data-screen-label="Stream CTA">
+  <section class="stream">
     <a class="sband" href="https://twitch.tv/Nexus_Shiyu" target="_blank">
       <span class="ldot"></span>
       <div class="stxt">
@@ -561,7 +565,7 @@
 </div>
 
 <!-- Footer -->
-<footer data-screen-label="Footer">
+<footer>
   <div class="foot">
     <div class="lockup">
       <img class="mk" src="nexus-logo.png" alt="NEXUS">
@@ -578,7 +582,7 @@
       <a href="https://twitch.tv/Nexus_Shiyu" target="_blank">Twitch</a>
     </nav>
   </div>
-  <div class="fcopy" style="padding: 16px 40px">NEXUS SHIYU © 2026 · Турнирный организатор по Zenless Zone Zero<br>
+  <div class="fcopy">NEXUS SHIYU © 2026 · Турнирный организатор по Zenless Zone Zero<br>
     <a href="https://twitch.tv/Nexus_Shiyu" target="_blank" rel="noopener noreferrer">twitch.tv/Nexus_Shiyu</a> ·
     <a href="https://t.me/nexus_shiyu" target="_blank" rel="noopener noreferrer">t.me/nexus_shiyu</a> ·
     <a href="https://discord.gg/6nKP7kWR78" target="_blank" rel="noopener noreferrer">discord.gg/6nKP7kWR78</a>
@@ -588,10 +592,10 @@
 <script>
   // leaderboard data — победители Nexus Shiyu: Qualifiers II (имена/призовые реальные, W/L — пример)
   const PLAYERS=[
-    {nm:'Sambrero', prize:'5 000 ₽', w:18,l:4,  tag:'S'},
-    {nm:'Xarlauss', prize:'2 500 ₽', w:16,l:6,  tag:'S'},
-    {nm:'Kazuto',   prize:'1 500 ₽', w:14,l:7,  tag:'A'},
-    {nm:'Hanamori', prize:'1 000 ₽', w:13,l:8,  tag:'A'},
+    {nm:'Sambrero', prize:'5 000 ₽', w:18,l:4,  tag:'S', img:'web/players/sambrero.webp'},
+    {nm:'Xarlauss', prize:'2 500 ₽', w:16,l:6,  tag:'S', img:'web/players/xarlauss.webp'},
+    {nm:'Kazuto',   prize:'1 500 ₽', w:14,l:7,  tag:'A', img:'web/players/kazuto.webp'},
+    {nm:'Hanamori', prize:'1 000 ₽', w:13,l:8,  tag:'A', img:'web/players/hanamori.webp'},
   ];
   const ini=n=>n.replace(/[^A-Za-zА-Яа-я$]/g,'').slice(0,2).toUpperCase();
   const wrp=(w,l)=>Math.round(w/(w+l)*100);
@@ -602,9 +606,12 @@
     const p=PLAYERS[idx], place=idx+1;
     const d=document.createElement('div');
     d.className='pod p'+place;
+    // initials always present as a fallback; photo (if it loads) covers them.
+    // onerror removes a missing photo so the initials show through.
+    const photo=p.img?`<img src="${p.img}" alt="${p.nm}" onerror="this.remove()">`:'';
     d.innerHTML=`
       <span class="place">${place}</span>
-      <div class="pod-av"><image-slot id="win-${place}" shape="rect" fit="cover" placeholder="Фото"></image-slot></div>
+      <div class="pod-av"><span class="ini">${ini(p.nm)}</span>${photo}</div>
       <div class="medal">${place} место</div>
       <div class="nm">${p.nm}</div>
       <div class="meta">RANK ${p.tag} · WIN RATE ${wrp(p.w,p.l)}%</div>
@@ -680,24 +687,3 @@
 </script>
 </body>
 </html>
-
-<style id="__om-edit-overrides">
-#mgrid >div:nth-child(1) >.mbody >span:nth-child(3) { margin: 0px 2px 0px 0px !important }
-#mgrid >div:nth-child(1) >.mbody >span:nth-child(3) { margin: 0px 5px 0px 0px !important }
-#mgrid >div:nth-child(1) >.mbody >span:nth-child(3) { margin: 0px 2px 0px 0px !important }
-#mgrid >div:nth-child(1) >.mbody >span:nth-child(3) { margin: 0px !important }
-#mgrid >div:nth-child(1) >.mbody >span:nth-child(3) { padding: 0px 2px 0px 0px !important }
-#mgrid >div:nth-child(2) >.mbody >span:nth-child(3) { padding: 0px 2px 0px 0px !important }
-#mgrid >div:nth-child(3) .win { padding: 0px 2px 0px 0px !important }
-#mgrid >div:nth-child(1) >.mbody >span:nth-child(3) { padding: 0px 3px 0px 0px !important }
-#mgrid >div:nth-child(2) >.mbody >span:nth-child(3) { padding: 0px 3px 0px 0px !important }
-#mgrid >div:nth-child(3) .win { padding: 0px 3px 0px 0px !important }
-#mgrid :is(h1,h2,h3,h4,h5,h6,p,li,dt,dd,blockquote,figcaption,label,span,a,em,strong,small,td,th,caption) >:is(h1,h2,h3,h4,h5,h6,p,li,dt,dd,blockquote,figcaption,label,span,a,em,strong,small,td,th,caption) { color: rgb(138, 138, 147) !important }
-#mgrid :is(h1,h2,h3,h4,h5,h6,p,li,dt,dd,blockquote,figcaption,label,span,a,em,strong,small,td,th,caption) >:is(h1,h2,h3,h4,h5,h6,p,li,dt,dd,blockquote,figcaption,label,span,a,em,strong,small,td,th,caption) { color: rgb(22, 22, 24) !important }
-#mgrid :is(h1,h2,h3,h4,h5,h6,p,li,dt,dd,blockquote,figcaption,label,span,a,em,strong,small,td,th,caption) >:is(h1,h2,h3,h4,h5,h6,p,li,dt,dd,blockquote,figcaption,label,span,a,em,strong,small,td,th,caption) { color: rgb(38, 38, 44) !important }
-#mgrid :is(h1,h2,h3,h4,h5,h6,p,li,dt,dd,blockquote,figcaption,label,span,a,em,strong,small,td,th,caption) >:is(h1,h2,h3,h4,h5,h6,p,li,dt,dd,blockquote,figcaption,label,span,a,em,strong,small,td,th,caption) { color: rgb(44, 44, 48) !important }
-#mgrid >div:nth-child(1) .sc >:is(h1,h2,h3,h4,h5,h6,p,li,dt,dd,blockquote,figcaption,label,span,a,em,strong,small,td,th,caption) { color: rgb(138, 138, 147) !important }
-#mgrid >div:nth-child(1) .sc >:is(h1,h2,h3,h4,h5,h6,p,li,dt,dd,blockquote,figcaption,label,span,a,em,strong,small,td,th,caption) { color: rgb(44, 44, 48) !important }
-#mgrid >div:nth-child(1) .sc { margin: 0px 0px 2px !important }
-#mgrid >div:nth-child(1) .sc { margin: 0px !important }
-</style>
