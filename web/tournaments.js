@@ -22,12 +22,57 @@ async function openCosts(tourId,tourName){
   document.getElementById('page-title').textContent=`Косты — ${tourName}`;
   const{data:existing}=await sb.from('tournament_costs').select('*').eq('tournament_id',tourId);
   const{data:tour}=await sb.from('tournaments').select('restart_penalties').eq('id',tourId).maybeSingle();
-  renderCostsTable(tourId,tourName,existing||[],tour?.restart_penalties||[]);
+  renderCostsPage(tourId,tourName,existing||[],tour?.restart_penalties||[]);
+}
+
+// Совмещённая страница: два раскрывающихся блока (косты персонажей / костов амплификаторов), оба изначально свёрнуты.
+function renderCostsPage(tourId,tourName,existing,penalties){
+  html(`<button class="btn btn-g" style="margin-bottom:16px" onclick="go('tournaments')">← Назад</button>
+  ${costsTopControls(tourId,penalties)}
+  <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap">
+    <button id="cost-tg-char" class="btn btn-g" onclick="toggleCostSection('char')">▸ Косты персонажей</button>
+    <button id="cost-tg-amp" class="btn btn-g" onclick="toggleCostSection('amp')">▸ Косты амплификаторов</button>
+  </div>
+  <div id="cost-sec-char" hidden>${charCostsSection(tourId,tourName,existing,penalties)}</div>
+  <div id="cost-sec-amp" hidden>${ampCostsSection(tourId,tourName,existing)}</div>`);
+  updatePenaltyHint();
+}
+
+// Импорт из ссылки + копирование костов + штрафы рестартов — общие элементы над таблицами.
+function costsTopControls(tourId,penalties){
+  const otherTours=D.tours.filter(t=>t.id!==tourId);
+  const copySelect=otherTours.length?`<select id="copy-from-tour" style="font-size:13px;padding:5px 10px;margin-right:8px">
+    ${otherTours.map(t=>`<option value="${t.id}">${t.name}</option>`).join('')}
+  </select>
+  <button class="btn btn-g" style="font-size:12px;padding:5px 12px" onclick="copyCosts('${tourId}')">Скопировать косты</button>`:'<span style="color:var(--sub);font-size:13px">Нет других турниров для копирования</span>';
+  return`<div class="card" style="margin-bottom:16px">
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <span style="font-weight:600;font-size:14px">Импорт из ссылки драфта:</span>
+      <input id="rs-link" type="text" placeholder="ссылка shiyu.darte.gg…" style="flex:1;min-width:220px;padding:6px 10px;font-size:13px">
+      <button class="btn btn-g" style="font-size:13px;padding:6px 14px" onclick="importTourRuleset('${tourId}')">Загрузить косты и штрафы</button>
+    </div>
+    <div id="rs-status" style="font-size:12px;color:var(--sub);margin-top:8px"></div>
+    <div style="font-size:11px;color:var(--sub);margin-top:4px">Заполнит косты персонажей по минскейпам и штрафы рестартов. Косты амплификаторов — в блоке «Косты амплификаторов». Проверь и нажми «Сохранить».</div>
+  </div>
+  <div class="card" style="margin-bottom:16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+    <span style="font-weight:600;font-size:14px">Скопировать косты из турнира:</span>
+    ${copySelect}
+  </div>
+  ${renderPenalties(penalties)}`;
+}
+
+function toggleCostSection(which){
+  const sec=document.getElementById('cost-sec-'+which);
+  const btn=document.getElementById('cost-tg-'+which);
+  if(!sec||!btn)return;
+  const show=sec.hidden;sec.hidden=!show;
+  btn.classList.toggle('btn-y',show);
+  btn.textContent=(show?'▾':'▸')+btn.textContent.slice(1);
 }
 
 // Редактор инкрементальных штрафов за рестарт (сек). N полей; пусто = 0.
 function renderPenalties(pen){
-  const N=6;
+  const N=4;
   const inputs=Array.from({length:N},(_,i)=>`<div style="display:flex;flex-direction:column;align-items:center;gap:3px">
     <span style="font-size:11px;color:var(--sub)">рест. ${i+1}</span>
     <input class="rp-in" data-i="${i}" type="number" min="0" placeholder="0" value="${pen[i]??''}" style="width:54px;padding:4px 6px;font-size:13px;text-align:center" oninput="updatePenaltyHint()">
@@ -47,18 +92,12 @@ function updatePenaltyHint(){
   if(el)el.textContent='итого после N рестартов: '+parts.map((c,i)=>`${i+1}→+${c}с`).join(', ');
 }
 
-function renderCostsTable(tourId,tourName,existing,penalties){
+function charCostsSection(tourId,tourName,existing,penalties){
   penalties=penalties||[];
   const costMap={};existing.forEach(c=>{costMap[`${c.character_id}_${c.mindscape}`]=c;});
-  const charSigMap={};D.sigs.forEach(s=>{if(!charSigMap[s.character_id])charSigMap[s.character_id]=[];charSigMap[s.character_id].push(s);});
   const msCols=[0,1,2,3,4,5,6];
   const msHeads=msCols.map(ms=>`<th style="padding:8px 6px;color:var(--sub);text-align:center;min-width:70px">М${ms}</th>`).join('');
   const rows=D.chars.map(c=>{
-    const sOpts=(charSigMap[c.id]||[]).map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
-    const anyEx=msCols.map(ms=>costMap[`${c.id}_${ms}`]).find(x=>x)||{};
-    const sigSel=`<select class="ci-char" data-c="${c.id}" data-f="sig" style="width:160px;font-size:13px;padding:3px 6px">
-      <option value="">—</option>${sOpts.replace(`value="${anyEx.sig_id||''}"`,`value="${anyEx.sig_id||''}" selected`)}
-    </select>`;
     const msCells=msCols.map(ms=>{
       const ex=costMap[`${c.id}_${ms}`]||{};
       return`<td style="padding:6px 6px;text-align:center"><input class="ci-ms" data-c="${c.id}" data-m="${ms}" type="number" min="0" placeholder="—" value="${ex.cost??''}" style="width:65px;padding:3px 6px;font-size:13px;text-align:center"></td>`;
@@ -75,46 +114,20 @@ function renderCostsTable(tourId,tourName,existing,penalties){
           ${elemPh}
         </div>
       </td>
-      <td style="padding:6px 8px;text-align:center"><input class="ci-char" data-c="${c.id}" data-f="sig_cost" type="number" min="0" placeholder="—" value="${anyEx.sig_cost??''}" style="width:65px;padding:3px 6px;font-size:13px;text-align:center"></td>
-      <td style="padding:6px 8px">${sigSel}</td>
       ${msCells}
     </tr>`;
   }).join('');
 
-  const otherTours=D.tours.filter(t=>t.id!==tourId);
-  const copySelect=otherTours.length?`<select id="copy-from-tour" style="font-size:13px;padding:5px 10px;margin-right:8px">
-    ${otherTours.map(t=>`<option value="${t.id}">${t.name}</option>`).join('')}
-  </select>
-  <button class="btn btn-g" style="font-size:12px;padding:5px 12px" onclick="copyCosts('${tourId}')">Скопировать косты</button>`:'<span style="color:var(--sub);font-size:13px">Нет других турниров для копирования</span>';
-
-  html(`<button class="btn btn-g" style="margin-bottom:16px" onclick="go('tournaments')">← Назад</button>
-  <div class="card" style="margin-bottom:16px">
-    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-      <span style="font-weight:600;font-size:14px">Импорт из ссылки драфта:</span>
-      <input id="rs-link" type="text" placeholder="ссылка shiyu.darte.gg…" style="flex:1;min-width:220px;padding:6px 10px;font-size:13px">
-      <button class="btn btn-g" style="font-size:13px;padding:6px 14px" onclick="importTourRuleset('${tourId}')">Загрузить косты и штрафы</button>
-    </div>
-    <div id="rs-status" style="font-size:12px;color:var(--sub);margin-top:8px"></div>
-    <div style="font-size:11px;color:var(--sub);margin-top:4px">Заполнит косты персонажей по минскейпам и штрафы рестартов. Косты амплификаторов — позже (отдельная таблица). Проверь и нажми «Сохранить».</div>
-  </div>
-  <div class="card" style="margin-bottom:16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-    <span style="font-weight:600;font-size:14px">Скопировать косты из турнира:</span>
-    ${copySelect}
-  </div>
-  ${renderPenalties(penalties)}
-  <div class="card" style="overflow-x:auto;padding:0">
+  return`<div class="card" style="overflow-x:auto;padding:0">
     <table style="width:100%;border-collapse:collapse;font-size:13px">
       <thead><tr style="background:#0b0d14">
         <th style="padding:8px 10px;text-align:left;color:var(--sub)">Персонаж</th>
-        <th style="padding:8px 6px;color:var(--sub);text-align:center">Кост сигны</th>
-        <th style="padding:8px 6px;color:var(--sub)">Сигна</th>
         ${msHeads}
       </tr></thead>
       <tbody>${rows}</tbody>
     </table>
   </div>
-  <button class="btn btn-y" style="margin-top:16px" onclick="saveCosts('${tourId}')">Сохранить все косты</button>`);
-  updatePenaltyHint();
+  <button class="btn btn-y" style="margin-top:16px" onclick="saveCosts('${tourId}')">Сохранить все косты</button>`;
 }
 
 // Снапшот рулсетов (косты+штрафы) из репо; draft_systems закрыт CORS из браузера.
@@ -173,20 +186,13 @@ async function copyCosts(tourId){
 }
 
 async function saveCosts(tourId){
-  const charLevel={};
-  document.querySelectorAll('.ci-char').forEach(el=>{
-    const c=el.dataset.c;
-    if(!charLevel[c])charLevel[c]={};
-    if(el.dataset.f==='sig_cost')charLevel[c].sig_cost=el.value?+el.value:null;
-    if(el.dataset.f==='sig')charLevel[c].sig_id=el.value||null;
-  });
+  // Косты амплификаторов (sig_cost/sig_id) ведутся отдельным редактором — здесь их НЕ трогаем.
+  // upsert без этих полей оставляет их без изменений у существующих строк (ON CONFLICT обновляет только переданные колонки).
   const valid=[];
   document.querySelectorAll('.ci-ms').forEach(el=>{
     if(!el.value)return;
     const c=el.dataset.c,ms=+el.dataset.m;
-    const cl=charLevel[c]||{};
-    valid.push({tournament_id:tourId,character_id:c,mindscape:ms,cost:+el.value,
-      sig_cost:cl.sig_cost??null,sig_id:cl.sig_id??null,is_allowed:true});
+    valid.push({tournament_id:tourId,character_id:c,mindscape:ms,cost:+el.value,is_allowed:true});
   });
   if(valid.length){const{error}=await sb.from('tournament_costs').upsert(valid,{onConflict:'tournament_id,character_id,mindscape'});if(dbErr(error,'сохранение костов'))return;}
   // Штрафы за рестарты — обрезаем хвост нулей, пишем в турнир.
@@ -195,4 +201,75 @@ async function saveCosts(tourId){
   {const{error}=await sb.from('tournaments').update({restart_penalties:pen}).eq('id',tourId);if(dbErr(error,'сохранение штрафов'))return;
    const t=D.tours.find(t=>t.id===tourId);if(t)t.restart_penalties=pen;}
   toast(`Сохранено ${valid.length} костов + штрафы`);
+}
+
+// --- КОСТЫ АМПЛИФИКАТОРОВ ---
+// Список амплификаторов, у каждого — кост на его персонаже.
+// По дефолту ничего не проставляется; заполняем только там, где кост в этом турнире задан.
+function ampCostsSection(tourId,tourName,existing){
+  // текущая сигна+кост у персонажа (поля продублированы по строкам минскейпов — берём любую заполненную)
+  const charSig={};
+  existing.forEach(c=>{if(c.sig_id!=null&&!charSig[c.character_id])charSig[c.character_id]={sig_id:c.sig_id,sig_cost:c.sig_cost};});
+
+  const sigs=[...D.sigs].sort((a,b)=>(a.name||'').localeCompare(b.name||''));
+  const rows=sigs.map(s=>{
+    const c=D.chars.find(x=>x.id===s.character_id);
+    if(!c)return'';
+    const cur=charSig[c.id]?.sig_id===s.id?charSig[c.id]:null;
+    const img=typeof sigImg==='function'?sigImg(s,28):'';
+    return`<tr style="border-top:1px solid var(--border)">
+      <td style="padding:8px 10px;white-space:nowrap">
+        <div style="display:flex;align-items:center;gap:8px">${img}<span style="font-weight:500">${s.name}</span></div>
+      </td>
+      <td style="padding:8px 10px;white-space:nowrap">
+        <div style="display:flex;align-items:center;gap:8px">${iconChar(c,28)}<span>${c.name}</span></div>
+      </td>
+      <td style="padding:6px 10px;text-align:center">
+        <input class="ac-in" data-sig="${s.id}" data-char="${c.id}" type="number" min="0" placeholder="—" value="${cur?.sig_cost??''}" style="width:75px;padding:4px 6px;font-size:13px;text-align:center">
+      </td>
+    </tr>`;
+  }).join('');
+
+  return`<div class="card" style="margin-bottom:16px">
+    <div style="font-size:12px;color:var(--sub)">Кост указывается на персонаже, для которого амплификатор сигнатурный. Пустое поле — амплификатор не котируется в этом турнире.</div>
+  </div>
+  <div class="card" style="overflow-x:auto;padding:0">
+    <table style="width:100%;border-collapse:collapse;font-size:13px">
+      <thead><tr style="background:#0b0d14">
+        <th style="padding:8px 10px;text-align:left;color:var(--sub)">Амплификатор</th>
+        <th style="padding:8px 10px;text-align:left;color:var(--sub)">Персонаж</th>
+        <th style="padding:8px 10px;color:var(--sub);text-align:center">Кост</th>
+      </tr></thead>
+      <tbody>${rows||'<tr><td colspan="3" style="padding:14px;color:var(--sub)">Сначала добавь амплификаторы в разделе «Амплификаторы»</td></tr>'}</tbody>
+    </table>
+  </div>
+  <button class="btn btn-y" style="margin-top:16px" onclick="saveAmpCosts('${tourId}')">Сохранить косты амплификаторов</button>`;
+}
+
+async function saveAmpCosts(tourId){
+  const inputs=[...document.querySelectorAll('.ac-in')];
+  let set=0,cleared=0;
+  for(const el of inputs){
+    const charId=el.dataset.char,sigId=el.dataset.sig;
+    const val=el.value!==''?+el.value:null;
+    if(val!=null){
+      // проставляем sig_id+sig_cost на существующие строки персонажа; если строк нет — заводим заглушку M0
+      const{data:upd,error}=await sb.from('tournament_costs')
+        .update({sig_id:sigId,sig_cost:val}).eq('tournament_id',tourId).eq('character_id',charId).select('id');
+      if(dbErr(error,'сохранение коста амплификатора'))return;
+      if(!upd||!upd.length){
+        const{error:insErr}=await sb.from('tournament_costs')
+          .insert({tournament_id:tourId,character_id:charId,mindscape:0,cost:null,sig_id:sigId,sig_cost:val,is_allowed:true});
+        if(dbErr(insErr,'создание строки коста амплификатора'))return;
+      }
+      set++;
+    }else{
+      // снимаем кост только если этот амплификатор был привязан к персонажу
+      const{data:upd,error}=await sb.from('tournament_costs')
+        .update({sig_id:null,sig_cost:null}).eq('tournament_id',tourId).eq('character_id',charId).eq('sig_id',sigId).select('id');
+      if(dbErr(error,'очистка коста амплификатора'))return;
+      if(upd&&upd.length)cleared++;
+    }
+  }
+  toast(`Косты амплификаторов: задано ${set}, снято ${cleared}`);
 }
