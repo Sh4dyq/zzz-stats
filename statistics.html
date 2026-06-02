@@ -1,0 +1,918 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<title>ZZZ Tournament Stats</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Saira+Condensed:ital,wght@0,700;0,800;0,900;1,800;1,900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script>tailwind.config={theme:{extend:{fontFamily:{raj:['Rajdhani','sans-serif'],mono:['JetBrains Mono','monospace']}}}}</script>
+<style>
+  :root{
+    --bg:#0b0b0d;--card:#161618;--panel-2:#1c1c20;--panel-3:#242429;
+    --border:#26262c;--line:rgba(255,255,255,.07);
+    --red:#ff1f44;--pink:#ec1862;--grad:linear-gradient(95deg,#ff1f44,#ec1862);
+    --accent:#ff1f44;--gold:#f5c842;--cyan:#3dd9d6;
+    --text:#f3f3f5;--sub:#8a8a93;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font-family:'Rajdhani',sans-serif;min-height:100vh}
+  /* faceted brand background */
+  .facets{position:fixed;inset:0;z-index:0;pointer-events:none}
+  .topstripe{height:4px;background:var(--grad);position:sticky;top:0;z-index:50}
+  body>*:not(.facets){position:relative;z-index:1}
+  .disp{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;text-transform:uppercase;letter-spacing:.01em}
+  ::-webkit-scrollbar{width:6px;height:6px}
+  ::-webkit-scrollbar-track{background:var(--card)}
+  ::-webkit-scrollbar-thumb{background:#34343b;border-radius:3px}
+  ::-webkit-scrollbar-thumb:hover{background:var(--red)}
+  /* tabs */
+  .tab-btn{border:none;background:none;position:relative;padding:14px 22px;font-family:'Saira Condensed',sans-serif;font-style:italic;font-size:19px;font-weight:800;text-transform:uppercase;color:var(--sub);cursor:pointer;transition:.15s;letter-spacing:.02em}
+  .tab-btn:hover{color:var(--text)}
+  .tab-btn.active{color:#fff}
+  .tab-btn.active::after{content:"";position:absolute;left:14px;right:14px;bottom:-1px;height:3px;border-radius:3px 3px 0 0;background:var(--grad)}
+  .tbl-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:12px;background:var(--card)}
+  table{border-collapse:collapse;font-size:12px;white-space:nowrap;width:100%;font-family:'JetBrains Mono',monospace}
+  th,td{padding:6px 11px;border:1px solid var(--border);text-align:center}
+  th{background:#101013;font-size:11px;font-weight:500;color:var(--sub);cursor:pointer;user-select:none;font-family:'Rajdhani',sans-serif;font-weight:600;letter-spacing:.04em}
+  th:hover{color:var(--text);background:#17171c}
+  .th-g{text-align:center!important;background:#121214!important;color:#fff!important;font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;font-size:13px;letter-spacing:.03em;border-bottom:2px solid var(--red)!important}
+  td.nc{text-align:left;font-weight:600;color:var(--text);min-width:150px;font-family:'Rajdhani',sans-serif;font-size:14px}
+  th.nc{text-align:left}
+  .g{color:#46d369;font-weight:700}.r{color:#ff6b7d;font-weight:700}.m{color:var(--sub)}
+  .vrow{background:#101014}.vrow td.nc{color:var(--sub);font-weight:500;padding-left:22px;font-size:12px}
+  .seg-btn{border:none;background:none;padding:8px 18px;font-size:14px;font-family:'Saira Condensed',sans-serif;font-weight:800;text-transform:uppercase;letter-spacing:.02em;color:var(--sub);cursor:pointer;transition:.15s}
+  .seg-btn.on{background:var(--grad);color:#fff}
+  .chev{font-size:15px;color:var(--red);display:inline-block;margin-left:5px}
+  select,input[type=text],input[type=number]{background:var(--panel-2);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:8px 12px;font-family:'Rajdhani',sans-serif;font-weight:600;font-size:14px;transition:.15s}
+  select{cursor:pointer}
+  select:focus,input:focus{outline:none;border-color:var(--red)}
+  .pic{width:22px;height:22px;border-radius:5px;display:inline-flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;flex-shrink:0;font-family:'Rajdhani',sans-serif}
+  .badge-s{font-size:9px;font-weight:800;padding:1px 5px;border-radius:4px;background:linear-gradient(180deg,#f8d36a,#d99a16);color:#231703;font-family:'Rajdhani',sans-serif;letter-spacing:.05em}
+  .badge-a{font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;background:var(--panel-3);color:var(--sub);font-family:'Rajdhani',sans-serif;letter-spacing:.05em}
+  .ms-tag{font-size:10px;padding:1px 6px;border-radius:4px;background:rgba(255,31,68,.14);border:1px solid rgba(255,31,68,.35);color:#ff7587;font-family:'JetBrains Mono',monospace;font-weight:600}
+  .hl-cell{background:rgba(255,31,68,.13);color:#ff6b7d;font-weight:800;font-size:14px!important;font-family:'Saira Condensed',sans-serif;font-style:italic}
+  .note{font-size:12px;color:var(--sub);margin-top:10px;font-family:'Rajdhani',sans-serif;font-weight:500}
+  .fav{display:inline-flex;align-items:center;gap:7px;flex-wrap:wrap}
+  .fav .cnt{color:var(--sub);font-size:12px;font-family:'JetBrains Mono',monospace;margin-left:-2px}
+  .plc{display:inline-block;font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;font-size:18px;line-height:1;color:var(--text);padding-right:.18em}
+  .plc.g1,.plc.g2,.plc.g3{-webkit-background-clip:text;background-clip:text;color:transparent}
+  .plc.g1{background-image:linear-gradient(90deg,#f8d36a,#d99a16)}
+  .plc.g2{background-image:linear-gradient(90deg,#eef1f6,#aeb4c0)}
+  .plc.g3{background-image:linear-gradient(90deg,#f0a06b,#c46a32)}
+  .prize-rub{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;font-size:16px;background:linear-gradient(90deg,#f8d36a,#d99a16);-webkit-background-clip:text;background-clip:text;color:transparent;padding-right:.1em;white-space:nowrap}
+  .empty{padding:48px 0;text-align:center;color:var(--sub);font-size:15px;font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;letter-spacing:.04em}
+  .spinner{width:22px;height:22px;border:2px solid var(--border);border-top-color:var(--red);border-radius:50%;animation:spin .7s linear infinite;margin:0 auto}
+  /* читаемость таблицы персонажей */
+  tbody tr:hover td{background:#17171c}
+  tbody tr:hover td.nc{background:#1d1d22}
+  td.nc,th.nc{position:sticky;left:0;z-index:2;background:#131317}
+  th.nc{z-index:4;background:#101013}
+  .vrow td.nc{background:#101014}
+  .gb{border-left:2px solid #34343b!important}
+  tbody td.gb{font-weight:600;color:var(--text)}
+  td.ic,th.ic{text-align:center}
+  /* надёжное горизонтальное центрирование одиночных иконок (text-align не всегда центрирует img в ячейке) */
+  td.ic>img:only-child,th.ic>img:only-child{display:block;margin:0 auto}
+  td.ic img,th.ic img{vertical-align:middle}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  /* brand header */
+  .hdr{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:16px 28px;border-bottom:1px solid var(--border);background:rgba(11,11,13,.72);backdrop-filter:blur(12px)}
+  .brand{display:flex;align-items:center;gap:11px}
+  .brand .mk{height:42px;width:auto;display:block}
+  .brand .wm{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;font-size:25px;letter-spacing:.02em;background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent;padding-right:.16em}
+  .brand .suf{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;font-size:25px;color:#fff;text-transform:uppercase;margin-left:-4px}
+  .live{display:flex;align-items:center;gap:8px;font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;font-size:13px;letter-spacing:.05em;color:var(--sub)}
+  .live .dot{width:9px;height:9px;border-radius:50%;background:var(--red);box-shadow:0 0 0 0 rgba(255,31,68,.6);animation:pulse 1.8s infinite}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(255,31,68,.5)}70%{box-shadow:0 0 0 7px rgba(255,31,68,0)}100%{box-shadow:0 0 0 0 rgba(255,31,68,0)}}
+  .admin-link{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;font-size:14px;text-transform:uppercase;letter-spacing:.03em;color:var(--sub);text-decoration:none;padding:7px 14px;border:1px solid var(--border);border-radius:8px;transition:.15s}
+  .admin-link:hover{color:#fff;border-color:var(--red)}
+  .tabrow{border-bottom:1px solid var(--border);padding:0 22px;display:flex;background:rgba(11,11,13,.4)}
+  /* tournament scope tabs */
+  body>.tourrow{position:relative;z-index:40;display:flex;align-items:stretch;padding:0 22px;border-bottom:1px solid var(--border);background:rgba(16,16,20,.55)}
+  .tour-tab{position:relative;display:flex;flex-direction:column;justify-content:center;gap:3px;border:none;background:none;padding:11px 22px;cursor:pointer;text-align:left;transition:.15s;min-height:58px}
+  .tour-tab+.tour-tab{border-left:1px solid var(--line)}
+  .tour-tab .tt-main{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;font-size:17px;letter-spacing:.02em;color:var(--sub);transition:.15s;line-height:1}
+  .tour-tab .tt-sub{font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:500;color:#62626c;letter-spacing:.01em;max-width:230px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:1.1}
+  .tour-tab:hover .tt-main{color:var(--text)}
+  .tour-tab.active .tt-main{color:#fff}
+  .tour-tab.active .tt-sub{color:#ff7587}
+  .tour-tab.active::after{content:"";position:absolute;left:22px;right:22px;bottom:-1px;height:3px;border-radius:3px 3px 0 0;background:var(--grad)}
+  .tour-pick{padding-right:56px}
+  .tour-pick .tt-chev{position:absolute;right:15px;top:50%;transform:translateY(-50%);width:30px;height:15px;color:var(--sub);transition:color .15s,transform .2s;pointer-events:none;z-index:1}
+  .tour-pick:hover .tt-chev,.tour-pick.open .tt-chev{color:var(--red)}
+  .tour-pick.open .tt-chev{transform:translateY(-50%) rotate(180deg)}
+  /* custom tournament dropdown */
+  .tour-menu{position:absolute;top:calc(100% + 7px);left:-1px;min-width:260px;background:var(--card);border:1px solid var(--border);border-radius:11px;padding:6px;z-index:60;box-shadow:0 20px 46px rgba(0,0,0,.6),0 0 0 1px rgba(255,31,68,.08);display:flex;flex-direction:column;gap:2px;cursor:default;animation:menuIn .14s ease}
+  .tour-menu[hidden]{display:none}
+  @keyframes menuIn{from{opacity:0;transform:translateY(-5px)}to{opacity:1;transform:translateY(0)}}
+  .tour-menu .tm-head{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;font-size:11px;letter-spacing:.07em;color:var(--sub);padding:5px 11px 6px;border-bottom:1px solid var(--line);margin-bottom:3px}
+  .tour-menu .tm-item{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:8px;cursor:pointer;font-family:'Rajdhani',sans-serif;font-weight:600;font-size:15px;color:var(--text);transition:.12s;white-space:nowrap}
+  .tour-menu .tm-item::before{content:"";width:7px;height:7px;border-radius:50%;background:#3a3a42;flex-shrink:0;transition:.12s}
+  .tour-menu .tm-item:hover{background:var(--panel-2);color:#fff}
+  .tour-menu .tm-item:hover::before{background:var(--sub)}
+  .tour-menu .tm-item.sel{background:rgba(255,31,68,.13);color:#fff}
+  .tour-menu .tm-item.sel::before{background:var(--red);box-shadow:0 0 8px rgba(255,31,68,.7)}
+  .tour-menu .tm-empty{padding:14px 12px;text-align:center;color:var(--sub);font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:700;text-transform:uppercase;font-size:13px;letter-spacing:.03em}
+</style>
+</head>
+<body>
+
+<!-- brand faceted background -->
+<svg class="facets" preserveAspectRatio="xMidYMid slice" viewBox="0 0 1440 900">
+  <defs>
+    <pattern id="poly" width="240" height="210" patternUnits="userSpaceOnUse">
+      <rect width="240" height="210" fill="#0b0b0d"/>
+      <polygon points="0,0 130,55 0,120" fill="#0e0e11"/>
+      <polygon points="130,55 240,0 240,110 150,140" fill="#0d0d10"/>
+      <polygon points="0,120 150,140 70,210 0,210" fill="#101014"/>
+      <polygon points="150,140 240,110 240,210 130,210" fill="#0c0c0f"/>
+      <polygon points="70,210 130,210 150,140" fill="#0f0f13"/>
+    </pattern>
+  </defs>
+  <rect width="1440" height="900" fill="url(#poly)"/>
+</svg>
+
+<div class="topstripe"></div>
+
+<!-- Header -->
+<div class="hdr">
+  <div style="display:flex;align-items:center;gap:20px">
+    <div class="brand">
+      <img class="mk" src="nexus-logo.png" alt="NEXUS">
+      <span class="wm">ZZZ</span><span class="suf">STATS</span>
+    </div>
+  </div>
+  <div style="display:flex;align-items:center;gap:16px">
+    <span class="live"><span class="dot"></span> NEXUS SHIYU</span>
+    <a href="index.html" class="admin-link">← На главную</a>
+    <a href="admin.html" class="admin-link">Управление →</a>
+  </div>
+</div>
+
+<!-- Tournament scope tabs (Liquipedia-style) -->
+<div class="tourrow">
+  <button class="tour-tab active" data-mode="all">
+    <span class="tt-main">Все турниры</span>
+    <span class="tt-sub">общая статистика</span>
+  </button>
+  <button class="tour-tab" data-mode="last">
+    <span class="tt-main">ТЕКУЩИЙ ТУРНИР</span>
+    <span class="tt-sub" id="last-tour-name">загрузка…</span>
+  </button>
+  <div class="tour-tab tour-pick" data-mode="pick">
+    <span class="tt-main">Выбрать турнир</span>
+    <span class="tt-sub" id="pick-sub">из прошедших</span>
+    <svg class="tt-chev" viewBox="0 0 28 14" aria-hidden="true"><path d="M3 3.5 L14 11 L25 3.5" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <div class="tour-menu" id="tour-menu" hidden></div>
+  </div>
+</div>
+
+<!-- Tabs -->
+<div class="tabrow">
+  <button class="tab-btn active" data-tab="chars">Персонажи</button>
+  <button class="tab-btn" data-tab="players">Игроки</button>
+  <button class="tab-btn" data-tab="amps">Амплификаторы</button>
+  <button class="tab-btn" data-tab="ext">Расширенная</button>
+</div>
+
+<!-- Content -->
+<div style="padding:20px 24px">
+  <div id="loading" style="padding:60px 0;text-align:center"><div class="spinner"></div></div>
+
+  <!-- CHARACTERS -->
+  <div id="tab-chars" class="tab-pane" style="display:none">
+    <div class="tbl-wrap">
+      <table>
+        <thead id="chars-head"></thead>
+        <tbody id="chars-body"><tr><td class="empty" colspan="40">Нет данных</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- PLAYERS -->
+  <div id="tab-players" class="tab-pane" style="display:none">
+    <div style="display:flex;gap:2px;border:1px solid var(--border);border-radius:6px;overflow:hidden;width:fit-content;margin-bottom:14px">
+      <button id="seg-v" class="seg-btn on" onclick="setView('v')">По встречам (Bo2)</button>
+      <button id="seg-m" class="seg-btn" onclick="setView('m')">По матчам</button>
+      <button id="seg-r" class="seg-btn" onclick="setView('r')">Ростеры</button>
+      <button id="seg-x" class="seg-btn" onclick="setView('x')">Разное</button>
+    </div>
+    <div id="players-area" class="tbl-wrap">
+      <table><tbody><tr><td class="empty" colspan="12">Нет данных</td></tr></tbody></table>
+    </div>
+  </div>
+
+  <!-- AMPLIFIERS -->
+  <div id="tab-amps" class="tab-pane" style="display:none">
+    <div class="tbl-wrap">
+      <table>
+        <thead id="amps-head"></thead>
+        <tbody id="amps-body"><tr><td class="empty" colspan="8">Нет данных</td></tr></tbody>
+      </table>
+    </div>
+    <p class="note">«Пики» — взятия персонажа с этим амплификатором · нажми на строку, чтобы увидеть персонажей и кост на каждом · WR пол-очка за ничью</p>
+  </div>
+
+  <!-- EXTENDED -->
+  <div id="tab-ext" class="tab-pane" style="display:none">
+    <div class="tbl-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th colspan="5" class="th-g">Драфты</th>
+            <th colspan="3" class="th-g">Таймер</th>
+            <th colspan="4" class="th-g">Рестарты</th>
+          </tr>
+          <tr>
+            <th>Σ игр</th><th>W fp</th><th>WR fp</th><th>W double</th><th>WR double</th>
+            <th>AVG</th><th>AVG W</th><th>AVG L</th>
+            <th>Σ</th><th>AVG / игра</th><th>AVG W</th><th>AVG L</th>
+          </tr>
+        </thead>
+        <tbody id="ext-body"><tr><td class="empty" colspan="12">Нет данных</td></tr></tbody>
+      </table>
+    </div>
+    <p class="note">«Σ игр» — по отдельным матчам · победитель = меньший центральный таймер · WR пол-очка за ничью</p>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>document.write('<script src="web/icons.js?v='+Date.now()+'"><\/script>');</script>
+<script>
+const SB_URL='https://zoavnckfbfiejxfjakue.supabase.co';
+const SB_KEY='sb_publishable_37RZBsmdp3O1i795EuEfeg_vFpdPTFZ';
+const sb=supabase.createClient(SB_URL,SB_KEY);
+
+const ROLES={atk:{bg:'#3b1010',fg:'#fca5a5'},stun:{bg:'#0f1f3b',fg:'#93c5fd'},rupt:{bg:'#2d1a00',fg:'#fcd34d'},sup:{bg:'#0a2218',fg:'#6ee7b7'},def:{bg:'#0a2218',fg:'#86efac'},ano:{bg:'#1a0d3b',fg:'#c4b5fd'}};
+
+let S={tournaments:[],characters:[],players:[],encounters:[],matches:[],picks:[],bans:[],costs:{},rosters:{},sigs:[],allCosts:[],tour:'__all__',view:'v',cSort:{k:'name',asc:true},aSort:{k:'pk',asc:false}};
+
+const ALL='__all__';
+const f1=v=>typeof v==='number'?v.toFixed(2)+'%':v;
+const wr=(w,d,t)=>t?(w+0.5*d)/t*100:0;
+const wc=v=>v>55?'g':v<45?'r':'m';
+const pctT=(n,t)=>t?n/t*100:0;
+const fSec=s=>{if(!s&&s!==0)return'—';return`${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`};
+const avg=a=>a.length?Math.round(a.reduce((x,y)=>x+y,0)/a.length):null;
+const cid=s=>s.replace(/[^A-Za-z0-9]/g,'_');
+
+function pic(name,role){const c=(S.characters||[]).find(x=>x.name===name)||{name,role};return iconChar(c,28);}
+
+async function loadAll(){
+  document.getElementById('loading').style.display='block';
+  document.querySelectorAll('.tab-pane').forEach(t=>t.style.display='none');
+
+  const[{data:chars},{data:pls},{data:sigs},{data:allCosts}]=await Promise.all([
+    sb.from('characters').select('*'),
+    sb.from('players').select('*'),
+    sb.from('signatures').select('*'),
+    sb.from('tournament_costs').select('*')
+  ]);
+  S.characters=chars||[];S.players=pls||[];S.sigs=sigs||[];S.allCosts=allCosts||[];
+  S.charMap={};S.characters.forEach(c=>S.charMap[c.id]=c);
+  S.playerMap={};S.players.forEach(p=>S.playerMap[p.id]=p);
+
+  let encQ=sb.from('encounters').select('*');
+  if(S.tour!==ALL)encQ=encQ.eq('tournament_id',S.tour);
+  const{data:encs}=await encQ;
+  S.encounters=encs||[];
+  const encIds=S.encounters.map(e=>e.id);
+  S.matchMap={};S.encMap={};
+  S.encounters.forEach(e=>S.encMap[e.id]=e);
+
+  if(encIds.length){
+    const{data:ms}=await sb.from('matches').select('*').in('encounter_id',encIds);
+    S.matches=ms||[];S.matches.forEach(m=>S.matchMap[m.id]=m);
+    const mIds=S.matches.map(m=>m.id);
+    if(mIds.length){
+      const[{data:pks},{data:bns}]=await Promise.all([
+        sb.from('match_picks').select('*').in('match_id',mIds),
+        sb.from('match_bans').select('*').in('match_id',mIds)
+      ]);
+      S.picks=pks||[];S.bans=bns||[];
+    }else{S.picks=[];S.bans=[];}
+  }else{S.matches=[];S.picks=[];S.bans=[];}
+
+  S.costs={};S.rosters={};
+  if(S.tour!==ALL){
+    const[{data:cs},{data:rs}]=await Promise.all([
+      sb.from('tournament_costs').select('*').eq('tournament_id',S.tour),
+      sb.from('player_rosters').select('*').eq('tournament_id',S.tour)
+    ]);
+    (cs||[]).forEach(c=>{if(!S.costs[c.character_id])S.costs[c.character_id]={};S.costs[c.character_id][c.mindscape]=c;});
+    (rs||[]).forEach(r=>{if(!S.rosters[r.player_id])S.rosters[r.player_id]=[];S.rosters[r.player_id].push(r);});
+  }
+
+  // все ростеры по всем турнирам — для вкладки «Ростеры» (среднее по турнирам)
+  const{data:allRs}=await sb.from('player_rosters').select('*');
+  S.rostersRaw=allRs||[];
+
+  document.getElementById('loading').style.display='none';
+  renderAll();
+}
+
+function computeChars(){
+  const T=S.matches.length;
+  const statMap={};
+  const banCount={};
+
+  S.picks.forEach(pk=>{
+    const m=S.matchMap[pk.match_id];if(!m)return;
+    const key=pk.character_id+'_'+pk.mindscape;
+    if(!statMap[key])statMap[key]={cid:pk.character_id,ms:pk.mindscape,pk:0,pw:0,pd:0,fp:0,fw:0,fd:0,dp:0,dw:0,dd:0,sp:0,sw:0,sd:0};
+    const s=statMap[key];
+    s.pk++;
+    const isW=m.winner_id===pk.player_id,isD=m.is_draw;
+    if(isW)s.pw++;else if(isD)s.pd++;
+    if(pk.is_fp){s.fp++;if(isW)s.fw++;else if(isD)s.fd++;}
+    if(pk.is_double){s.dp++;if(isW)s.dw++;else if(isD)s.dd++;}
+    if(pk.has_signature){s.sp++;if(isW)s.sw++;else if(isD)s.sd++;}
+  });
+  S.bans.forEach(b=>{banCount[b.character_id]=(banCount[b.character_id]||0)+1;});
+
+  const rosterCount={};
+  Object.values(S.rosters).forEach(arr=>arr.forEach(r=>{const k=r.character_id+'_'+r.mindscape;rosterCount[k]=(rosterCount[k]||0)+1;}));
+  const totalPlayers=Object.keys(S.rosters).length||1;
+
+  // Group by character
+  const groups={};
+  S.characters.forEach(c=>groups[c.id]={char:c,variants:[]});
+
+  Object.values(statMap).forEach(s=>{
+    if(!groups[s.cid])return;
+    const bn=banCount[s.cid]||0;
+    const cost=S.costs[s.cid]?.[s.ms];
+    const rs=rosterCount[s.cid+'_'+s.ms]||0;
+    groups[s.cid].variants.push({
+      ms:s.ms,cost:cost?.cost??'—',sc:cost?.sig_cost??'—',
+      pk:s.pk,pw:s.pw,pd:s.pd,pl:s.pk-s.pw-s.pd,pwr:wr(s.pw,s.pd,s.pk),ppt:pctT(s.pk,T),
+      fp:s.fp,fw:s.fw,fd:s.fd,fl:s.fp-s.fw-s.fd,fwr:wr(s.fw,s.fd,s.fp),
+      dp:s.dp,dw:s.dw,dd:s.dd,dl:s.dp-s.dw-s.dd,dwr:wr(s.dw,s.dd,s.dp),
+      bn,bpt:pctT(bn,T),pbn:s.pk+bn,pbpt:pctT(s.pk+bn,T),
+      rs,rspt:pctT(rs,totalPlayers),
+      sp:s.sp,sw:s.sw,sd:s.sd,sl:s.sp-s.sw-s.sd,swr:wr(s.sw,s.sd,s.sp),spt:pctT(s.sp,T)
+    });
+  });
+
+  const result=[];
+  Object.values(groups).forEach(g=>{
+    if(!g.variants.length){
+      // персонаж ни разу не пикнут — показываем строку с нулями/прочерками
+      const cidv=g.char.id, bn=banCount[cidv]||0;
+      let rs=0;Object.keys(rosterCount).forEach(k=>{if(k.slice(0,cidv.length+1)===cidv+'_')rs+=rosterCount[k];});
+      const totalP0=Object.keys(S.rosters).length||1;
+      result.push({char:g.char,variants:[],agg:{
+        pk:0,pw:0,pd:0,pl:0,pwr:'—',ppt:0,
+        fp:0,fw:0,fd:0,fl:0,fwr:'—',
+        dp:0,dw:0,dd:0,dl:0,dwr:'—',
+        bn,bpt:pctT(bn,T),pbn:bn,pbpt:pctT(bn,T),
+        rs,rspt:pctT(rs,totalP0),
+        sp:0,sw:0,sd:0,sl:0,swr:'—',spt:0,
+        cost:'—',sc:'—'
+      }});
+      return;
+    }
+    g.variants.sort((a,b)=>a.ms-b.ms);
+    const sum={pk:0,pw:0,pd:0,fp:0,fw:0,fd:0,dp:0,dw:0,dd:0,bn:0,rs:0,sp:0,sw:0,sd:0};
+    g.variants.forEach(v=>Object.keys(sum).forEach(k=>sum[k]+=typeof v[k]==='number'?v[k]:0));
+    const T2=S.matches.length,totalP=Object.keys(S.rosters).length||1;
+    const agg={...sum,
+      pl:sum.pk-sum.pw-sum.pd,fl:sum.fp-sum.fw-sum.fd,dl:sum.dp-sum.dw-sum.dd,sl:sum.sp-sum.sw-sum.sd,
+      pwr:wr(sum.pw,sum.pd,sum.pk),fwr:wr(sum.fw,sum.fd,sum.fp),dwr:wr(sum.dw,sum.dd,sum.dp),swr:wr(sum.sw,sum.sd,sum.sp),
+      ppt:pctT(sum.pk,T2),bpt:pctT(sum.bn,T2),pbn:sum.pk+sum.bn,pbpt:pctT(sum.pk+sum.bn,T2),
+      rspt:pctT(sum.rs,totalP),spt:pctT(sum.sp,T2)
+    };
+    const costs=[...new Set(g.variants.map(v=>v.cost).filter(c=>c!=='—'))].sort((a,b)=>a-b);
+    const scs=[...new Set(g.variants.map(v=>v.sc).filter(c=>c!=='—'))].sort((a,b)=>a-b);
+    agg.cost=costs.length===0?'—':costs.length===1?costs[0]:`${costs[0]}–${costs[costs.length-1]}`;
+    agg.sc=scs.length===0?'—':scs.length===1?scs[0]:`${scs[0]}–${scs[scs.length-1]}`;
+    result.push({char:g.char,agg,variants:g.variants});
+  });
+  return result;
+}
+
+function cellsHTML(d,isAll){
+  // WR: прочерк, если в сегменте 0 игр (как на Liquipedia)
+  const wrc=(v,tot)=>tot?`<td class="${wc(v)}">${f1(v)}</td>`:`<td class="m">—</td>`;
+  const co=isAll?'':`<td class="gb">${d.cost}</td>`;
+  return `${co}<td class="gb">${d.pk}</td><td>${d.pw}</td><td class="m">${d.pd}</td><td>${d.pl}</td>${wrc(d.pwr,d.pk)}<td>${f1(d.ppt)}</td>`+
+    `<td class="gb">${d.fp}</td><td>${d.fw}</td><td class="m">${d.fd}</td><td>${d.fl}</td>${wrc(d.fwr,d.fp)}`+
+    `<td class="gb">${d.dp}</td><td>${d.dw}</td><td class="m">${d.dd}</td><td>${d.dl}</td>${wrc(d.dwr,d.dp)}`+
+    `<td class="gb">${d.bn}</td><td>${f1(d.bpt)}</td><td class="gb">${d.pbn}</td><td>${f1(d.pbpt)}</td><td class="gb">${d.rs}</td><td>${f1(d.rspt)}</td>`;
+}
+
+function renderChars(data){
+  const isAll=S.tour===ALL;
+  const co=isAll?'':'<th rowspan="2" class="nc gb th-g" onclick="sortC(\'cost\')" title="Стоимость персонажа">Кост</th>';
+  const TS='Всего',TW='Победы',TD='Ничьи',TL='Поражения',TWR='Винрейт (ничья = ½)',TPT='Доля от всех матчей';
+  document.getElementById('chars-head').innerHTML=`<tr>
+    <th rowspan="2" class="nc th-g" onclick="sortC('name')">Имя</th>
+    <th rowspan="2" class="ic th-g" onclick="sortC('rarity')" title="Редкость">Редкость</th>
+    <th rowspan="2" class="ic th-g" onclick="sortC('role')" title="Роль">Роль</th>
+    <th rowspan="2" class="ic th-g" onclick="sortC('element')" title="Атрибут">Атрибут</th>${co}
+    <th colspan="6" class="th-g gb">Пики</th><th colspan="5" class="th-g gb">Фп</th><th colspan="5" class="th-g gb">Дабл</th>
+    <th colspan="2" class="th-g gb">Баны</th><th colspan="2" class="th-g gb">Пики+баны</th><th colspan="2" class="th-g gb">В ростере</th>
+  </tr><tr>
+    <th class="gb" onclick="sortC('pk')" title="${TS}">Σ</th><th onclick="sortC('pw')" title="${TW}">W</th><th title="${TD}">D</th><th onclick="sortC('pl')" title="${TL}">L</th><th onclick="sortC('pwr')" title="${TWR}">WR%</th><th onclick="sortC('ppt')" title="${TPT}">%T</th>
+    <th class="gb" onclick="sortC('fp')" title="${TS}">Σ</th><th onclick="sortC('fw')" title="${TW}">W</th><th title="${TD}">D</th><th onclick="sortC('fl')" title="${TL}">L</th><th onclick="sortC('fwr')" title="${TWR}">WR%</th>
+    <th class="gb" onclick="sortC('dp')" title="${TS}">Σ</th><th onclick="sortC('dw')" title="${TW}">W</th><th title="${TD}">D</th><th onclick="sortC('dl')" title="${TL}">L</th><th onclick="sortC('dwr')" title="${TWR}">WR%</th>
+    <th class="gb" onclick="sortC('bn')" title="Сколько раз забанен">Σ</th><th onclick="sortC('bpt')" title="${TPT}">%T</th><th class="gb" onclick="sortC('pbn')" title="Пики + баны">Σ</th><th onclick="sortC('pbpt')" title="${TPT}">%T</th><th class="gb" onclick="sortC('rs')" title="Сколько игроков взяли в ростер">Σ</th><th onclick="sortC('rspt')" title="Доля игроков">%T</th>
+  </tr>`;
+
+  if(!data.length){document.getElementById('chars-body').innerHTML=`<tr><td class="empty" colspan="40">Нет данных для этого турнира</td></tr>`;return;}
+
+  const k=S.cSort.k,asc=S.cSort.asc;
+  const charKeys={name:'name',rarity:'rarity',role:'role',element:'element'};
+  data.sort((a,b)=>{
+    let va=charKeys[k]?(a.char[charKeys[k]]||''):(typeof a.agg[k]==='number'?a.agg[k]:parseFloat(a.agg[k])||0);
+    let vb=charKeys[k]?(b.char[charKeys[k]]||''):(typeof b.agg[k]==='number'?b.agg[k]:parseFloat(b.agg[k])||0);
+    return typeof va==='string'?(asc?va.localeCompare(vb):vb.localeCompare(va)):(asc?va-vb:vb-va);
+  });
+
+  let h='';
+  data.forEach(item=>{
+    const c=item.char,isS=c.rarity==='S',id=cid(c.name);
+    const photo=iconChar(c,24);
+    const nm=isS
+      ?`<div style="display:flex;align-items:center;gap:6px;cursor:pointer" onclick="toggleV('${id}')">`+
+        `${photo}<span>${c.name}</span><span class="chev" id="chev-${id}">▾</span></div>`
+      :`<div style="display:flex;align-items:center;gap:6px">${photo}<span>${c.name}</span></div>`;
+    const idCols=`<td class="ic">${iconRarity(c.rarity,18)}</td><td class="ic">${iconRole(c.role,18)}</td><td class="ic">${iconElement(c.element,18)}</td>`;
+    h+=`<tr><td class="nc">${nm}</td>${idCols}${cellsHTML(item.agg,isAll)}</tr>`;
+    if(isS)item.variants.forEach(v=>{
+      h+=`<tr class="vrow" data-parent="${id}" style="display:none"><td class="nc"><span class="ms-tag">M${v.ms}</span> ${c.name}</td><td></td><td></td><td></td>${cellsHTML(v,isAll)}</tr>`;
+    });
+  });
+  document.getElementById('chars-body').innerHTML=h;
+}
+
+function toggleV(id){
+  let shown=false;
+  document.querySelectorAll(`[data-parent="${id}"]`).forEach(r=>{const hid=r.style.display==='none';r.style.display=hid?'table-row':'none';shown=hid;});
+  const ch=document.getElementById('chev-'+id);if(ch)ch.textContent=shown?'▴':'▾';
+}
+function sortC(k){S.cSort.asc=S.cSort.k===k?!S.cSort.asc:false;S.cSort.k=k;renderAll();}
+
+function computePlayers(){
+  const mStats={},vStats={};
+  S.matches.forEach(m=>{
+    const enc=S.encMap[m.encounter_id];if(!enc)return;
+    [[enc.player1_id,m.player1_timer_sec,m.player1_restarts],[enc.player2_id,m.player2_timer_sec,m.player2_restarts]].forEach(([pid,timer,rests])=>{
+      if(!mStats[pid])mStats[pid]={m:0,w:0,d:0,l:0,fpm:0,fpw:0,fpd:0,dm:0,dw2:0,dd:0,rests:0,wtimers:[],ltimers:[]};
+      const s=mStats[pid];s.m++;
+      if(m.is_draw)s.d++;else if(m.winner_id===pid)s.w++;else s.l++;
+      s.rests+=rests||0;
+      const won=m.winner_id===pid;
+      if(timer){if(won)s.wtimers.push(timer);else if(!m.is_draw)s.ltimers.push(timer);}
+      if(m.fp_player_id===pid){s.fpm++;if(m.is_draw)s.fpd++;else if(won)s.fpw++;}
+      else{s.dm++;if(m.is_draw)s.dd++;else if(won)s.dw2++;}
+    });
+  });
+  S.encounters.forEach(enc=>{
+    [enc.player1_id,enc.player2_id].forEach(pid=>{
+      if(!vStats[pid])vStats[pid]={v:0,w:0,l:0,timers:[]};
+      const s=vStats[pid];s.v++;
+      if(enc.winner_id===pid)s.w++;else s.l++;
+      const ms=S.matches.filter(m=>m.encounter_id===enc.id);
+      let tot=0;
+      ms.forEach(m=>{const t=enc.player1_id===pid?m.player1_timer_sec:m.player2_timer_sec;if(t)tot+=t;});
+      if(tot)s.timers.push(tot);
+    });
+  });
+  return{mStats,vStats};
+}
+
+function rosterCols(pid){
+  const r=S.rosters[pid]||[];
+  if(!r.length)return'<td>—</td>'.repeat(5);
+  let atk=0,stun=0,rupt=0,supdef=0,ano=0;
+  r.forEach(x=>{const c=S.charMap[x.character_id];if(!c)return;
+    if(c.role==='atk')atk++;else if(c.role==='stun')stun++;else if(c.role==='rupt')rupt++;else if(c.role==='sup'||c.role==='def')supdef++;else if(c.role==='ano')ano++;
+  });
+  return`<td>${atk}</td><td>${stun}</td><td>${rupt}</td><td>${supdef}</td><td>${ano}</td>`;
+}
+
+function renderPV(vStats,isAll){
+  const head=`<thead><tr><th class="nc">Ник</th><th onclick="sortP(1)">Σ встреч</th><th onclick="sortP(2)">W</th><th onclick="sortP(3)">L</th><th onclick="sortP(4)">WR%</th><th onclick="sortP(5)">AVG таймер</th></tr></thead>`;
+  const activePl=S.players.filter(p=>vStats[p.id]);
+  if(!activePl.length){document.getElementById('players-area').innerHTML=`<table><tbody><tr><td class="empty" colspan="6">Нет данных</td></tr></tbody></table>`;return;}
+  const rows=activePl.map(p=>{
+    const s=vStats[p.id]||{v:0,w:0,l:0,timers:[]};
+    const wrPct=wr(s.w,0,s.v);
+    const avgT=fSec(avg(s.timers));
+    return`<tr><td class="nc"><div style="display:flex;align-items:center;gap:6px">${pic(p.nickname,'')}<span>${p.nickname}</span></div></td><td>${s.v}</td><td>${s.w}</td><td>${s.l}</td><td class="${wc(wrPct)}">${f1(wrPct)}</td><td>${avgT}</td></tr>`;
+  });
+  document.getElementById('players-area').innerHTML=`<table>${head}<tbody>${rows.join('')}</tbody></table>`;
+}
+
+function renderPM(mStats,isAll){
+  const head=`<thead><tr><th class="nc">Ник</th><th onclick="sortP(1)">Σ матч</th><th onclick="sortP(2)">W</th><th>D</th><th onclick="sortP(4)">L</th><th onclick="sortP(5)">WR%</th><th onclick="sortP(6)">WR фп%</th><th onclick="sortP(7)">WR дабл%</th><th onclick="sortP(8)">Σ рест</th><th onclick="sortP(9)">AVG рест</th><th onclick="sortP(10)">AVG таймер</th></tr></thead>`;
+  const activePl=S.players.filter(p=>mStats[p.id]);
+  if(!activePl.length){document.getElementById('players-area').innerHTML=`<table><tbody><tr><td class="empty" colspan="11">Нет данных</td></tr></tbody></table>`;return;}
+  const rows=activePl.map(p=>{
+    const s=mStats[p.id]||{m:0,w:0,d:0,l:0,fpm:0,fpw:0,fpd:0,dm:0,dw2:0,dd:0,rests:0,wtimers:[],ltimers:[]};
+    const wrPct=wr(s.w,s.d,s.m),wrfp=wr(s.fpw,s.fpd,s.fpm),wrdbl=wr(s.dw2,s.dd,s.dm);
+    const allT=[...s.wtimers,...s.ltimers];
+    return`<tr><td class="nc"><div style="display:flex;align-items:center;gap:6px">${pic(p.nickname,'')}<span>${p.nickname}</span></div></td><td>${s.m}</td><td>${s.w}</td><td class="m">${s.d}</td><td>${s.l}</td><td class="${wc(wrPct)}">${f1(wrPct)}</td><td class="${wc(wrfp)}">${f1(wrfp)}</td><td class="${wc(wrdbl)}">${f1(wrdbl)}</td><td>${s.rests}</td><td>${s.m?(s.rests/s.m).toFixed(2):'—'}</td><td>${fSec(avg(allT))}</td></tr>`;
+  });
+  document.getElementById('players-area').innerHTML=`<table>${head}<tbody>${rows.join('')}</tbody></table>`;
+}
+
+function setView(v){
+  S.view=v;pSort.idx=null;
+  document.getElementById('seg-v').className='seg-btn'+(v==='v'?' on':'');
+  document.getElementById('seg-m').className='seg-btn'+(v==='m'?' on':'');
+  document.getElementById('seg-r').className='seg-btn'+(v==='r'?' on':'');
+  document.getElementById('seg-x').className='seg-btn'+(v==='x'?' on':'');
+  const isAll=S.tour===ALL;
+  if(v==='r'){renderRosters(isAll);return;}
+  if(v==='x'){renderMisc();return;}
+  const{mStats,vStats}=computePlayers();
+  if(v==='v')renderPV(vStats,isAll);else renderPM(mStats,isAll);
+}
+
+// Ростеры: для конкретного турнира — счётчики ролей; для «Все турниры» —
+// среднее число персонажей каждой роли по турнирам, где игрок присутствовал.
+const RBUCK={atk:'atk',stun:'stun',rupt:'rupt',sup:'sd',def:'sd',ano:'ano'};
+function computeRosters(isAll){
+  const raw=S.rostersRaw||[];
+  const map={}; // map[pid][tid] = {atk,stun,rupt,sd,ano}
+  raw.forEach(r=>{
+    if(!isAll && r.tournament_id!==S.tour)return;
+    const c=S.charMap[r.character_id];if(!c)return;
+    const b=RBUCK[c.role];if(!b)return;
+    (map[r.player_id]=map[r.player_id]||{});
+    (map[r.player_id][r.tournament_id]=map[r.player_id][r.tournament_id]||{atk:0,stun:0,rupt:0,sd:0,ano:0});
+    map[r.player_id][r.tournament_id][b]++;
+  });
+  const out={};
+  Object.entries(map).forEach(([pid,tours])=>{
+    const tids=Object.keys(tours);
+    const agg={atk:0,stun:0,rupt:0,sd:0,ano:0};
+    tids.forEach(tid=>['atk','stun','rupt','sd','ano'].forEach(k=>agg[k]+=tours[tid][k]));
+    if(isAll){const n=tids.length||1;['atk','stun','rupt','sd','ano'].forEach(k=>agg[k]=agg[k]/n);}
+    out[pid]={agg,n:tids.length};
+  });
+  return out;
+}
+function renderRosters(isAll){
+  const data=computeRosters(isAll);
+  const fmt=v=>isAll?v.toFixed(1):String(v);
+  const head=`<thead><tr><th class="nc">Ник</th>`+
+    `<th class="ic" title="Атака" onclick="sortP(1)">${iconRole('atk',18)}</th>`+
+    `<th class="ic" title="Стан" onclick="sortP(2)">${iconRole('stun',18)}</th>`+
+    `<th class="ic" title="Разрыв" onclick="sortP(3)">${iconRole('rupt',18)}</th>`+
+    `<th class="ic" title="Саппорт / Защита" onclick="sortP(4)"><span style="display:inline-flex;align-items:center;justify-content:center;gap:3px">${iconRole('sup',18)}<span style="color:var(--sub)">/</span>${iconRole('def',18)}</span></th>`+
+    `<th class="ic" title="Аномалия" onclick="sortP(5)">${iconRole('ano',18)}</th>`+
+    `${isAll?'<th class="ic" title="Турниров с ростером" onclick="sortP(6)">Σ турн.</th>':''}</tr></thead>`;
+  const activePl=S.players.filter(p=>data[p.id]);
+  if(!activePl.length){document.getElementById('players-area').innerHTML=`<table>${head}<tbody><tr><td class="empty" colspan="7">Нет данных по ростерам</td></tr></tbody></table>`;return;}
+  const rows=activePl.map(p=>{
+    const a=data[p.id].agg;
+    return`<tr><td class="nc"><div style="display:flex;align-items:center;gap:6px">${pic(p.nickname,'')}<span>${p.nickname}</span></div></td>`+
+      `<td class="ic">${fmt(a.atk)}</td><td class="ic">${fmt(a.stun)}</td><td class="ic">${fmt(a.rupt)}</td><td class="ic">${fmt(a.sd)}</td><td class="ic">${fmt(a.ano)}</td>`+
+      `${isAll?`<td class="ic">${data[p.id].n}</td>`:''}</tr>`;
+  });
+  document.getElementById('players-area').innerHTML=`<table>${head}<tbody>${rows.join('')}</tbody></table>`;
+}
+
+// Разное: любимый персонаж (по пикам, без A-ранга), Σ матчей (встреч),
+// возраст, Σ турниров, наивысшее место, призовые ₽. Уважает фильтр турнира.
+function computeMisc(){
+  const out={};
+  S.players.forEach(p=>out[p.id]={fav:[],favN:0,matches:0,tours:new Set()});
+  S.encounters.forEach(enc=>{
+    [enc.player1_id,enc.player2_id].forEach(pid=>{
+      if(!out[pid])return;
+      out[pid].matches++;
+      if(enc.tournament_id!=null)out[pid].tours.add(enc.tournament_id);
+    });
+  });
+  const pickCnt={}; // pickCnt[pid][cid] — считаем все ранги
+  S.picks.forEach(pk=>{
+    if(!S.charMap[pk.character_id])return;
+    (pickCnt[pk.player_id]=pickCnt[pk.player_id]||{});
+    pickCnt[pk.player_id][pk.character_id]=(pickCnt[pk.player_id][pk.character_id]||0)+1;
+  });
+  Object.entries(pickCnt).forEach(([pid,m])=>{
+    if(!out[pid])return;
+    const max=Math.max(...Object.values(m));
+    let tied=Object.keys(m).filter(cid=>m[cid]===max);
+    // A-ранги прячем только при ничьей; если в ничьей одни A — показываем одного случайного
+    if(tied.length>1){
+      const sOnly=tied.filter(cid=>S.charMap[cid].rarity!=='A');
+      tied=sOnly.length?sOnly:[tied[Math.floor(Math.random()*tied.length)]];
+    }
+    out[pid].fav=tied;
+    out[pid].favN=max;
+  });
+  return out;
+}
+function placeCell(pl,cnt){
+  if(pl==null||pl==='')return'—';
+  const cls=(pl===1||pl===2||pl===3)?' g'+pl:'';
+  const c=(cnt!=null&&cnt>1)?` <span class="cnt">(${cnt})</span>`:'';
+  return`<span class="plc${cls}">${pl} место</span>${c}`;
+}
+function renderMisc(){
+  const data=computeMisc();
+  const head=`<thead><tr><th class="nc">Ник</th><th>Любимый персонаж</th><th onclick="sortP(2)">Σ матчей</th><th onclick="sortP(3)">Σ турниров</th><th onclick="sortP(4)">Наивысшее место</th><th onclick="sortP(5)">Призовые ₽</th><th onclick="sortP(6)">Возраст</th></tr></thead>`;
+  // показываем всех игроков, у кого есть встречи в текущем фильтре
+  const activePl=S.players.filter(p=>data[p.id]&&data[p.id].matches);
+  if(!activePl.length){document.getElementById('players-area').innerHTML=`<table>${head}<tbody><tr><td class="empty" colspan="7">Нет данных</td></tr></tbody></table>`;return;}
+  const rows=activePl.map(p=>{
+    const d=data[p.id];
+    const fav=d.fav.length
+      ? `<span class="fav">${d.fav.map(cid=>pic(S.charMap[cid].name,'')).join('')}${d.favN>1?`<span class="cnt">(${d.favN})</span>`:''}</span>`
+      : '—';
+    const pr=S.playerMap[p.id]?.prize;
+    const prize=pr!=null?`<span class="prize-rub">${String(pr).replace(/\B(?=(\d{3})+(?!\d))/g,' ')} ₽</span>`:'—';
+    return`<tr><td class="nc"><div style="display:flex;align-items:center;gap:6px">${pic(p.nickname,'')}<span>${p.nickname}</span></div></td>`+
+      `<td>${fav}</td><td>${d.matches}</td><td>${d.tours.size}</td><td>${placeCell(p.highest_place,p.highest_place_count)}</td><td>${prize}</td><td>${p.age??'—'}</td></tr>`;
+  });
+  document.getElementById('players-area').innerHTML=`<table>${head}<tbody>${rows.join('')}</tbody></table>`;
+}
+
+// Универсальная сортировка таблицы игроков по индексу колонки (работает для любой
+// из вкладок: По встречам / По матчам / Ростеры / Разное). Парсит числа, проценты,
+// таймеры mm:ss, призовые «1 000 ₽», «N место»; «—»/пусто всегда уходят в конец.
+let pSort={idx:null,asc:true};
+function sortP(idx){
+  const tbl=document.querySelector('#players-area table');
+  const tb=tbl&&tbl.tBodies[0];if(!tb)return;
+  const rows=[...tb.rows].filter(r=>!r.querySelector('.empty'));
+  if(rows.length<2)return;
+  pSort.asc=pSort.idx===idx?!pSort.asc:false;pSort.idx=idx;
+  const asc=pSort.asc;
+  const parse=txt=>{
+    txt=(txt||'').trim();
+    if(txt===''||txt==='—')return{n:null,s:''};
+    const t=txt.match(/^(\d+):(\d{2})$/);
+    if(t)return{n:+t[1]*60+ +t[2]};
+    const num=parseFloat(txt.replace(/\s/g,'').replace(',','.').replace(/[^\d.\-]/g,''));
+    return isNaN(num)?{n:null,s:txt.toLowerCase()}:{n:num};
+  };
+  rows.sort((a,b)=>{
+    const A=parse(a.cells[idx]&&a.cells[idx].textContent),B=parse(b.cells[idx]&&b.cells[idx].textContent);
+    if(A.n==null&&B.n==null)return (A.s||'').localeCompare(B.s||'')*(asc?1:-1);
+    if(A.n==null)return 1;if(B.n==null)return -1;
+    return asc?A.n-B.n:B.n-A.n;
+  });
+  rows.forEach(r=>tb.appendChild(r));
+}
+
+function computeExt(){
+  if(!S.matches.length)return null;
+  let tot=0,fpW=0,fpD=0,dblW=0,dblD=0,wT=[],lT=[],rests=0,wR=0,lR=0,wN=0,lN=0;
+  S.matches.forEach(m=>{
+    tot++;const enc=S.encMap[m.encounter_id];if(!enc)return;
+    if(m.is_draw){fpD++;dblD++;}
+    else if(m.winner_id===m.fp_player_id)fpW++;
+    else dblW++;
+    const p1isWin=m.winner_id===enc.player1_id;
+    const wTimer=p1isWin?m.player1_timer_sec:m.player2_timer_sec;
+    const lTimer=p1isWin?m.player2_timer_sec:m.player1_timer_sec;
+    const wRst=(p1isWin?m.player1_restarts:m.player2_restarts)||0;
+    const lRst=(p1isWin?m.player2_restarts:m.player1_restarts)||0;
+    rests+=(m.player1_restarts||0)+(m.player2_restarts||0);
+    if(!m.is_draw){if(wTimer){wT.push(wTimer);wR+=wRst;wN++;}if(lTimer){lT.push(lTimer);lR+=lRst;lN++;}}
+  });
+  return{tot,fpW,fpWR:wr(fpW,fpD,tot),dblW,dblWR:wr(dblW,dblD,tot),
+    avgT:fSec(avg([...wT,...lT])),avgTW:fSec(avg(wT)),avgTL:fSec(avg(lT)),
+    rests,avgR:tot?(rests/tot).toFixed(2):'—',avgRW:wN?(wR/wN).toFixed(2):'—',avgRL:lN?(lR/lN).toFixed(2):'—'};
+}
+
+function renderExt(d){
+  if(!d){document.getElementById('ext-body').innerHTML=`<tr><td class="empty" colspan="12">Нет данных</td></tr>`;return;}
+  document.getElementById('ext-body').innerHTML=`<tr>
+    <td class="hl-cell">${d.tot}</td><td>${d.fpW}</td><td class="${wc(d.fpWR)}">${f1(d.fpWR)}</td><td>${d.dblW}</td><td class="${wc(d.dblWR)}">${f1(d.dblWR)}</td>
+    <td>${d.avgT}</td><td>${d.avgTW}</td><td>${d.avgTL}</td>
+    <td>${d.rests}</td><td>${d.avgR}</td><td>${d.avgRW}</td><td>${d.avgRL}</td>
+  </tr>`;
+}
+
+// --- AMPLIFIERS (signatures) ---
+// Мини-картинка амплификатора: image_url из БД ИЛИ web/icons/amplifiers/<name>.webp
+function ampImg(s,sz){
+  sz=sz||24;
+  const name=(s&&s.name)||'';
+  const fb=`<span style="display:inline-block;width:${sz}px;height:${sz}px;border-radius:5px;background:#1c1f2e;flex-shrink:0"></span>`;
+  const url=(s&&s.image_url)||(name?'web/icons/amplifiers/'+encodeURIComponent(name)+'.webp':'');
+  if(!url)return fb;
+  return`<img src="${url}" alt="" width="${sz}" height="${sz}" loading="lazy" style="width:${sz}px;height:${sz}px;object-fit:cover;border-radius:5px;flex-shrink:0;vertical-align:middle" data-fb="${fb.replace(/"/g,'&quot;')}" onerror="this.outerHTML=this.getAttribute('data-fb')">`;
+}
+
+const ampRange=arr=>{const a=[...new Set(arr)].sort((x,y)=>x-y);return a.length?(a.length===1?a[0]:`${a[0]}–${a[a.length-1]}`):'—';};
+
+function computeAmps(){
+  const T=S.matches.length;
+  // косты в рамках текущего охвата (все турниры / выбранный)
+  const costRows=(S.allCosts||[]).filter(c=>S.tour===ALL||c.tournament_id===S.tour);
+  // персонаж → амплификатор. База: signatures.character_id (первый), переопределяется sig_id из костов.
+  const charSig={};
+  S.sigs.forEach(s=>{if(!charSig[s.character_id])charSig[s.character_id]=s.id;});
+  costRows.forEach(c=>{if(c.sig_id)charSig[c.character_id]=c.sig_id;});
+  // косты сигны: sigId → charId → [значения]
+  const costMap={};
+  costRows.forEach(c=>{
+    if(c.sig_cost==null)return;
+    const sid=c.sig_id||charSig[c.character_id];if(!sid)return;
+    (costMap[sid]=costMap[sid]||{});(costMap[sid][c.character_id]=costMap[sid][c.character_id]||[]).push(c.sig_cost);
+  });
+  // всего пиков на персонажа (любой амплификатор или без) — знаменатель для %T амплификатора
+  const charPickTotal={};
+  S.picks.forEach(pk=>{const m=S.matchMap[pk.match_id];if(!m)return;charPickTotal[pk.character_id]=(charPickTotal[pk.character_id]||0)+1;});
+  // статистика пиков с сигной
+  const amp={};
+  S.picks.forEach(pk=>{
+    if(!pk.has_signature)return;
+    const m=S.matchMap[pk.match_id];if(!m)return;
+    // реальный амплификатор пика (любой), фолбэк — сигнатура персонажа (старые записи)
+    const sid=pk.sig_id||charSig[pk.character_id];if(!sid)return;
+    if(!amp[sid])amp[sid]={pk:0,pw:0,pd:0,perChar:{}};
+    const a=amp[sid];a.pk++;
+    const isW=m.winner_id===pk.player_id,isD=m.is_draw;
+    if(isW)a.pw++;else if(isD)a.pd++;
+    if(!a.perChar[pk.character_id])a.perChar[pk.character_id]={pk:0,pw:0,pd:0};
+    const pc=a.perChar[pk.character_id];pc.pk++;if(isW)pc.pw++;else if(isD)pc.pd++;
+  });
+
+  return S.sigs.map(s=>{
+    const a=amp[s.id]||{pk:0,pw:0,pd:0,perChar:{}};
+    const chars=Object.keys(a.perChar).map(cidv=>{
+      const pc=a.perChar[cidv];
+      return{char:S.charMap[cidv],pk:pc.pk,pw:pc.pw,pd:pc.pd,pl:pc.pk-pc.pw-pc.pd,
+        pwr:wr(pc.pw,pc.pd,pc.pk),ppt:pctT(pc.pk,a.pk),cost:ampRange(costMap[s.id]?.[cidv]||[])};
+    }).sort((x,y)=>y.pk-x.pk);
+    const allCost=[].concat(...Object.values(costMap[s.id]||{}));
+    // %T амплификатора — доля игр сигнатурного персонажа, где взяли этот амплификатор
+    const sigPk=a.perChar[s.character_id]?.pk||0;
+    return{sig:s,char:S.charMap[s.character_id],cost:ampRange(allCost),
+      pk:a.pk,pw:a.pw,pd:a.pd,pl:a.pk-a.pw-a.pd,pwr:wr(a.pw,a.pd,a.pk),ppt:pctT(sigPk,charPickTotal[s.character_id]||0),chars};
+  });
+}
+
+function ampCells(d){
+  const wrc=d.pk?`<td class="${wc(d.pwr)}">${f1(d.pwr)}</td>`:`<td class="m">—</td>`;
+  return`<td class="gb">${d.pk}</td><td>${d.pw}</td><td class="m">${d.pd}</td><td>${d.pl}</td>${wrc}<td>${f1(d.ppt)}</td>`;
+}
+
+function renderAmps(data){
+  document.getElementById('amps-head').innerHTML=`<tr>
+    <th rowspan="2" class="nc th-g" onclick="sortA('name')">Амплификатор</th>
+    <th rowspan="2" class="gb th-g" onclick="sortA('cost')" title="Стоимость амплификатора">Кост</th>
+    <th colspan="6" class="th-g gb">Пики</th>
+  </tr><tr>
+    <th class="gb" onclick="sortA('pk')" title="Всего">Σ</th><th onclick="sortA('pw')" title="Победы">W</th><th title="Ничьи">D</th><th onclick="sortA('pl')" title="Поражения">L</th><th onclick="sortA('pwr')" title="Винрейт (ничья = ½)">WR%</th><th onclick="sortA('ppt')" title="Доля от всех матчей">%T</th>
+  </tr>`;
+
+  if(!data.length){document.getElementById('amps-body').innerHTML=`<tr><td class="empty" colspan="8">Нет амплификаторов</td></tr>`;return;}
+
+  const k=S.aSort.k,asc=S.aSort.asc;
+  data.sort((a,b)=>{
+    if(k==='name')return asc?(a.sig.name||'').localeCompare(b.sig.name||''):(b.sig.name||'').localeCompare(a.sig.name||'');
+    const va=typeof a[k]==='number'?a[k]:parseFloat(a[k])||0;
+    const vb=typeof b[k]==='number'?b[k]:parseFloat(b[k])||0;
+    return asc?va-vb:vb-va;
+  });
+
+  let h='';
+  data.forEach(item=>{
+    const s=item.sig,id='amp_'+cid(s.name),hasCh=item.chars.length>0;
+    const photo=ampImg(s,24);
+    const nm=hasCh
+      ?`<div style="display:flex;align-items:center;gap:6px;cursor:pointer" onclick="toggleV('${id}')">${photo}<span>${s.name}</span><span class="chev" id="chev-${id}">▾</span></div>`
+      :`<div style="display:flex;align-items:center;gap:6px">${photo}<span>${s.name}</span></div>`;
+    h+=`<tr><td class="nc">${nm}</td><td class="gb">${item.cost}</td>${ampCells(item)}</tr>`;
+    if(hasCh)item.chars.forEach(ch=>{
+      const c=ch.char;
+      const cn=c?`<div style="display:flex;align-items:center;gap:6px">${iconChar(c,20)}<span>${c.name}</span></div>`:'—';
+      h+=`<tr class="vrow" data-parent="${id}" style="display:none"><td class="nc">${cn}</td><td class="gb">${ch.cost}</td>${ampCells(ch)}</tr>`;
+    });
+  });
+  document.getElementById('amps-body').innerHTML=h;
+}
+function sortA(k){S.aSort.asc=S.aSort.k===k?!S.aSort.asc:(k==='name');S.aSort.k=k;renderAmps(computeAmps());}
+
+function renderAll(){
+  const isAll=S.tour===ALL;
+  const cd=computeChars();renderChars(cd);
+  renderAmps(computeAmps());
+  if(S.view==='r'){renderRosters(isAll);}
+  else{const{mStats,vStats}=computePlayers();if(S.view==='v')renderPV(vStats,isAll);else renderPM(mStats,isAll);}
+  renderExt(computeExt());
+  const active=document.querySelector('.tab-btn.active')?.dataset.tab||'chars';
+  document.querySelectorAll('.tab-pane').forEach(t=>t.style.display='none');
+  const el=document.getElementById('tab-'+active);if(el)el.style.display='block';
+}
+
+// Init
+let TOURS=[];
+function activateTour(id,tab){
+  S.tour=id;
+  document.querySelectorAll('.tour-tab').forEach(t=>t.classList.remove('active'));
+  if(tab)tab.classList.add('active');
+  loadAll();
+}
+async function init(){
+  const{data:tours}=await sb.from('tournaments').select('*').order('created_at',{ascending:false});
+  // ручной порядок (sort_order) поверх дефолтной сортировки; строки без него — в конец, стабильно.
+  TOURS=(tours||[]).slice().sort((a,b)=>(a.sort_order??1e9)-(b.sort_order??1e9));
+  // «текущий турнир» = live (ротация через админку); иначе первый не-upcoming (с данными);
+  // upcoming-турнир «текущим» не делаем — у него ещё нет матчей. defensive.
+  const liveTour=TOURS.find(t=>t.status==='live')||TOURS.find(t=>t.status!=='upcoming')||TOURS[0]||null;
+
+  const tabAll=document.querySelector('.tour-tab[data-mode="all"]');
+  const tabLast=document.querySelector('.tour-tab[data-mode="last"]');
+  const tabPick=document.querySelector('.tour-tab[data-mode="pick"]');
+  const menu=document.getElementById('tour-menu');
+  const pickSub=document.getElementById('pick-sub');
+
+  // подпись последнего турнира
+  document.getElementById('last-tour-name').textContent=liveTour?.name||'нет данных';
+
+  const resetPick=()=>{pickSub.textContent='из прошедших';menu.querySelectorAll('.tm-item').forEach(i=>i.classList.remove('sel'));};
+  const closeMenu=()=>{menu.hidden=true;tabPick.classList.remove('open');};
+  const openMenu=()=>{menu.hidden=false;tabPick.classList.add('open');};
+
+  // наполняем кастомное меню
+  menu.innerHTML=`<div class="tm-head">Прошедшие турниры</div>`+
+    (TOURS.length
+      ? TOURS.map(t=>`<div class="tm-item" data-id="${t.id}">${t.name}</div>`).join('')
+      : `<div class="tm-empty">Нет сохранённых</div>`);
+
+  menu.onclick=e=>{
+    const it=e.target.closest('.tm-item');if(!it)return;
+    menu.querySelectorAll('.tm-item').forEach(i=>i.classList.toggle('sel',i===it));
+    pickSub.textContent=it.textContent;
+    closeMenu();
+    activateTour(it.dataset.id,tabPick);
+  };
+
+  tabAll.onclick=()=>{closeMenu();resetPick();activateTour(ALL,tabAll);};
+  tabLast.onclick=()=>{if(!liveTour)return;closeMenu();resetPick();activateTour(liveTour.id,tabLast);};
+  tabPick.onclick=e=>{if(e.target.closest('.tour-menu'))return;menu.hidden?openMenu():closeMenu();};
+  // клик вне меню — закрыть
+  document.addEventListener('click',e=>{if(!tabPick.contains(e.target))closeMenu();});
+
+  // выбор турнира по URL-параметру ?t= (deep-link с главной)
+  // токенизируем имена (порядковые суффиксы 6th→6) и ищем точное совпадение токенов,
+  // допуская лишние ведущие слова в имени из БД (напр. «Nexus Shiyu: Proxy Rush 6»).
+  // токенное сравнение исключает ложные совпадения римских цифр (I ⊄ II).
+  const toks=s=>(s||'').toLowerCase()
+    .replace(/(\d+)(st|nd|rd|th)/g,'$1')
+    .replace(/[^a-zа-я0-9]+/gi,' ').trim().split(/\s+/).filter(Boolean);
+  const sub=(w,n)=>{ // w — непрерывная подпоследовательность n?
+    if(!w.length||w.length>n.length)return false;
+    for(let i=0;i+w.length<=n.length;i++){
+      let ok=true;
+      for(let j=0;j<w.length;j++){if(n[i+j]!==w[j]){ok=false;break;}}
+      if(ok)return true;
+    }
+    return false;
+  };
+  const want=new URLSearchParams(location.search).get('t');
+  const wt=toks(want);
+  let picked=null;
+  if(wt.length && wt.join('')!=='all' && wt.join('')!=='vse'){
+    picked=TOURS.find(t=>{const n=toks(t.name);return sub(wt,n)||sub(n,wt);});
+  }
+  if(picked){
+    if(liveTour && picked.id===liveTour.id){
+      resetPick();activateTour(picked.id,tabLast);
+    }else{
+      const it=menu.querySelector(`.tm-item[data-id="${picked.id}"]`);
+      if(it){menu.querySelectorAll('.tm-item').forEach(i=>i.classList.toggle('sel',i===it));pickSub.textContent=it.textContent;}
+      activateTour(picked.id,tabPick);
+    }
+  }else{
+    S.tour=ALL;
+    loadAll();
+  }
+}
+
+document.querySelectorAll('.tab-btn').forEach(btn=>{
+  btn.onclick=()=>{
+    document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    document.querySelectorAll('.tab-pane').forEach(t=>t.style.display='none');
+    const el=document.getElementById('tab-'+btn.dataset.tab);if(el)el.style.display='block';
+  };
+});
+
+// open a tab from URL hash (#chars / #players / #ext) — used by deep links from главной
+(function(){
+  const h=(location.hash||'').replace('#','');
+  const b=document.querySelector('.tab-btn[data-tab="'+h+'"]');
+  if(b){document.querySelectorAll('.tab-btn').forEach(x=>x.classList.remove('active'));b.classList.add('active');}
+})();
+
+init();
+</script>
+</body>
+</html>

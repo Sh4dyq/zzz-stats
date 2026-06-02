@@ -11,7 +11,10 @@ const DRAFT_TEMPLATE=(fp,dbl)=>[
 ];
 
 async function pgMatches(){
-  const{data:encs}=await sb.from('encounters').select('*').order('created_at',{ascending:false});
+  const{data:encsRaw}=await sb.from('encounters').select('*').order('created_at',{ascending:false});
+  // ручной порядок (sort_order) поверх дефолтной сортировки; строки без него — в конец, стабильно.
+  // defensive: запрос по created_at (колонка точно есть), sort_order применяется клиентски.
+  const encs=(encsRaw||[]).slice().sort((a,b)=>(a.sort_order??1e9)-(b.sort_order??1e9));
   const{data:ms}=encs?.length?await sb.from('matches').select('*').in('encounter_id',encs.map(e=>e.id)):{data:[]};
   const mByEnc={};(ms||[]).forEach(m=>{if(!mByEnc[m.encounter_id])mByEnc[m.encounter_id]=[];mByEnc[m.encounter_id].push(m);});
   const tourMap={};D.tours.forEach(t=>tourMap[t.id]=t);
@@ -22,12 +25,23 @@ async function pgMatches(){
     const ems=mByEnc[e.id]||[];
     const m1done=ems.find(m=>m.match_number===1)?.winner_id||ems.find(m=>m.match_number===1)?.is_draw;
     const m2done=ems.find(m=>m.match_number===2)?.winner_id||ems.find(m=>m.match_number===2)?.is_draw;
-    return`<div class="card">
-      <div style="display:flex;justify-content:space-between;margin-bottom:8px">
-        <div><span style="font-weight:600">${p1?.nickname||'?'}</span><span style="color:var(--sub);margin:0 8px">vs</span><span style="font-weight:600">${p2?.nickname||'?'}</span></div>
+    return`<div class="card" draggable="true" data-id="${e.id}">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:8px">
+        <div style="display:flex;align-items:center;gap:8px;min-width:0">
+          <span style="color:var(--sub);cursor:grab;font-size:16px;user-select:none" title="Перетащите для сортировки (порядок и на главной)">⠿</span>
+          <span style="font-weight:600">${p1?.nickname||'?'}</span><span style="color:var(--sub);margin:0 6px">vs</span><span style="font-weight:600">${p2?.nickname||'?'}</span>
+        </div>
         <span style="font-size:12px;color:var(--sub)">${t?.name||'?'}</span>
       </div>
       ${win?`<div style="font-size:12px;margin-bottom:8px">Победитель встречи: <span style="color:var(--accent);font-weight:600">${win.nickname}</span></div>`:''}
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
+        <input id="stage-${e.id}" value="${escapeHtml(e.stage||'')}" placeholder="стадия (напр. Гранд-финал) — пусто = скрыто" draggable="false"
+          onchange="updateEncMeta('${e.id}',{stage:this.value.trim()||null})"
+          title="Стадия встречи; показывается на главной в блоке последних матчей" style="font-size:12px;padding:5px 8px;flex:1;min-width:180px">
+        <input type="date" id="date-${e.id}" value="${e.played_at||''}" draggable="false"
+          onchange="updateEncMeta('${e.id}',{played_at:this.value||null})"
+          title="Дата проведения (для актуальности на главной)" style="font-size:12px;padding:4px 8px">
+      </div>
       <div style="display:flex;gap:8px">
         <button class="btn ${m1done?'btn-g':'btn-y'}" style="font-size:12px;padding:5px 14px" onclick="openMatch('${e.id}',1,'${e.player1_id}','${e.player2_id}')">
           ${m1done?'✓':''} Матч 1</button>
@@ -50,7 +64,17 @@ async function pgMatches(){
     <div style="font-size:11px;color:var(--sub);margin-bottom:8px">Если ник новый — игрок создастся автоматически.</div>
     <button class="btn btn-y" onclick="addEnc()">Создать встречу</button>
   </div>
-  <div class="space-y">${list||'<p style="color:var(--sub);font-size:14px">Встреч ещё нет</p>'}</div>`);
+  <div class="space-y" id="enc-list">${list||'<p style="color:var(--sub);font-size:14px">Встреч ещё нет</p>'}</div>`);
+  // drag-and-drop ручная сортировка встреч (порядок отражается и на главной)
+  enableReorder(document.getElementById('enc-list'),'encounters',pgMatches);
+}
+
+// Точечное обновление метаданных встречи (стадия / дата). Тихо игнорирует ошибку
+// отсутствующей колонки до запуска sql/add_match_meta.sql, но сообщит при иной проблеме.
+async function updateEncMeta(id,patch){
+  const{error}=await sb.from('encounters').update(patch).eq('id',id);
+  if(error){dbErr(error,'сохранение метаданных встречи');return;}
+  toast('Сохранено');
 }
 
 // Ник → id игрока: ищет существующего (без учёта регистра) или создаёт нового.

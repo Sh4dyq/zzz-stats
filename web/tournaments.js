@@ -1,20 +1,30 @@
 // tournaments.js — турниры и косты
 
+const TOUR_STATUSES=[['live','🔴 Идёт сейчас'],['upcoming','🗓 Анонс'],['finished','✓ Завершён']];
 async function pgTournaments(){
-  const list=D.tours.map(t=>`<div class="row-item" draggable="true" data-id="${t.id}">
+  const list=D.tours.map(t=>{
+    const st=t.status||'finished';
+    const statusSel=`<select onchange="setTourStatus('${t.id}',this.value)" title="Статус турнира. «Идёт сейчас» = текущий на главной и во вкладке статистики (только один турнир)" style="font-size:12px;padding:5px 8px">
+      ${TOUR_STATUSES.map(([v,l])=>`<option value="${v}" ${st===v?'selected':''}>${l}</option>`).join('')}
+    </select>`;
+    return`<div class="row-item" draggable="true" data-id="${t.id}">
     <div style="display:flex;align-items:center;gap:10px">
       <span title="Перетащить для сортировки" style="cursor:grab;color:var(--sub);font-size:15px;user-select:none">⠿</span>
       <div>
-        <div style="font-weight:600">${t.name}</div>
+        <div style="font-weight:600">${st==='live'?'<span style="color:var(--red)">●</span> ':''}${t.name}</div>
         <div style="font-size:12px;color:var(--sub)">${new Date(t.created_at).toLocaleDateString('ru')}</div>
       </div>
     </div>
-    <div style="display:flex;gap:8px">
+    <div style="display:flex;gap:8px;align-items:center">
+      ${statusSel}
       <button class="btn btn-g" style="font-size:12px;padding:5px 12px" onclick="openCosts('${t.id}','${t.name.replace(/'/g,"\\'")}')">Косты</button>
       <button class="btn-r" onclick="delTour('${t.id}')">✕</button>
     </div>
-  </div>`).join('');
-  html(`<div class="card" style="margin-bottom:16px">
+  </div>`;}).join('');
+  html(`<div class="card" style="margin-bottom:16px;border-left:3px solid var(--accent)">
+    <div style="font-size:13px;line-height:1.5">💡 <b>После турнира:</b> поставь ему статус <b>«✓ Завершён»</b>, а новому — <b>«🔴 Идёт сейчас»</b>. Этого достаточно — на главной и в статистике «текущим» автоматически станет live-турнир, а в блоке «Топ турнира» — последний завершённый. <span style="color:var(--sub)">SQL править больше не нужно.</span></div>
+  </div>
+  <div class="card" style="margin-bottom:16px">
     <h3>Новый турнир</h3>
     <div class="grid2"><div><label>Название</label><input id="t-name" type="text" placeholder="Nexus Shiyu Proxy Rush 6"></div></div>
     <button class="btn btn-y" style="margin-top:12px" onclick="addTour()">Добавить</button>
@@ -22,7 +32,20 @@ async function pgTournaments(){
   <div class="space-y" id="tour-list">${list||'<p style="color:var(--sub);font-size:14px">Турниров ещё нет</p>'}</div>`);
   if(typeof enableReorder==='function')enableReorder(document.getElementById('tour-list'),'tournaments',pgTournaments);
 }
-async function addTour(){const n=v('t-name');if(!n)return;const{error}=await sb.from('tournaments').insert({name:n});if(dbErr(error,'добавление турнира'))return;toast('Турнир добавлен');pgTournaments();}
+async function addTour(){const n=v('t-name');if(!n)return;const{error}=await sb.from('tournaments').insert({name:n,status:'upcoming'});if(dbErr(error,'добавление турнира'))return;toast('Турнир добавлен (статус: Анонс)');await refreshData();pgTournaments();}
+// Статус турнира. «live» эксклюзивен — снимаем live с остальных (на главной/в статистике
+// «текущим» считается ровно один live-турнир). Колонка из sql/add_tournament_status.sql.
+async function setTourStatus(id,status){
+  if(status==='live'){
+    for(const o of D.tours.filter(t=>t.id!==id&&t.status==='live')){
+      const{error}=await sb.from('tournaments').update({status:'finished'}).eq('id',o.id);
+      if(dbErr(error,'смена статуса'))return;
+    }
+  }
+  const{error}=await sb.from('tournaments').update({status}).eq('id',id);
+  if(dbErr(error,'смена статуса турнира'))return;
+  toast('Статус обновлён');await refreshData();pgTournaments();
+}
 async function delTour(id){if(!confirm('Удалить турнир?'))return;const{error}=await sb.from('tournaments').delete().eq('id',id);if(dbErr(error,'удаление турнира'))return;pgTournaments();}
 
 async function openCosts(tourId,tourName){
@@ -284,7 +307,7 @@ async function saveAmpCosts(tourId){
     const arr=[];for(let i=0;i<5;i++)arr[i]=g.p[i]===undefined?null:g.p[i];
     while(arr.length&&arr[arr.length-1]==null)arr.pop();
     const hasAny=arr.some(x=>x!=null);
-    const p1=arr.length?arr[0]:null; // зеркало для статистики (index.html читает sig_cost)
+    const p1=arr.length?arr[0]:null; // зеркало для статистики (statistics.html читает sig_cost)
     if(hasAny){
       // проставляем sig_id+sig_cost(P1)+sig_costs на строки персонажа; если строк нет — заводим заглушку M0
       const{data:upd,error}=await sb.from('tournament_costs')
