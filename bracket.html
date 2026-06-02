@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<title>Nexus Stats — Сетки</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Saira+Condensed:ital,wght@0,700;0,800;0,900;1,800;1,900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0b0b0d;--card:#161618;--panel-2:#1c1c20;--panel-3:#242429;
+    --border:#26262c;--line:rgba(255,255,255,.07);
+    --red:#ff1f44;--pink:#ec1862;--grad:linear-gradient(95deg,#ff1f44,#ec1862);
+    --gold:#f5c842;--lime:#c4f500;--purple:#a970ff;
+    --text:#f3f3f5;--sub:#8a8a93;--win:#46d369;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font-family:'Rajdhani',sans-serif;min-height:100vh}
+  a{text-decoration:none;color:inherit}
+  .facets{position:fixed;inset:0;z-index:0;pointer-events:none}
+  .topstripe{height:4px;background:var(--grad);position:sticky;top:0;z-index:50}
+  body>*:not(.facets){position:relative;z-index:1}
+  .disp{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;text-transform:uppercase;letter-spacing:.01em}
+  ::-webkit-scrollbar{width:8px;height:8px}
+  ::-webkit-scrollbar-track{background:var(--card)}
+  ::-webkit-scrollbar-thumb{background:#34343b;border-radius:4px}
+  ::-webkit-scrollbar-thumb:hover{background:var(--red)}
+
+  /* ===== header (shared shell) ===== */
+  .hdr{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:16px 28px;border-bottom:1px solid var(--border);background:rgba(11,11,13,.72);backdrop-filter:blur(12px)}
+  .brand{display:flex;align-items:center;gap:11px;flex-shrink:0}
+  .brand .mk{height:42px;width:auto;display:block}
+  .brand .wm{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;font-size:25px;letter-spacing:.02em;text-transform:uppercase;background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent;padding-right:.16em}
+  .brand .suf{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;font-size:25px;color:#fff;text-transform:uppercase;margin-left:-4px}
+  .nav{display:flex;align-items:center;gap:2px;flex-shrink:0;margin-left:6px}
+  @media (max-width:980px){.nav{display:none}}
+  .nav a{position:relative;font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;font-size:17px;letter-spacing:.02em;color:var(--sub);padding:8px 15px;transition:.15s}
+  .nav a:hover{color:var(--text)}
+  .nav a.active{color:#fff}
+  .nav a.active::after{content:"";position:absolute;left:15px;right:15px;bottom:-2px;height:3px;border-radius:3px;background:var(--grad)}
+  .livetw{display:flex;align-items:center;gap:10px;padding:9px 16px;border-radius:10px;background:rgba(145,70,255,.12);border:1px solid rgba(145,70,255,.4);font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;font-size:15px;letter-spacing:.04em;color:#fff;transition:.15s}
+  .livetw:hover{background:rgba(145,70,255,.22)}
+  .livetw .dot{width:9px;height:9px;border-radius:50%;background:var(--red);box-shadow:0 0 0 0 rgba(255,31,68,.6);animation:pulse 1.8s infinite}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(255,31,68,.5)}70%{box-shadow:0 0 0 7px rgba(255,31,68,0)}100%{box-shadow:0 0 0 0 rgba(255,31,68,0)}}
+  .livetw svg{width:17px;height:17px;fill:var(--purple)}
+  .livetw .tw{color:var(--purple)}.livetw .vbar{width:1px;height:18px;background:rgba(255,255,255,.18)}
+  .livetw.offline .dot{background:#5e5e66;box-shadow:none;animation:none}
+
+  /* ===== in-page navigation: «Все сетки» (left) + активный турнир (right) ===== */
+  .tourrow{position:relative;z-index:40;display:flex;align-items:stretch;padding:0 22px;border-bottom:1px solid var(--border);background:rgba(16,16,20,.55)}
+  /* «Все сетки» index button */
+  .all-btn{position:relative;display:flex;align-items:center;gap:11px;border:none;background:none;padding:0 24px;cursor:pointer;transition:.15s;min-height:58px}
+  .all-btn .ab-ic{width:18px;height:18px;color:var(--sub);transition:.15s}
+  .all-btn .ab-tx{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;font-size:17px;letter-spacing:.02em;color:var(--sub);transition:.15s}
+  .all-btn:hover .ab-ic,.all-btn:hover .ab-tx{color:var(--text)}
+  .all-btn.active .ab-tx,.all-btn.active .ab-ic{color:#fff}
+  .all-btn.active::after{content:"";position:absolute;left:24px;right:24px;bottom:-1px;height:3px;border-radius:3px 3px 0 0;background:var(--grad)}
+  /* active-tournament tab on the right */
+  .tourrow .spacer{flex:1}
+  .tour-tab{position:relative;display:flex;flex-direction:column;justify-content:center;gap:3px;border:none;border-left:1px solid var(--line);background:none;padding:11px 24px;cursor:default;text-align:right;min-height:58px;white-space:nowrap}
+  .tour-tab .tt-main{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;font-size:17px;letter-spacing:.02em;color:#fff;line-height:1}
+  .tour-tab .tt-sub{font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:500;color:#ff7587;line-height:1.1}
+  .tour-tab .tt-badge{display:inline-block;font-size:9px;font-weight:800;letter-spacing:.05em;font-style:normal;font-family:'Saira Condensed',sans-serif;margin-left:8px;vertical-align:middle}
+  .tt-badge.live{color:var(--red)}.tt-badge.upcoming{color:var(--lime)}.tt-badge.finished{color:var(--sub)}
+
+  /* ===== «Все сетки» — tournaments index table (Challonge-style) ===== */
+  .idx-wrap{max-width:1080px;margin:26px auto;padding:0 28px}
+  .idx-h{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;text-transform:uppercase;font-size:30px;margin-bottom:4px}
+  .idx-sub{color:var(--sub);font-size:14px;font-weight:500;margin-bottom:22px}
+  .idx-tbl{border:1px solid var(--border);border-radius:13px;overflow:hidden;background:var(--card)}
+  .idx-head,.idx-row{display:grid;grid-template-columns:minmax(200px,2.3fr) 1.2fr .9fr .5fr .8fr 1fr .9fr;align-items:center;gap:14px;padding:13px 20px}
+  .idx-head{background:#101013;border-bottom:1px solid var(--border);font-family:'Rajdhani',sans-serif;font-weight:600;font-size:12px;letter-spacing:.05em;text-transform:uppercase;color:var(--sub)}
+  .idx-row{border-top:1px solid var(--line);cursor:pointer;transition:.12s}
+  .idx-row:first-child{border-top:none}
+  .idx-row:hover{background:#1a1a1f}
+  .idx-row .ir-name{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;font-size:18px;color:#fff;display:flex;align-items:center;gap:10px;line-height:1}
+  .idx-row .ir-thumb{width:34px;height:34px;border-radius:8px;background:var(--panel-3);flex-shrink:0;display:flex;align-items:center;justify-content:center;overflow:hidden}
+  .idx-row .ir-thumb img{width:100%;height:100%;object-fit:cover}
+  .idx-cell{font-family:'Rajdhani',sans-serif;font-weight:600;font-size:14px;color:var(--text)}
+  .idx-cell.mut{color:var(--sub);font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:500}
+  .gtag{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--sub)}
+  .fmt-pill{display:inline-block;font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:600;padding:3px 9px;border-radius:6px;background:var(--panel-2);border:1px solid var(--border);color:var(--text)}
+  .st-pill{display:inline-flex;align-items:center;gap:6px;font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;font-size:12px;letter-spacing:.03em;padding:4px 11px;border-radius:7px}
+  .st-pill .sdot{width:7px;height:7px;border-radius:50%}
+  .st-live{background:rgba(255,31,68,.13);color:#ff7587}.st-live .sdot{background:var(--red);box-shadow:0 0 7px rgba(255,31,68,.8)}
+  .st-upcoming{background:rgba(196,245,0,.1);color:var(--lime)}.st-upcoming .sdot{background:var(--lime)}
+  .st-finished{background:var(--panel-2);color:var(--sub)}.st-finished .sdot{background:#5e5e66}
+  @media (max-width:760px){.idx-head{display:none}.idx-row{grid-template-columns:1fr auto;gap:6px 14px}.idx-row .idx-cell:nth-child(n+3){grid-column:auto}}
+
+  /* format sub-tabs (Сетка / Результаты) */
+  .fmtrow{display:flex;gap:0;padding:0 24px;border-bottom:1px solid var(--border);background:rgba(11,11,13,.4)}
+  .fmtrow[hidden]{display:none}
+  .fmt-btn{border:none;background:none;position:relative;padding:13px 20px;font-family:'Saira Condensed',sans-serif;font-style:italic;font-size:18px;font-weight:800;text-transform:uppercase;color:var(--sub);cursor:pointer;transition:.15s;letter-spacing:.02em}
+  .fmt-btn:hover{color:var(--text)}
+  .fmt-btn.active{color:#fff}
+  .fmt-btn.active::after{content:"";position:absolute;left:14px;right:14px;bottom:-1px;height:3px;border-radius:3px 3px 0 0;background:var(--grad)}
+
+  /* tournament meta strip */
+  .tmeta{display:flex;align-items:center;flex-wrap:wrap;gap:18px;padding:16px 28px;border-bottom:1px solid var(--border)}
+  .tmeta .tname{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;text-transform:uppercase;font-size:30px;line-height:.9}
+  .tmeta .chip{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--sub);padding:5px 11px;border:1px solid var(--border);border-radius:7px;display:inline-flex;align-items:center;gap:7px}
+  .tmeta .chip b{color:var(--text);font-weight:600}
+  .tmeta .ch-link{margin-left:auto;display:inline-flex;align-items:center;gap:8px;font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;font-size:14px;letter-spacing:.03em;padding:9px 16px;border-radius:9px;background:var(--panel-2);border:1px solid var(--border);color:var(--text);transition:.15s}
+  .tmeta .ch-link:hover{border-color:var(--red)}
+
+  /* ===== bracket canvas ===== */
+  .bracket-wrap{overflow:auto;padding:30px 28px 50px}
+  .bsec-title{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;font-size:15px;letter-spacing:.05em;color:var(--sub);margin:6px 0 14px;display:flex;align-items:center;gap:10px}
+  .bsec-title::after{content:"";flex:1;height:1px;background:var(--border)}
+  .bsec-title.upper{color:#ff7587}.bsec-title.lower{color:var(--purple)}.bsec-title.gf{color:var(--gold)}
+
+  .bracket{display:flex;gap:46px;align-items:flex-start;min-width:min-content;padding-bottom:8px}
+  .bround{display:flex;flex-direction:column;justify-content:space-around;gap:22px;min-width:230px}
+  .bround-h{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;font-size:13px;letter-spacing:.04em;color:var(--sub);padding-bottom:2px;text-align:center}
+
+  /* match card */
+  .match{position:relative;background:var(--card);border:1px solid var(--border);border-radius:9px;overflow:hidden;transition:.15s}
+  .match:hover{border-color:#3a3a42}
+  .match .seed{display:flex;align-items:center;gap:9px;padding:9px 12px;min-height:42px}
+  .match .seed+.seed{border-top:1px solid var(--line)}
+  .seed .sd{font-family:'JetBrains Mono',monospace;font-size:10px;color:#5e5e66;width:16px;flex-shrink:0;text-align:center}
+  .seed .av{width:24px;height:24px;border-radius:6px;background:var(--panel-3);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;flex-shrink:0;overflow:hidden}
+  .seed .av img{width:100%;height:100%;object-fit:cover}
+  .seed .nm{font-weight:600;font-size:15px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text)}
+  .seed .sc{font-family:'JetBrains Mono',monospace;font-weight:600;font-size:14px;color:var(--sub);min-width:18px;text-align:right}
+  .seed.win .nm{color:#fff;font-weight:700}
+  .seed.win .sc{color:var(--win)}
+  .seed.win::before{content:"";position:absolute;left:0;width:3px;height:42px;background:var(--grad)}
+  .seed.lose .nm,.seed.lose .sc{color:#6d6d76}
+  .seed.tbd .nm{color:#4d4d55;font-style:italic;font-weight:500}
+  .match.played{box-shadow:0 0 0 1px rgba(255,31,68,.12)}
+
+  /* connectors (simple visual hint, refined by design) */
+  .bround.has-conn .match{margin-left:0}
+
+  /* states */
+  .panel{max-width:560px;margin:60px auto;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:34px 30px;text-align:center}
+  .panel h3{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;text-transform:uppercase;font-size:24px;margin-bottom:10px}
+  .panel p{color:var(--sub);font-size:15px;font-weight:500;line-height:1.5;margin-bottom:8px}
+  .panel .alt{margin-top:18px;display:inline-flex;gap:8px;align-items:center;padding:11px 20px;border-radius:9px;background:var(--grad);color:#fff;font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;font-size:14px;letter-spacing:.03em}
+  .spinner{width:24px;height:24px;border:2px solid var(--border);border-top-color:var(--red);border-radius:50%;animation:spin .7s linear infinite;margin:60px auto}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  /* results table (Результаты tab) */
+  .rtbl{max-width:680px;margin:24px auto;border:1px solid var(--border);border-radius:12px;overflow:hidden;background:var(--card)}
+  .rrow{display:flex;align-items:center;gap:14px;padding:13px 18px}
+  .rrow+.rrow{border-top:1px solid var(--line)}
+  .rrow .plc{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;font-size:22px;width:42px;color:var(--sub)}
+  .rrow .plc.g1{background:linear-gradient(90deg,#f8d36a,#d99a16);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .rrow .plc.g2{background:linear-gradient(90deg,#eef1f6,#aeb4c0);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .rrow .plc.g3{background:linear-gradient(90deg,#f0a06b,#c46a32);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .rrow .rnm{flex:1;font-weight:600;font-size:16px}
+  .rrow .rprz{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;font-size:16px;background:linear-gradient(90deg,#f8d36a,#d99a16);-webkit-background-clip:text;background-clip:text;color:transparent}
+
+  /* footer */
+  footer{border-top:1px solid var(--border);background:#08080a;margin-top:48px}
+  .foot{max-width:1280px;margin:0 auto;padding:24px 40px 18px;display:flex;flex-direction:column;align-items:center;gap:16px;text-align:center}
+  .fnav{display:flex;gap:6px;flex-wrap:wrap;justify-content:center}
+  .fnav a{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;font-size:15px;letter-spacing:.03em;color:var(--sub);padding:6px 12px;transition:.15s}
+  .fnav a:hover{color:#fff}
+  .fcopy{max-width:1280px;margin:0 auto;padding:14px 40px 20px;border-top:1px solid var(--border);font-family:'JetBrains Mono',monospace;font-size:11px;color:#5e5e66;text-align:center}
+</style>
+</head>
+<body>
+
+<svg class="facets" preserveAspectRatio="xMidYMid slice" viewBox="0 0 1440 900">
+  <defs>
+    <pattern id="poly" width="240" height="210" patternUnits="userSpaceOnUse">
+      <rect width="240" height="210" fill="#0b0b0d"/>
+      <polygon points="0,0 130,55 0,120" fill="#0e0e11"/>
+      <polygon points="130,55 240,0 240,110 150,140" fill="#0d0d10"/>
+      <polygon points="0,120 150,140 70,210 0,210" fill="#101014"/>
+      <polygon points="150,140 240,110 240,210 130,210" fill="#0c0c0f"/>
+      <polygon points="70,210 130,210 150,140" fill="#0f0f13"/>
+    </pattern>
+  </defs>
+  <rect width="1440" height="900" fill="url(#poly)"/>
+</svg>
+
+<div class="topstripe"></div>
+
+<!-- Header -->
+<div class="hdr">
+  <div style="display:flex;align-items:center;gap:18px">
+    <div class="brand">
+      <img class="mk" src="nexus-logo.png" alt="NEXUS">
+      <span class="wm">Nexus</span><span class="suf">Stats</span>
+    </div>
+    <nav class="nav">
+      <a href="index.html">Главная</a>
+      <a href="statistics.html#chars">Статистика</a>
+      <a href="#" class="active">Сетки</a>
+    </nav>
+  </div>
+  <div style="display:flex;align-items:center;gap:14px">
+    <a href="https://twitch.tv/Nexus_Shiyu" target="_blank" class="livetw" id="livetw">
+      <svg viewBox="0 0 24 24"><path d="M4 2 2 6v14h5v3l3-3h4l6-6V2H4zm16 11-3 3h-4l-3 3v-3H6V4h14v9z"/><path d="M15 7h2v5h-2zM10 7h2v5h-2z"/></svg>
+      <span class="tw">Twitch</span><span class="vbar"></span><span class="lv">Live</span><span class="dot"></span>
+    </a>
+  </div>
+</div>
+
+<!-- Nav bar: «Все сетки» (left) + активный турнир (right) -->
+<div class="tourrow" id="tourrow"></div>
+
+<!-- Format sub-tabs (видны только внутри турнира) -->
+<div class="fmtrow" id="fmtrow" hidden>
+  <button class="fmt-btn active" data-fmt="bracket">Сетка</button>
+  <button class="fmt-btn" data-fmt="results">Результаты</button>
+</div>
+
+<!-- Tournament meta -->
+<div class="tmeta" id="tmeta" style="display:none"></div>
+
+<!-- Content -->
+<div id="content">
+  <div class="spinner" id="spinner"></div>
+</div>
+
+<!-- Footer -->
+<footer>
+  <div class="foot">
+    <nav class="fnav">
+      <a href="index.html">Главная</a>
+      <a href="statistics.html#chars">Персонажи</a>
+      <a href="statistics.html#players">Игроки</a>
+      <a href="https://twitch.tv/Nexus_Shiyu" target="_blank">Twitch</a>
+    </nav>
+  </div>
+  <div class="fcopy">NEXUS SHIYU © 2026 · Турнирный организатор по Zenless Zone Zero</div>
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+const SB_URL='https://zoavnckfbfiejxfjakue.supabase.co';
+const SB_KEY='sb_publishable_37RZBsmdp3O1i795EuEfeg_vFpdPTFZ';
+const sb=supabase.createClient(SB_URL,SB_KEY);
+
+const S={tours:[],players:{},encounters:[],results:{},cur:null,fmt:'bracket',view:'all'};
+const GAME='Zenless Zone Zero';
+const fmtDate=d=>d?new Date(d).toLocaleDateString('ru',{day:'2-digit',month:'short',year:'numeric'}):'—';
+const partCount=tid=>{const s=new Set();S.encounters.filter(e=>e.tournament_id==tid).forEach(e=>{if(e.player1_id)s.add(e.player1_id);if(e.player2_id)s.add(e.player2_id)});return s.size};
+const $=id=>document.getElementById(id);
+const esc=s=>(s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+// ---- challonge link normalization (ready for proxy/iframe fallback) ----
+function challongeSlug(url){
+  if(!url) return null;
+  const m=String(url).match(/challonge\.com\/(?:[a-z]{2}\/)?([A-Za-z0-9_]+)/);
+  return m?m[1]:String(url).replace(/^.*\//,'');
+}
+
+async function boot(){
+  const [ts,ps,es,rs]=await Promise.all([
+    sb.from('tournaments').select('*').order('created_at',{ascending:false}),
+    sb.from('players').select('id,nickname'),
+    sb.from('encounters').select('*'),
+    sb.from('tournament_results').select('*').then(r=>r,()=>({data:[]}))
+  ]);
+  S.tours=ts.data||[];
+  (ps.data||[]).forEach(p=>S.players[p.id]=p.nickname);
+  S.encounters=es.data||[];
+  (rs.data||[]).forEach(r=>{(S.results[r.tournament_id]=S.results[r.tournament_id]||[]).push(r)});
+  // default landing = «Все сетки» index
+  S.view='all';S.cur=null;
+  renderTourbar();
+  renderFmtTabs();
+  render();
+}
+
+function openTour(t){S.cur=t;S.view='tour';S.fmt='bracket';
+  $('fmtrow').querySelectorAll('.fmt-btn').forEach(x=>x.classList.toggle('active',x.dataset.fmt==='bracket'));
+  renderTourbar();render();}
+function openAll(){S.view='all';renderTourbar();render();}
+
+// left «Все сетки» + (when inside a tournament) active tournament tab on the right
+function renderTourbar(){
+  const inTour=S.view==='tour'&&S.cur;
+  let right='';
+  if(inTour){
+    const t=S.cur,st=t.status||'finished';
+    const lbl={live:'LIVE',upcoming:'СКОРО',finished:'ЗАВЕРШЁН'}[st]||'';
+    right=`<div class="spacer"></div>
+      <div class="tour-tab"><span class="tt-main">${esc(t.name)}<span class="tt-badge ${st}">${lbl}</span></span>
+        <span class="tt-sub">${fmtDate(t.event_date)}</span></div>`;
+  }
+  $('tourrow').innerHTML=`
+    <button class="all-btn ${S.view==='all'?'active':''}" id="allBtn">
+      <svg class="ab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+      <span class="ab-tx">Все сетки</span>
+    </button>${right}`;
+  $('allBtn').onclick=openAll;
+  $('fmtrow').hidden=!inTour;
+}
+function renderFmtTabs(){
+  $('fmtrow').querySelectorAll('.fmt-btn').forEach(b=>b.onclick=()=>{
+    S.fmt=b.dataset.fmt;
+    $('fmtrow').querySelectorAll('.fmt-btn').forEach(x=>x.classList.toggle('active',x===b));
+    render();
+  });
+}
+
+function render(){
+  const sp=$('spinner');if(sp)sp.style.display='none';
+  if(S.view==='all'){$('tmeta').style.display='none';return renderAll();}
+  const t=S.cur;
+  if(!t){return openAll();}
+  renderMeta(t);
+  if(S.fmt==='results') return renderResults(t);
+  renderBracket(t);
+}
+
+// «Все сетки» — tournaments index (Challonge-style list)
+function renderAll(){
+  if(!S.tours.length){$('content').innerHTML='<div class="panel"><h3>Нет турниров</h3></div>';return;}
+  const order={live:0,upcoming:1,finished:2};
+  const rows=S.tours.slice().sort((a,b)=>(order[a.status]??3)-(order[b.status]??3));
+  const stPill=t=>{const st=t.status||'finished';const lbl={live:'Идёт',upcoming:'Скоро',finished:'Завершён'}[st]||st;
+    return `<span class="st-pill st-${st}"><span class="sdot"></span>${lbl}</span>`;};
+  $('content').innerHTML=`<div class="idx-wrap">
+    <div class="idx-h">Все сетки</div>
+    <div class="idx-sub">Турнирные сетки Nexus Shiyu · нажми на турнир, чтобы открыть его сетку</div>
+    <div class="idx-tbl">
+      <div class="idx-head">
+        <div>Название</div><div>Игра</div><div>Роль</div><div>Тип</div><div>Участники</div><div>Дата проведения</div><div>Статус</div>
+      </div>
+      ${rows.map(t=>`
+        <div class="idx-row" data-id="${t.id}">
+          <div class="ir-name"><span class="ir-thumb">${esc((t.name||'?').slice(0,2).toUpperCase())}</span>${esc(t.name)}</div>
+          <div class="idx-cell"><span class="gtag">${GAME}</span></div>
+          <div class="idx-cell mut">${esc(t.role||'Organizer')}</div>
+          <div class="idx-cell"><span class="fmt-pill">${t.bracket_type||'—'}</span></div>
+          <div class="idx-cell mut">${partCount(t.id)||'—'}</div>
+          <div class="idx-cell mut">${fmtDate(t.event_date)}</div>
+          <div class="idx-cell">${stPill(t)}</div>
+        </div>`).join('')}
+    </div>
+  </div>`;
+  $('content').querySelectorAll('.idx-row').forEach(r=>r.onclick=()=>openTour(S.tours.find(t=>t.id==r.dataset.id)));
+}
+
+function renderMeta(t){
+  const slug=challongeSlug(t.challonge_url);
+  const encN=S.encounters.filter(e=>e.tournament_id==t.id).length;
+  $('tmeta').style.display='flex';
+  $('tmeta').innerHTML=`
+    <div class="tname">${esc(t.name)}</div>
+    <span class="chip">Формат <b>${t.bracket_type==='DE'?'Double Elim':t.bracket_type==='SE'?'Single Elim':'—'}</b></span>
+    <span class="chip">Дата <b>${fmtDate(t.event_date)}</b></span>
+    <span class="chip">Встреч <b>${encN}</b></span>
+    ${slug?`<a class="ch-link" href="https://challonge.com/ru/${slug}" target="_blank" rel="noopener">Открыть на Challonge ↗</a>`:''}`;
+}
+
+// ---- normalized bracket model from encounters (fallback until Challonge proxy) ----
+// Groups a tournament's encounters by `stage` into rounds. Challonge proxy will
+// later feed the same {rounds:[{name,matches}]} shape — renderRounds stays unchanged.
+function modelFromEncounters(t){
+  const encs=S.encounters.filter(e=>e.tournament_id==t.id);
+  if(!encs.length) return null;
+  const byStage={};
+  encs.forEach(e=>{const k=e.stage||'Раунд';(byStage[k]=byStage[k]||[]).push(e)});
+  const ORDER=['1/8','1/4','1/2','Полуфинал','Финал','Гранд-финал','Нижняя сетка'];
+  const keys=Object.keys(byStage).sort((a,b)=>{
+    const ia=ORDER.findIndex(o=>a.includes(o)),ib=ORDER.findIndex(o=>b.includes(o));
+    return (ia<0?99:ia)-(ib<0?99:ib);
+  });
+  return {rounds:keys.map(k=>({name:k,matches:byStage[k].sort((a,b)=>(a.sort_order||0)-(b.sort_order||0)).map(e=>encMatch(e))}))};
+}
+function encMatch(e){
+  const n=id=>id?(S.players[id]||'—'):null;
+  // score: count match wins within encounter is unknown here → show winner only (Bo2)
+  return {
+    a:{name:n(e.player1_id),win:e.winner_id&&e.winner_id===e.player1_id,seed:''},
+    b:{name:n(e.player2_id),win:e.winner_id&&e.winner_id===e.player2_id,seed:''},
+    played:!!e.winner_id
+  };
+}
+
+function renderBracket(t){
+  const slug=challongeSlug(t.challonge_url);
+  const model=modelFromEncounters(t);
+  if(!model){
+    $('content').innerHTML=`<div class="panel">
+      <h3>Сетка ещё не готова</h3>
+      <p>Для этого турнира пока нет сохранённых встреч.</p>
+      ${slug?`<p>Пока можно открыть оригинал на Challonge:</p>
+        <a class="alt" href="https://challonge.com/ru/${slug}" target="_blank" rel="noopener">Challonge / ${esc(slug)} ↗</a>`:''}
+    </div>`;
+    return;
+  }
+  $('content').innerHTML=`<div class="bracket-wrap">${renderRounds(model.rounds)}</div>`;
+}
+
+function renderRounds(rounds){
+  return `<div class="bracket">`+rounds.map(r=>`
+    <div class="bround">
+      <div class="bround-h">${esc(r.name)}</div>
+      ${r.matches.map(matchHTML).join('')}
+    </div>`).join('')+`</div>`;
+}
+function matchHTML(m){
+  return `<div class="match ${m.played?'played':''}">
+    ${seedHTML(m.a)}${seedHTML(m.b)}</div>`;
+}
+function seedHTML(s){
+  if(!s||!s.name) return `<div class="seed tbd"><span class="sd"></span><span class="av"></span><span class="nm">TBD</span><span class="sc"></span></div>`;
+  const cls=s.win?'win':(s.name!=='—'?'lose':'tbd');
+  const init=(s.name||'?').slice(0,2).toUpperCase();
+  return `<div class="seed ${cls}">
+    <span class="sd">${s.seed||''}</span>
+    <span class="av">${init}</span>
+    <span class="nm">${esc(s.name)}</span>
+    <span class="sc">${s.win?'✓':''}</span></div>`;
+}
+
+function renderResults(t){
+  const rs=(S.results[t.id]||[]).slice().sort((a,b)=>(a.place||99)-(b.place||99));
+  if(!rs.length){
+    $('content').innerHTML=`<div class="panel"><h3>Результаты не заполнены</h3>
+      <p>Места и призовые появятся после завершения турнира — их подтянет синк с Challonge (final_rank) или ручной ввод в админке.</p></div>`;
+    return;
+  }
+  $('content').innerHTML=`<div class="rtbl">`+rs.map(r=>{
+    const g=r.place<=3?'g'+r.place:'';
+    return `<div class="rrow">
+      <span class="plc ${g}">${r.place||'—'}</span>
+      <span class="rnm">${esc(S.players[r.player_id]||'—')}</span>
+      ${r.prize?`<span class="rprz">${Number(r.prize).toLocaleString('ru')} ₽</span>`:''}</div>`;
+  }).join('')+`</div>`;
+}
+
+// twitch live pill (decapi, same as other pages)
+fetch('https://decapi.me/twitch/uptime/Nexus_Shiyu').then(r=>r.text()).then(txt=>{
+  if(/offline/i.test(txt))$('livetw').classList.add('offline');
+}).catch(()=>{});
+
+boot().catch(e=>{console.error(e);$('content').innerHTML='<div class="panel"><h3>Ошибка загрузки</h3><p>'+esc(e.message)+'</p></div>';});
+</script>
+</body>
+</html>

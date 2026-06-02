@@ -53,6 +53,9 @@
   .nav a:hover{color:var(--text)}
   .nav a.active{color:#fff}
   .nav a.active::after{content:"";position:absolute;left:16px;right:16px;bottom:-2px;height:3px;border-radius:3px;background:var(--grad)}
+  .nav a.soon{color:#54545c;cursor:default}
+  .nav a.soon::before{content:"СКОРО";position:absolute;top:-3px;right:2px;font-size:8px;font-weight:800;letter-spacing:.05em;color:var(--red);font-style:normal}
+  .nav a.soon:hover{color:#54545c}
 
   .hdr-right{display:flex;align-items:center;gap:14px}
   /* combined LIVE + Twitch pill */
@@ -282,11 +285,11 @@
     font-size:13px;letter-spacing:.03em;color:var(--text)}
   .mbody{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:12px}
   .mn{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;
-    font-size:18px;color:var(--sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
-  .mn.r{text-align:right}
+    font-size:18px;color:var(--sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;padding-right:.18em}
+  .mn.r{text-align:right;padding-right:0;padding-left:.18em}
   .mn.win{color:#fff}
   .sc{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;font-size:16px;color:#fff;
-    background:var(--grad);border-radius:8px;padding:8px 14px;white-space:nowrap}
+    background:var(--grad);border-radius:8px;padding:8px 16px 8px 14px;white-space:nowrap}
   .mstage{margin-top:2px;align-self:center;font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;
     text-transform:uppercase;font-size:11px;letter-spacing:.05em;color:var(--gold);
     border:1px solid rgba(245,200,66,.35);background:rgba(245,200,66,.08);padding:3px 12px;border-radius:6px}
@@ -327,7 +330,7 @@
 
   /* footer */
   footer{border-top:1px solid var(--border);background:#08080a;position:relative;z-index:1}
-  .foot{max-width:1280px;margin:0 auto;padding:38px 40px 22px;display:flex;flex-direction:column;align-items:center;gap:22px;text-align:center}
+  .foot{max-width:1280px;margin:0 auto;padding:28px 40px 16px;display:flex;flex-direction:column;align-items:center;gap:16px;text-align:center}
   .lockup{display:inline-flex;align-items:center;gap:22px;background:#121215;padding:14px 28px;
     clip-path:polygon(16px 0,100% 0,100% calc(100% - 16px),calc(100% - 16px) 100%,0 100%,0 16px)}
   .lockup .mk{height:42px;width:auto;display:block}
@@ -339,7 +342,7 @@
   .fnav a{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;
     font-size:15px;letter-spacing:.03em;color:var(--sub);padding:6px 12px;transition:.15s}
   .fnav a:hover{color:#fff}
-  .fcopy{max-width:1280px;margin:0 auto;padding:16px 40px 30px;border-top:1px solid var(--border);
+  .fcopy{max-width:1280px;margin:0 auto;padding:14px 40px 18px;border-top:1px solid var(--border);
     font-family:'JetBrains Mono',monospace;font-size:11px;color:#5e5e66;letter-spacing:.03em;text-align:center}
 
   @media (max-width:980px){
@@ -363,6 +366,17 @@
     .live .t{display:none}
     .finfo{padding:26px 22px}
   }
+
+  /* ── Курсивные градиентные заголовки ───────────────────────────────
+     WebKit при -webkit-background-clip:text обрезает наклонный «хвост»
+     последней буквы у курсива. Единое правило: резервируем правый отступ
+     для ВСЕХ таких элементов. Любой новый курсив-градиент добавляй сюда,
+     а не задавай padding-right поштучно — тогда проблема не вернётся. */
+  .brand .wm .wm-n,
+  h1.title .l2,
+  .sec-head h2 em,
+  .finfo h3 .l2,
+  .stxt h3 span{padding-right:.22em}
 </style>
 </head>
 <body>
@@ -400,6 +414,7 @@
         <a href="statistics.html#chars">Персонажи</a>
         <a href="statistics.html#players">Игроки</a>
         <a href="statistics.html#ext">Расширенная</a>
+        <a href="bracket.html">Сетки</a>
       </nav>
     </div>
     <div class="hdr-right">
