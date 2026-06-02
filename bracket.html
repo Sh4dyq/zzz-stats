@@ -305,15 +305,24 @@
 </footer>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="web/bracket-model.js"></script>
 <script>
 const SB_URL='https://zoavnckfbfiejxfjakue.supabase.co';
 const SB_KEY='sb_publishable_37RZBsmdp3O1i795EuEfeg_vFpdPTFZ';
 const sb=supabase.createClient(SB_URL,SB_KEY);
 
-const S={tours:[],players:{},encounters:[],results:{},cur:null,fmt:'bracket',view:'all'};
+const S={tours:[],players:{},encounters:[],results:{},parts:{},cur:null,fmt:'bracket',view:'all'};
 const GAME='Zenless Zone Zero';
 const fmtDate=d=>d?new Date(d).toLocaleDateString('ru',{day:'2-digit',month:'short',year:'numeric'}):'—';
-const partCount=tid=>{const s=new Set();S.encounters.filter(e=>e.tournament_id==tid).forEach(e=>{if(e.player1_id)s.add(e.player1_id);if(e.player2_id)s.add(e.player2_id)});return s.size};
+// диапазон дат проведения (event_date .. event_date_end)
+const fmtRange=t=>{
+  if(!t.event_date)return'—';
+  const sd=x=>new Date(x).toLocaleDateString('ru',{day:'2-digit',month:'short'});
+  return t.event_date_end&&t.event_date_end!==t.event_date?`${sd(t.event_date)} – ${fmtDate(t.event_date_end)}`:fmtDate(t.event_date);
+};
+// участники: из tournament_participants (по сеянию), иначе уникальные из встреч
+const seedsOf=tid=>(S.parts[tid]||[]).slice().sort((a,b)=>(a.seed||1e9)-(b.seed||1e9)).map(p=>S.players[p.player_id]).filter(Boolean);
+const partCount=tid=>{const sd=(S.parts[tid]||[]).length;if(sd)return sd;const s=new Set();S.encounters.filter(e=>e.tournament_id==tid).forEach(e=>{if(e.player1_id)s.add(e.player1_id);if(e.player2_id)s.add(e.player2_id)});return s.size};
 // прогресс турнира = доля сыгранных встреч (с победителем) от всех
 const tourProgress=tid=>{const e=S.encounters.filter(x=>x.tournament_id==tid);const total=e.length,done=e.filter(x=>x.winner_id).length;return{done,total,pct:total?Math.round(done/total*100):0};};
 const progHTML=pr=>`<div class="prog"><div class="bar"><div class="fill" style="width:${pr.pct}%"></div></div><span class="pln">${pr.done}/${pr.total}</span></div>`;
@@ -330,16 +339,18 @@ function challongeSlug(url){
 }
 
 async function boot(){
-  const [ts,ps,es,rs]=await Promise.all([
+  const [ts,ps,es,rs,pa]=await Promise.all([
     sb.from('tournaments').select('*').order('created_at',{ascending:false}),
     sb.from('players').select('id,nickname'),
     sb.from('encounters').select('*'),
-    sb.from('tournament_results').select('*').then(r=>r,()=>({data:[]}))
+    sb.from('tournament_results').select('*').then(r=>r,()=>({data:[]})),
+    sb.from('tournament_participants').select('*').then(r=>r,()=>({data:[]}))
   ]);
   S.tours=ts.data||[];
   (ps.data||[]).forEach(p=>S.players[p.id]=p.nickname);
   S.encounters=es.data||[];
   (rs.data||[]).forEach(r=>{(S.results[r.tournament_id]=S.results[r.tournament_id]||[]).push(r)});
+  (pa.data||[]).forEach(p=>{(S.parts[p.tournament_id]=S.parts[p.tournament_id]||[]).push(p)});
   // default landing = «Все сетки» index
   S.view='all';S.cur=null;
   renderTourbar();
@@ -360,7 +371,7 @@ function renderTourbar(){
     const t=S.cur,st=t.status||'finished';
     const lbl={live:'LIVE',upcoming:'СКОРО',finished:'ЗАВЕРШЁН'}[st]||'';
     // дату показываем только если задана (иначе под бейджем висел «—»)
-    const sub=t.event_date?`<span class="tt-sub">${fmtDate(t.event_date)}</span>`:'';
+    const sub=t.event_date?`<span class="tt-sub">${fmtRange(t)}</span>`:'';
     right=`<div class="spacer"></div>
       <div class="tour-tab"><span class="tt-main">${esc(t.name)}<span class="tt-badge ${st}">${lbl}</span></span>${sub}</div>`;
   }
@@ -417,8 +428,8 @@ function renderAll(){
         <div class="idx-row${(t.status||'')==='live'?' live-row':''}" data-id="${t.id}">
           <div class="ir-name"><span class="ir-thumb">${esc((t.name||'?').slice(0,2).toUpperCase())}</span>${esc(t.name)}${(t.status||'')==='live'?'<span class="live-dot" title="Идёт сейчас"></span>':''}</div>
           <div class="idx-cell"><span class="fmt-pill">${esc(fmtLbl(t))}</span></div>
-          <div class="idx-cell mut">${partCount(t.id)||'—'}</div>
-          <div class="idx-cell mut">${fmtDate(t.event_date)}</div>
+          <div class="idx-cell mut">${partCount(t.id)||t.expected_players||'—'}</div>
+          <div class="idx-cell mut">${fmtRange(t)}</div>
           <div class="idx-cell">${progHTML(tourProgress(t.id))}</div>
         </div>`).join('')}
     </div>
@@ -433,7 +444,7 @@ function renderMeta(t){
   $('tmeta').innerHTML=`
     <div class="tname">${esc(t.name)}</div>
     <span class="chip">Формат <b>${t.bracket_type==='DE'?'Double Elim':t.bracket_type==='SE'?'Single Elim':'—'}</b></span>
-    <span class="chip">Дата <b>${fmtDate(t.event_date)}</b></span>
+    <span class="chip">Дата <b>${fmtRange(t)}</b></span>
     <span class="chip" style="gap:10px">Прогресс <div class="prog" style="width:130px"><div class="bar"><div class="fill" style="width:${pr.pct}%"></div></div><span class="pln">${pr.done}/${pr.total}</span></div></span>
     ${slug?`<a class="ch-link" href="https://challonge.com/ru/${slug}" target="_blank" rel="noopener">Открыть на Challonge ↗</a>`:''}`;
 }
@@ -465,17 +476,26 @@ function encMatch(e){
 
 function renderBracket(t){
   const slug=challongeSlug(t.challonge_url);
-  const model=modelFromEncounters(t);
+  let model=modelFromEncounters(t);
+  let skeleton=false;
+  // нет сохранённых встреч → показываем КАРКАС по формату+числу участников
+  if(!model){
+    const seeds=seedsOf(t.id);
+    const n=Math.max(seeds.length,t.expected_players||0);
+    model=(typeof BracketModel!=='undefined')?BracketModel.skeletonModel(t.bracket_type||'SE',n,seeds):null;
+    skeleton=!!model;
+  }
   if(!model){
     $('content').innerHTML=`<div class="panel">
       <h3>Сетка ещё не готова</h3>
-      <p>Для этого турнира пока нет сохранённых встреч.</p>
+      <p>Укажи формат и число участников турнира, чтобы показать каркас сетки.</p>
       ${slug?`<p>Пока можно открыть оригинал на Challonge:</p>
         <a class="alt" href="https://challonge.com/ru/${slug}" target="_blank" rel="noopener">Challonge / ${esc(slug)} ↗</a>`:''}
     </div>`;
     return;
   }
-  $('content').innerHTML=`<div class="bracket-wrap">${renderRounds(model.rounds)}</div>`;
+  const note=skeleton?`<div style="max-width:1080px;margin:0 auto;padding:16px 28px 0;color:var(--sub);font-size:13px">Предварительный каркас сетки${seedsOf(t.id).length?' (участники по посеву)':' — участники появятся по мере заполнения'}.</div>`:'';
+  $('content').innerHTML=note+`<div class="bracket-wrap">${renderRounds(model.rounds)}</div>`;
 }
 
 function renderRounds(rounds){
@@ -487,11 +507,13 @@ function renderRounds(rounds){
 }
 function matchHTML(m){
   return `<div class="match ${m.played?'played':''}">
-    ${seedHTML(m.a)}${seedHTML(m.b)}</div>`;
+    ${seedHTML(m.a,m.played)}${seedHTML(m.b,m.played)}</div>`;
 }
-function seedHTML(s){
+function seedHTML(s,played){
+  if(s&&s.bye) return `<div class="seed tbd"><span class="sd"></span><span class="av" style="border-style:none"></span><span class="nm" style="color:#44444c">BYE</span><span class="sc"></span></div>`;
   if(!s||!s.name) return `<div class="seed tbd"><span class="sd"></span><span class="av"></span><span class="nm">TBD</span><span class="sc"></span></div>`;
-  const cls=s.win?'win':(s.name!=='—'?'lose':'tbd');
+  // победитель → win; в сыгранной встрече проигравший → серый; иначе (каркас) — нейтрально
+  const cls=s.win?'win':(played&&s.name!=='—'?'lose':'');
   const init=(s.name||'?').replace(/[^A-Za-zА-Яа-я0-9$]/g,'').slice(0,2).toUpperCase()||'—';
   const sl=(s.name||'').trim().toLowerCase();
   return `<div class="seed ${cls}">

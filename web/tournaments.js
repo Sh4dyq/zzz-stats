@@ -1,6 +1,12 @@
 // tournaments.js — турниры и косты
 
 const TOUR_STATUSES=[['live','🔴 Идёт сейчас'],['upcoming','🗓 Анонс'],['finished','✓ Завершён']];
+const BRACKET_TYPES=[['SE','Single Elimination'],['DE','Double Elimination'],['GROUPS','Группы']];
+const fmtTourDates=t=>{
+  if(!t.event_date)return'—';
+  const d=x=>new Date(x).toLocaleDateString('ru',{day:'2-digit',month:'short'});
+  return t.event_date_end&&t.event_date_end!==t.event_date?`${d(t.event_date)} – ${d(t.event_date_end)}`:d(t.event_date);
+};
 async function pgTournaments(){
   const list=D.tours.map(t=>{
     const st=t.status||'finished';
@@ -12,12 +18,13 @@ async function pgTournaments(){
       <span title="Перетащить для сортировки" style="cursor:grab;color:var(--sub);font-size:15px;user-select:none">⠿</span>
       <div>
         <div style="font-weight:600">${st==='live'?'<span style="color:var(--red)">●</span> ':''}${t.name}</div>
-        <div style="font-size:12px;color:var(--sub)">${new Date(t.created_at).toLocaleDateString('ru')}</div>
+        <div style="font-size:12px;color:var(--sub)">${(t.bracket_type||'—')} · ${fmtTourDates(t)} · уч.: ${t.expected_players||'—'}${t.stages_count>1?` · этапов: ${t.stages_count}`:''}</div>
       </div>
     </div>
     <div style="display:flex;gap:8px;align-items:center">
       ${statusSel}
-      <button class="btn btn-g" style="font-size:12px;padding:5px 12px" onclick="renameTour('${t.id}','${t.name.replace(/'/g,"\\'")}')">✎</button>
+      <button class="btn btn-g" style="font-size:12px;padding:5px 12px" onclick="openTourSettings('${t.id}','${t.name.replace(/'/g,"\\'")}')">⚙ Настройки</button>
+      <button class="btn btn-g" style="font-size:12px;padding:5px 12px" onclick="openParticipants('${t.id}','${t.name.replace(/'/g,"\\'")}')">Участники</button>
       <button class="btn btn-g" style="font-size:12px;padding:5px 12px" onclick="openBracketEditor('${t.id}','${t.name.replace(/'/g,"\\'")}')">Сетка</button>
       <button class="btn btn-g" style="font-size:12px;padding:5px 12px" onclick="openCosts('${t.id}','${t.name.replace(/'/g,"\\'")}')">Косты</button>
       <button class="btn-r" onclick="delTour('${t.id}')">✕</button>
@@ -28,13 +35,61 @@ async function pgTournaments(){
   </div>
   <div class="card" style="margin-bottom:16px">
     <h3>Новый турнир</h3>
-    <div class="grid2"><div><label>Название</label><input id="t-name" type="text" placeholder="Nexus Shiyu Proxy Rush 6"></div></div>
+    <div class="grid2">
+      <div><label>Название</label><input id="t-name" type="text" placeholder="Nexus Shiyu Proxy Rush 6"></div>
+      <div><label>Формат</label><select id="t-fmt">${BRACKET_TYPES.map(([v,l])=>`<option value="${v}">${l}</option>`).join('')}</select></div>
+      <div><label>Дата начала</label><input id="t-date" type="date"></div>
+      <div><label>Дата конца (опц.)</label><input id="t-date2" type="date"></div>
+      <div><label>Участников (предполагаемо)</label><input id="t-exp" type="number" min="2" placeholder="30"></div>
+      <div><label>Этапов (группы→плейофф)</label><input id="t-stages" type="number" min="1" value="1"></div>
+      <div style="grid-column:1/-1"><label>Ссылка на Challonge</label><input id="t-ch" type="text" placeholder="https://challonge.com/ru/NSPR6"></div>
+    </div>
     <button class="btn btn-y" style="margin-top:12px" onclick="addTour()">Добавить</button>
   </div>
   <div class="space-y" id="tour-list">${list||'<p style="color:var(--sub);font-size:14px">Турниров ещё нет</p>'}</div>`);
   if(typeof enableReorder==='function')enableReorder(document.getElementById('tour-list'),'tournaments',pgTournaments);
 }
-async function addTour(){const n=v('t-name');if(!n)return;const{error}=await sb.from('tournaments').insert({name:n,status:'upcoming'});if(dbErr(error,'добавление турнира'))return;toast('Турнир добавлен (статус: Анонс)');await refreshData();pgTournaments();}
+function tourFormPatch(p){
+  const fmt=document.getElementById(p+'fmt')?.value||'SE';
+  const d1=document.getElementById(p+'date')?.value||null;
+  const d2=document.getElementById(p+'date2')?.value||null;
+  const exp=document.getElementById(p+'exp')?.value;
+  const stg=document.getElementById(p+'stages')?.value;
+  const ch=document.getElementById(p+'ch')?.value?.trim()||null;
+  return{bracket_type:fmt,event_date:d1,event_date_end:d2,expected_players:exp?+exp:null,stages_count:stg?+stg:1,challonge_url:ch};
+}
+async function addTour(){
+  const n=v('t-name');if(!n)return toast('Впиши название','err');
+  const{error}=await sb.from('tournaments').insert({name:n,status:'upcoming',...tourFormPatch('t-')});
+  if(dbErr(error,'добавление турнира'))return;
+  toast('Турнир добавлен (статус: Анонс)');await refreshData();pgTournaments();
+}
+// Редактор параметров существующего турнира (формат/даты/участники/этапы/challonge)
+async function openTourSettings(id,name){
+  const t=D.tours.find(x=>x.id===id)||{};
+  const p='ts-';
+  html(`<button class="btn btn-g" style="margin-bottom:16px" onclick="go('tournaments')">← Назад</button>
+  <div class="card" style="margin-bottom:16px">
+    <h3>Настройки — ${escapeHtml(name)}</h3>
+    <div class="grid2">
+      <div><label>Название</label><input id="${p}name" type="text" value="${escapeHtml(t.name||'')}"></div>
+      <div><label>Формат</label><select id="${p}fmt">${BRACKET_TYPES.map(([v,l])=>`<option value="${v}" ${t.bracket_type===v?'selected':''}>${l}</option>`).join('')}</select></div>
+      <div><label>Дата начала</label><input id="${p}date" type="date" value="${t.event_date||''}"></div>
+      <div><label>Дата конца (опц.)</label><input id="${p}date2" type="date" value="${t.event_date_end||''}"></div>
+      <div><label>Участников (предполагаемо)</label><input id="${p}exp" type="number" min="2" value="${t.expected_players??''}"></div>
+      <div><label>Этапов</label><input id="${p}stages" type="number" min="1" value="${t.stages_count??1}"></div>
+      <div style="grid-column:1/-1"><label>Ссылка на Challonge</label><input id="${p}ch" type="text" value="${escapeHtml(t.challonge_url||'')}"></div>
+    </div>
+    <button class="btn btn-y" style="margin-top:12px" onclick="saveTourSettings('${id}')">Сохранить</button>
+  </div>`);
+}
+async function saveTourSettings(id){
+  const name=document.getElementById('ts-name')?.value?.trim();
+  if(!name)return toast('Название не может быть пустым','err');
+  const{error}=await sb.from('tournaments').update({name,...tourFormPatch('ts-')}).eq('id',id);
+  if(dbErr(error,'сохранение настроек турнира'))return;
+  toast('Настройки сохранены');await refreshData();go('tournaments');
+}
 // Статус турнира. «live» эксклюзивен — снимаем live с остальных (на главной/в статистике
 // «текущим» считается ровно один live-турнир). Колонка из sql/add_tournament_status.sql.
 async function setTourStatus(id,status){
@@ -54,11 +109,50 @@ async function delTour(id){if(!confirm('Удалить турнир?'))return;co
 // ===== Редактор сетки турнира =====
 // Правка/добавление результатов встреч (когда с Challonge не подтянулось или нужна корректировка).
 // Победителя встречи можно выставить вручную (для сеток-результатов), а драфт/таймеры — через «Матч 1/2».
+// Компактный каркас сетки для админки — визуально как реальная сетка, влезает на страницу.
+// seeds = массив ников по посеву (из участников). Модель из общего BracketModel.
+function compactSkeletonHTML(t,seeds){
+  if(typeof BracketModel==='undefined')return'';
+  const n=Math.max((seeds&&seeds.length)||0,t.expected_players||0);
+  const model=BracketModel.skeletonModel(t.bracket_type||'SE',n,seeds);
+  if(!model)return'<p style="color:var(--sub);font-size:13px">Укажи формат и число участников в «⚙ Настройки», либо добавь участников — и тут появится каркас.</p>';
+  const seed=s=>{
+    if(!s||s.bye)return`<div class="sk-s sk-bye"><span>BYE</span></div>`;
+    const nm=s.name||'TBD';
+    return`<div class="sk-s${s.name?'':' sk-tbd'}"><span class="sk-sd">${s.seed||''}</span><span class="sk-nm">${escapeHtml(nm)}</span></div>`;
+  };
+  const cols=model.rounds.map(r=>`<div class="sk-r"><div class="sk-rh">${escapeHtml(r.name)}</div>
+    ${r.matches.map(m=>`<div class="sk-m">${seed(m.a)}${seed(m.b)}</div>`).join('')}</div>`).join('');
+  return`<style>
+    .sk-wrap{overflow-x:auto;padding:6px 2px 10px}
+    .sk-b{display:flex;gap:26px;align-items:flex-start;min-width:min-content}
+    .sk-r{display:flex;flex-direction:column;justify-content:space-around;gap:10px;min-width:150px}
+    .sk-rh{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--sub);text-align:center;border-bottom:1px solid var(--border);padding-bottom:5px;margin-bottom:2px}
+    .sk-m{background:#11131a;border:1px solid var(--border);border-radius:8px;overflow:hidden}
+    .sk-s{display:flex;align-items:center;gap:7px;padding:6px 9px;min-height:30px;font-size:13px}
+    .sk-s+.sk-s{border-top:1px solid var(--border)}
+    .sk-sd{font-family:monospace;font-size:10px;color:#5b5b64;width:14px;text-align:center;flex-shrink:0}
+    .sk-nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .sk-tbd .sk-nm{color:#55555e;font-style:italic}
+    .sk-bye{justify-content:center;color:#44444c;font-size:11px;font-style:italic}
+  </style>
+  <div class="sk-wrap"><div class="sk-b">${cols}</div></div>`;
+}
 async function openBracketEditor(tourId,tourName){
   document.getElementById('page-title').textContent=`Сетка — ${tourName}`;
   const{data:encsRaw}=await sb.from('encounters').select('*').eq('tournament_id',tourId).order('created_at',{ascending:false});
+  const{data:parts}=await sb.from('tournament_participants').select('*').eq('tournament_id',tourId).order('seed',{ascending:true});
   const encs=(encsRaw||[]).slice().sort((a,b)=>(a.sort_order??1e9)-(b.sort_order??1e9));
   const plMap={};D.players.forEach(p=>plMap[p.id]=p);
+  const seeds=(parts||[]).map(pt=>plMap[pt.player_id]?.nickname).filter(Boolean);
+  const t=D.tours.find(x=>x.id===tourId)||{};
+  const skeleton=`<div class="card" style="margin-bottom:16px">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:6px">
+      <h3 style="margin:0">Каркас сетки <span style="color:var(--sub);font-weight:400;font-size:13px">${t.bracket_type||'SE'} · ${seeds.length?seeds.length+' уч.':((t.expected_players||0)+' уч. (предпол.)')}</span></h3>
+      <a class="btn btn-g" style="font-size:12px;padding:5px 12px" onclick="openParticipants('${tourId}','${tourName.replace(/'/g,"\\'")}')">Править участников</a>
+    </div>
+    ${compactSkeletonHTML(t,seeds)}
+  </div>`;
   const rows=encs.map(e=>{
     const p1=plMap[e.player1_id],p2=plMap[e.player2_id];
     const opts=[['','— не задан —'],[e.player1_id,p1?.nickname||'Игрок 1'],[e.player2_id,p2?.nickname||'Игрок 2']];
@@ -81,6 +175,7 @@ async function openBracketEditor(tourId,tourName){
   const plDatalist=`<datalist id="be-pl-list">${D.players.map(p=>`<option value="${escapeHtml(p.nickname)}"></option>`).join('')}</datalist>`;
   html(`<button class="btn btn-g" style="margin-bottom:16px" onclick="go('tournaments')">← Назад</button>
   ${plDatalist}
+  ${skeleton}
   <div class="card" style="margin-bottom:16px">
     <h3>Добавить встречу в сетку</h3>
     <div class="grid2" style="margin-bottom:8px">
@@ -107,6 +202,54 @@ async function addEncTo(tourId,tourName){
   const{error}=await sb.from('encounters').insert({tournament_id:tourId,player1_id:p1,player2_id:p2});
   if(dbErr(error,'создание встречи'))return;
   toast('Встреча добавлена');openBracketEditor(tourId,tourName);
+}
+
+// ===== Участники турнира (bulk-add по никам) =====
+async function openParticipants(tourId,tourName){
+  document.getElementById('page-title').textContent=`Участники — ${tourName}`;
+  const{data:parts}=await sb.from('tournament_participants').select('*').eq('tournament_id',tourId).order('seed',{ascending:true});
+  const plMap={};D.players.forEach(p=>plMap[p.id]=p);
+  const list=(parts||[]).map((pt,i)=>{
+    const nm=plMap[pt.player_id]?.nickname||'?';
+    return`<div class="row-item"><div style="display:flex;align-items:center;gap:10px">
+      <span style="color:var(--sub);font-family:monospace;width:28px">${pt.seed||i+1}</span>
+      <span style="font-weight:600">${escapeHtml(nm)}</span></div>
+      <button class="btn-r" onclick="delParticipant('${pt.id}','${tourId}','${tourName.replace(/'/g,"\\'")}')">✕</button></div>`;
+  }).join('');
+  html(`<button class="btn btn-g" style="margin-bottom:16px" onclick="go('tournaments')">← Назад</button>
+  <div class="card" style="margin-bottom:16px">
+    <h3>Добавить участников</h3>
+    <div style="font-size:12px;color:var(--sub);margin-bottom:8px">Вставь ники списком — по одному в строке (или через запятую). Несуществующие игроки заведутся автоматически. Порядок строк = посев.</div>
+    <textarea id="pa-bulk" rows="8" placeholder="Player1&#10;Player2&#10;Player3" style="width:100%;padding:10px;font-size:14px;font-family:monospace;resize:vertical"></textarea>
+    <button class="btn btn-y" style="margin-top:12px" onclick="bulkAddParticipants('${tourId}','${tourName.replace(/'/g,"\\'")}')">Добавить в турнир</button>
+  </div>
+  <div class="card" style="margin-bottom:16px"><div style="font-size:13px">Участников: <b>${(parts||[]).length}</b>${(parts||[]).length?` <button class="btn-r" style="margin-left:10px;font-size:11px;padding:3px 10px" onclick="clearParticipants('${tourId}','${tourName.replace(/'/g,"\\'")}')">Очистить всех</button>`:''}</div></div>
+  <div class="space-y">${list||'<p style="color:var(--sub);font-size:14px">Участников ещё нет</p>'}</div>`);
+}
+async function bulkAddParticipants(tourId,tourName){
+  const raw=document.getElementById('pa-bulk')?.value||'';
+  const nicks=raw.split(/[\n,]+/).map(s=>s.trim()).filter(Boolean);
+  if(!nicks.length)return toast('Список пуст','err');
+  const{data:cur}=await sb.from('tournament_participants').select('seed').eq('tournament_id',tourId);
+  let seed=(cur||[]).reduce((m,r)=>Math.max(m,r.seed||0),0);
+  let added=0,fail=0;
+  for(const nick of nicks){
+    const pid=await resolvePlayerNick(nick);
+    if(!pid){fail++;continue;}
+    const{error}=await sb.from('tournament_participants').upsert({tournament_id:tourId,player_id:pid,seed:++seed},{onConflict:'tournament_id,player_id'});
+    if(error){fail++;seed--;}else added++;
+  }
+  toast(`Добавлено ${added}${fail?`, пропущено ${fail}`:''}`);
+  await refreshData();openParticipants(tourId,tourName);
+}
+async function delParticipant(id,tourId,tourName){
+  const{error}=await sb.from('tournament_participants').delete().eq('id',id);
+  if(dbErr(error,'удаление участника'))return;openParticipants(tourId,tourName);
+}
+async function clearParticipants(tourId,tourName){
+  if(!confirm('Удалить всех участников турнира?'))return;
+  const{error}=await sb.from('tournament_participants').delete().eq('tournament_id',tourId);
+  if(dbErr(error,'очистка участников'))return;openParticipants(tourId,tourName);
 }
 
 async function openCosts(tourId,tourName){

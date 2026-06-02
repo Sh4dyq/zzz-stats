@@ -115,7 +115,7 @@
 <script>
 // cache-busting: всегда грузим свежие web/*.js (без необходимости хард-рефреша).
 // document.write сохраняет порядок и синхронность загрузки.
-['web/icons.js','web/core.js','web/characters.js','web/signatures.js','web/players.js','web/tournaments.js','web/draft-import.js','web/matches.js']
+['web/icons.js','web/core.js','web/bracket-model.js','web/characters.js','web/signatures.js','web/players.js','web/tournaments.js','web/draft-import.js','web/matches.js']
   .forEach(function(s){document.write('<script src="'+s+'?v='+Date.now()+'"><\/script>');});
 </script>
 <script>
