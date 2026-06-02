@@ -121,17 +121,19 @@ function compactSkeletonHTML(t,seeds){
     const nm=s.name||'TBD';
     return`<div class="sk-s${s.name?'':' sk-tbd'}"><span class="sk-sd">${s.seed||''}</span><span class="sk-nm">${escapeHtml(nm)}</span></div>`;
   };
+  let id=0; // сквозная нумерация встреч (как в Challonge)
   const cols=model.rounds.map(r=>`<div class="sk-r"><div class="sk-rh">${escapeHtml(r.name)}</div>
-    ${r.matches.map(m=>`<div class="sk-m">${seed(m.a)}${seed(m.b)}</div>`).join('')}</div>`).join('');
+    ${r.matches.map(m=>`<div class="sk-m"><span class="sk-id">${++id}</span>${seed(m.a)}${seed(m.b)}</div>`).join('')}</div>`).join('');
   return`<style>
     .sk-wrap{overflow-x:auto;padding:6px 2px 10px}
-    .sk-b{display:flex;gap:26px;align-items:flex-start;min-width:min-content}
+    .sk-b{display:flex;gap:34px;align-items:flex-start;min-width:min-content}
     .sk-r{display:flex;flex-direction:column;justify-content:space-around;gap:10px;min-width:150px}
     .sk-rh{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--sub);text-align:center;border-bottom:1px solid var(--border);padding-bottom:5px;margin-bottom:2px}
-    .sk-m{background:#11131a;border:1px solid var(--border);border-radius:8px;overflow:hidden}
-    .sk-s{display:flex;align-items:center;gap:7px;padding:6px 9px;min-height:30px;font-size:13px}
+    .sk-m{position:relative;background:#11131a;border:1px solid var(--border);border-radius:8px;overflow:hidden}
+    .sk-id{position:absolute;left:-22px;top:50%;transform:translateY(-50%);font-family:monospace;font-size:10px;color:#4d4d55;width:18px;text-align:center}
+    .sk-s{display:flex;align-items:center;gap:7px;padding:6px 9px 6px 0;min-height:30px;font-size:13px}
     .sk-s+.sk-s{border-top:1px solid var(--border)}
-    .sk-sd{font-family:monospace;font-size:10px;color:#5b5b64;width:14px;text-align:center;flex-shrink:0}
+    .sk-sd{font-family:monospace;font-size:10px;color:#7a7a85;width:22px;text-align:center;flex-shrink:0;align-self:stretch;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.03);border-right:1px solid var(--border);margin-right:4px}
     .sk-nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
     .sk-tbd .sk-nm{color:#55555e;font-style:italic}
     .sk-bye{justify-content:center;color:#44444c;font-size:11px;font-style:italic}
@@ -156,19 +158,15 @@ async function openBracketEditor(tourId,tourName){
   const rows=encs.map(e=>{
     const p1=plMap[e.player1_id],p2=plMap[e.player2_id];
     const opts=[['','— не задан —'],[e.player1_id,p1?.nickname||'Игрок 1'],[e.player2_id,p2?.nickname||'Игрок 2']];
-    return`<div class="card" style="margin-bottom:10px">
-      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
-        <div style="font-weight:600;min-width:160px">${p1?.nickname||'?'} <span style="color:var(--sub)">vs</span> ${p2?.nickname||'?'}</div>
-        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-          <input type="text" value="${escapeHtml(e.stage||'')}" placeholder="стадия" onchange="updateEncMeta('${e.id}',{stage:this.value.trim()||null})" style="font-size:12px;padding:5px 8px;width:150px" title="Стадия (Гранд-финал и т.п.)">
-          <label style="font-size:12px;color:var(--sub)">Победитель</label>
-          <select onchange="setEncWinner('${e.id}',this.value)" style="font-size:12px;padding:5px 8px">
-            ${opts.map(([val,l])=>`<option value="${val}" ${String(e.winner_id||'')===String(val)?'selected':''}>${escapeHtml(l)}</option>`).join('')}
-          </select>
-          <button class="btn btn-g" style="font-size:12px;padding:5px 12px" onclick="openMatch('${e.id}',1,'${e.player1_id}','${e.player2_id}')">Матч 1</button>
-          <button class="btn btn-g" style="font-size:12px;padding:5px 12px" onclick="openMatch('${e.id}',2,'${e.player1_id}','${e.player2_id}')">Матч 2</button>
-          <button class="btn-r" onclick="delEnc('${e.id}')">✕</button>
-        </div>
+    return`<div class="enc-card">
+      <div class="enc-head"><span class="enc-vs">${escapeHtml(p1?.nickname||'?')} <span style="color:var(--sub)">vs</span> ${escapeHtml(p2?.nickname||'?')}</span><button class="btn-r" onclick="delEnc('${e.id}')" title="Удалить встречу">✕</button></div>
+      <input type="text" value="${escapeHtml(e.stage||'')}" placeholder="стадия (Гранд-финал и т.п.)" onchange="updateEncMeta('${e.id}',{stage:this.value.trim()||null})" style="font-size:12px;padding:5px 8px;width:100%">
+      <select onchange="setEncWinner('${e.id}',this.value)" style="font-size:12px;padding:5px 8px;width:100%" title="Победитель">
+        ${opts.map(([val,l])=>`<option value="${val}" ${String(e.winner_id||'')===String(val)?'selected':''}>${escapeHtml(l)}</option>`).join('')}
+      </select>
+      <div class="enc-acts">
+        <button class="btn btn-g" style="font-size:12px;padding:5px 10px;flex:1" onclick="openMatch('${e.id}',1,'${e.player1_id}','${e.player2_id}')">Матч 1</button>
+        <button class="btn btn-g" style="font-size:12px;padding:5px 10px;flex:1" onclick="openMatch('${e.id}',2,'${e.player1_id}','${e.player2_id}')">Матч 2</button>
       </div>
     </div>`;
   }).join('');
@@ -185,7 +183,14 @@ async function openBracketEditor(tourId,tourName){
     <div style="font-size:11px;color:var(--sub);margin-bottom:8px">Драфт и таймеры — через «Матч 1/2». Победителя можно выставить и вручную справа.</div>
     <button class="btn btn-y" onclick="addEncTo('${tourId}','${tourName.replace(/'/g,"\\'")}')">Создать встречу</button>
   </div>
-  <div class="space-y">${rows||'<p style="color:var(--sub);font-size:14px">Встреч ещё нет</p>'}</div>`);
+  <style>
+    .enc-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px;align-items:start}
+    .enc-card{background:var(--card,#11131a);border:1px solid var(--border);border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:7px}
+    .enc-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+    .enc-vs{font-weight:600;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .enc-acts{display:flex;gap:6px}
+  </style>
+  <div class="enc-grid">${rows||'<p style="color:var(--sub);font-size:14px">Встреч ещё нет</p>'}</div>`);
 }
 async function setEncWinner(encId,winnerId){
   const{error}=await sb.from('encounters').update({winner_id:winnerId||null}).eq('id',encId);
