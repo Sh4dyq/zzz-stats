@@ -110,6 +110,8 @@ function applyDraftToForm(norm,pen){
     // обновить портрет под новый выбор (без авто-M6 из draftCharChanged)
     const img=document.querySelector(`.pk-img[data-imgslot="${slot.n}"]`);
     if(img&&typeof iconChar==='function')img.innerHTML=iconChar(ch,48);
+    // обновить кнопку-дропдаун персонажа (иконки ранг/элемент/роль) под выбор
+    if(typeof dcRefreshChar==='function')dcRefreshChar(slot.n);
     // обновить мини-иконку амплификатора по выбранному в дропдауне
     const sig2=document.querySelector(`.draft-sig[data-slot="${slot.n}"]`);
     if(sig2&&typeof draftSigChanged==='function')draftSigChanged(sig2);

@@ -162,14 +162,14 @@ function sigForChar(charId){return charId?D.sigs.find(s=>s.character_id===charId
 
 const DRAFT_CSS=`<style>
 /* Драфт-борд в стиле shiyu: сетка-очередь — фп (слева, к центру) · PICKS · дабл (справа). */
-.dboard{max-width:1100px;margin:0 auto}
+.dboard{max-width:1240px;margin:0 auto}
 .dgrid{display:grid;grid-template-columns:1fr auto 1fr;gap:18px;align-items:stretch}
 .dgcol{min-width:0}
 .dgname{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;text-transform:uppercase;font-size:20px;letter-spacing:.02em;color:var(--text);display:flex;align-items:baseline;gap:8px;margin-bottom:8px;min-width:0}
 .dgname b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .dgname.dbl{justify-content:flex-end;text-align:right}
 .dgname .dtag{font-size:10px;font-style:normal;font-weight:700;letter-spacing:.1em;color:#fff;background:var(--grad);border-radius:3px;padding:1px 6px;flex-shrink:0}
-.dgcells{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;align-content:start}
+.dgcells{display:grid;grid-template-columns:repeat(5,1fr);gap:7px;align-content:start}
 .dgmid{display:flex;align-items:center;justify-content:center;min-width:30px}
 .dgmid-lbl{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;font-size:14px;letter-spacing:.18em;color:var(--sub);white-space:nowrap;writing-mode:vertical-rl;transform:rotate(180deg)}
 
@@ -183,18 +183,39 @@ const DRAFT_CSS=`<style>
 .dcell.ban .pk-thumb img,.dcell.ban .pk-thumb .pic{filter:grayscale(1) brightness(.62)}
 .dcell.ban .pk-num{background:#dc2626}
 
-/* амплификатор: отдельная строка-дропдаун под селектом персонажа (мини-иконка + список всех ампов) */
-.amp-pick{display:flex;align-items:center;gap:4px;min-width:0}
-.amp-pick .pk-amp{display:inline-flex;align-items:center;line-height:0;flex-shrink:0}
-.amp-pick .pk-amp img,.amp-pick .pk-amp .pic{width:16px!important;height:16px!important;border-radius:3px!important;object-fit:cover;background:transparent!important}
-.amp-pick .draft-sig{flex:1;min-width:0;font-size:11px;padding:3px 4px;border-radius:5px}
+/* кнопки-дропдауны драфта (персонаж / амплификатор) — вытянутые кнопочки под портретом */
+.ddw{position:relative;width:100%}
+.dd-btn{width:100%;display:flex;align-items:center;justify-content:center;gap:6px;min-height:30px;background:#0f1118;border:1px solid var(--border);color:var(--text);border-radius:6px;padding:4px 8px;font-family:'Rajdhani',sans-serif;font-size:12px;cursor:pointer;line-height:1;transition:border-color .12s}
+.dd-btn:hover{border-color:var(--sub)}
+.ddw.open .dd-btn{border-color:var(--accent)}
+.dd-cur{display:flex;align-items:center;justify-content:center;gap:6px;min-width:0;flex:1;overflow:hidden}
+.dd-cur .dd-nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;color:var(--sub)}
+.dd-ph{color:var(--sub);font-size:12px}
+.dd-arr{color:var(--sub);font-size:9px;flex-shrink:0}
+/* ряд иконок ранг/элемент/роль в кнопке персонажа */
+.dd-cur .ic-row{display:flex;align-items:center;gap:5px}
+.dd-cur .ic-row img{flex-shrink:0}
+/* картинка амплификатора в кнопке */
+.dd-cur .amp-im{display:inline-flex;align-items:center;line-height:0;flex-shrink:0}
+.dd-cur .amp-im img,.dd-cur .amp-im .pic{width:18px!important;height:18px!important;border-radius:4px!important;object-fit:cover}
+/* выпадающий список */
+.dd-list{position:absolute;z-index:60;top:calc(100% + 4px);left:0;min-width:100%;width:max-content;max-width:240px;background:#12141d;border:1px solid var(--border);border-radius:8px;padding:5px;display:none;max-height:280px;overflow:auto;box-shadow:0 10px 28px rgba(0,0,0,.5)}
+.dd-list.left{left:auto;right:0}
+.ddw.open .dd-list{display:block}
+.dd-search{width:100%;background:#0d0f18;border:1px solid var(--border);color:var(--text);border-radius:5px;padding:5px 8px;font-size:12px;margin-bottom:5px;font-family:'Rajdhani',sans-serif;position:sticky;top:0}
+.dd-opt{display:flex;align-items:center;gap:8px;padding:5px 7px;border-radius:5px;cursor:pointer;font-size:13px;color:var(--text);white-space:nowrap}
+.dd-opt:hover{background:#1c1f2e}
+.dd-opt.sel{background:#221019;color:var(--accent)}
+.dd-opt.none{color:var(--sub);font-style:italic}
+.dd-opt .dd-oic{display:inline-flex;align-items:center;flex-shrink:0;line-height:0}
+.dd-opt .dd-oic img,.dd-opt .dd-oic .pic{border-radius:4px}
 
 /* минскейп: бейдж M0..M6 снизу-справа (нативный select без стрелки) */
 .pk-ms{position:absolute;right:3px;bottom:3px;z-index:3;appearance:none;-webkit-appearance:none;background:rgba(8,8,12,.82);border:1px solid #2a2d3a;color:#fff;border-radius:5px;font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;padding:2px 5px;width:auto;min-width:0;cursor:pointer;text-align:center;text-align-last:center}
 .pk-ms:hover,.pk-ms:focus{border-color:var(--accent)}
 
-/* селект персонажа под портретом */
-.dcell .draft-char{width:100%;font-size:11px;padding:3px 6px;border-radius:5px}
+/* скрытые input'ы держат значение (совместимость с saveMatch / импортом драфта) */
+.dcell .draft-char,.dcell .draft-sig{display:none}
 
 @media(max-width:760px){
   .dgrid{grid-template-columns:1fr;gap:18px}
@@ -203,15 +224,31 @@ const DRAFT_CSS=`<style>
 }
 </style>`;
 
-// Раскладка очереди как на сайте (4 колонки, фп зеркалит к центру).
-// Числа — это slot.n; null — пустая ячейка-распорка (чтобы последний пик
-// встал ближе к центру, как в референсе). Слоты фп/дабл из DRAFT_TEMPLATE фиксированы.
-const DRAFT_ORDER_FP =[8,5,4,1, 16,13,12,9, null,null,17,null];
-const DRAFT_ORDER_DBL=[2,3,6,7, 10,11,14,15, null,18,null,null];
+// Раскладка очереди как на сайте (5 колонок, фп зеркалит к центру).
+// Последние пики (17 у фп, 18 у дабла) ставим по бокам 2-го ряда, а не на 3-й ряд —
+// это экономит вертикаль. Числа — slot.n; null — пустая ячейка-распорка.
+const DRAFT_ORDER_FP =[null,8,5,4,1, 17,16,13,12,9];
+const DRAFT_ORDER_DBL=[2,3,6,7,null, 10,11,14,15,18];
+
+// Текущее значение минскейпа в общий msOpts.
+function _msSel(val){const s=String(val||0);return msOpts.replace(`value="${s}"`,`value="${s}" selected`);}
+
+// HTML «текущего выбора» в кнопке-дропдауне.
+// Персонаж: ряд иконок ранг · элемент · роль. Пусто → «—».
+function charCurHtml(ch){
+  if(!ch)return`<span class="dd-ph">—</span>`;
+  return`<span class="ic-row">${iconRarity(ch.rarity,16)}${iconElement(ch.element,16)}${iconRole(ch.role,16)}</span>`;
+}
+// Амплификатор: его картинка + название. Пусто → «— амп —».
+function ampCurHtml(sig){
+  if(!sig)return`<span class="dd-ph">— амп —</span>`;
+  return`<span class="amp-im">${sigImg(sig,18)}</span><span class="dd-nm">${escapeHtml(sig.name)}</span>`;
+}
 
 // Универсальная ячейка драфта. slot===null → пустая распорка.
-// Бан: портрет ч/б + красная рамка + №. Пик: + минскейп M0..M6, чекбокс sig и картинка амплификатора.
-function draftCellHtml(slot,banMap,pickMap,charOpts,ampOpts,setSel){
+// Бан: портрет ч/б + красная рамка + №  → кнопка-дропдаун персонажа.
+// Пик: + минскейп-оверлей M0..M6, кнопка персонажа и кнопка амплификатора.
+function draftCellHtml(slot,banMap,pickMap){
   if(!slot)return`<div class="dcell empty"></div>`;
   const isBan=slot.type==='ban';
   const ex=(isBan?banMap:pickMap)[slot.n]||{};
@@ -219,13 +256,13 @@ function draftCellHtml(slot,banMap,pickMap,charOpts,ampOpts,setSel){
   let ov='',ampRow='';
   if(!isBan){
     // минскейп — оверлей снизу-справа на портрете
-    ov=`<select class="draft-ms pk-ms" data-slot="${slot.n}" title="Минскейп">${setSel(msOpts,String(ex.mindscape||0))}</select>`;
-    // амплификатор — отдельная строка-дропдаун под селектом персонажа (любой амп на любом персе)
+    ov=`<select class="draft-ms pk-ms" data-slot="${slot.n}" title="Минскейп">${_msSel(ex.mindscape||0)}</select>`;
+    // амплификатор — кнопка-дропдаун (любой амп на любом персе); картинка показывается в кнопке
     const curSig=ex.sig_id?D.sigs.find(s=>s.id===ex.sig_id):null;
-    ampRow=`<div class="amp-pick">
-      <span class="pk-amp" data-ampslot="${slot.n}">${curSig?sigImg(curSig,16):''}</span>
-      <select class="draft-sig" data-slot="${slot.n}" onchange="draftSigChanged(this)" title="Амплификатор (W-движок)">
-        <option value="">— амп —</option>${setSel(ampOpts,ex.sig_id||'')}</select>
+    ampRow=`<div class="ddw" data-kind="amp" data-slot="${slot.n}">
+      <input type="hidden" class="draft-sig" data-slot="${slot.n}" value="${ex.sig_id||''}">
+      <button type="button" class="dd-btn" onclick="ddToggle(this,event)" title="Амплификатор (W-движок)"><span class="dd-cur">${ampCurHtml(curSig)}</span><span class="dd-arr">▾</span></button>
+      <div class="dd-list"></div>
     </div>`;
   }
   return`<div class="dcell ${isBan?'ban':'pick'}">
@@ -233,8 +270,11 @@ function draftCellHtml(slot,banMap,pickMap,charOpts,ampOpts,setSel){
       <span class="pk-img" data-imgslot="${slot.n}">${iconChar(ch,isBan?64:88)}</span>
       <span class="pk-num">${slot.n}</span>
       ${ov}</div>
-    <select class="draft-char" data-slot="${slot.n}" data-type="${slot.type}" data-pid="${slot.pid}" onchange="draftCharChanged(this)">
-      <option value="">—</option>${setSel(charOpts,ex.character_id)}</select>
+    <div class="ddw" data-kind="char" data-slot="${slot.n}">
+      <input type="hidden" class="draft-char" data-slot="${slot.n}" data-type="${slot.type}" data-pid="${slot.pid}" value="${ex.character_id||''}">
+      <button type="button" class="dd-btn" onclick="ddToggle(this,event)" title="Персонаж"><span class="dd-cur">${charCurHtml(ch)}</span><span class="dd-arr">▾</span></button>
+      <div class="dd-list"></div>
+    </div>
     ${ampRow}
   </div>`;
 }
@@ -246,16 +286,15 @@ function renderDraftBoard(slots,fpId,dblId,fpName,dblName,match){
   (match?.bans||[]).forEach(b=>banMap[b.ban_order]=b);
   (match?.picks||[]).forEach(p=>pickMap[p.pick_order]=p);
 
-  const charOpts=D.chars.map(c=>`<option value="${c.id}">${c.name}</option>`).join('');
-  // амплификаторы: имя + (персонаж-владелец) для ориентира
-  const ampOpts=[...D.sigs].sort((a,b)=>(a.name||'').localeCompare(b.name||'')).map(s=>{
+  // Данные для ленивых списков дропдаунов (HTML опций строится при первом открытии).
+  window._ddCharItems=D.chars.map(c=>({value:c.id,label:c.name,c}));
+  window._ddAmpItems=[...D.sigs].sort((a,b)=>(a.name||'').localeCompare(b.name||'')).map(s=>{
     const c=D.chars.find(x=>x.id===s.character_id);
-    return`<option value="${s.id}">${escapeHtml(s.name)}${c?' · '+escapeHtml(c.name):''}</option>`;
-  }).join('');
-  const setSel=(opts,val)=>val?opts.replace(`value="${val}"`,`value="${val}" selected`):opts;
+    return{value:s.id,label:s.name+(c?' · '+c.name:''),s};
+  });
 
   const byN={};slots.forEach(s=>byN[s.n]=s);
-  const cells=order=>order.map(n=>draftCellHtml(n?byN[n]:null,banMap,pickMap,charOpts,ampOpts,setSel)).join('');
+  const cells=order=>order.map(n=>draftCellHtml(n?byN[n]:null,banMap,pickMap)).join('');
 
   return DRAFT_CSS+`<div class="dboard">
     <div class="dgrid">
@@ -272,24 +311,94 @@ function renderDraftBoard(slots,fpId,dblId,fpName,dblName,match){
   </div>`;
 }
 
-function draftCharChanged(el){
-  const slot=el.dataset.slot;
-  const char=D.chars.find(c=>c.id===el.value)||null;
+// ===== Кнопки-дропдауны драфта (персонаж / амплификатор) =====
+// Значение хранится в скрытом input.draft-char / .draft-sig (совместимо с saveMatch и импортом).
+
+// Список опций (лениво, при первом открытии). У каждого пункта — иконка + имя.
+function buildDdList(kind){
+  if(kind==='amp'){
+    const items=window._ddAmpItems||[];
+    return`<input class="dd-search" placeholder="поиск амплификатора" oninput="ddSearch(this)" onclick="event.stopPropagation()">`+
+      `<div class="dd-opt none" data-v="" onclick="ddPick(this)">— без амплификатора —</div>`+
+      items.map(it=>`<div class="dd-opt" data-v="${it.value}" onclick="ddPick(this)"><span class="dd-oic">${sigImg(it.s,22)}</span>${escapeHtml(it.label)}</div>`).join('');
+  }
+  const items=window._ddCharItems||[];
+  return`<input class="dd-search" placeholder="поиск персонажа" oninput="ddSearch(this)" onclick="event.stopPropagation()">`+
+    `<div class="dd-opt none" data-v="" onclick="ddPick(this)">— пусто —</div>`+
+    items.map(it=>`<div class="dd-opt" data-v="${it.value}" onclick="ddPick(this)"><span class="dd-oic">${iconChar(it.c,22)}</span>${escapeHtml(it.label)}</div>`).join('');
+}
+
+function ddToggle(btn,ev){
+  if(ev)ev.stopPropagation();
+  const w=btn.closest('.ddw');if(!w)return;
+  const wasOpen=w.classList.contains('open');
+  document.querySelectorAll('.ddw.open').forEach(x=>x.classList.remove('open'));
+  if(wasOpen)return;
+  const list=w.querySelector('.dd-list');
+  if(list&&!list.dataset.filled){list.innerHTML=buildDdList(w.dataset.kind);list.dataset.filled='1';}
+  const val=w.querySelector('input').value;
+  if(list)list.querySelectorAll('.dd-opt').forEach(o=>o.classList.toggle('sel',o.dataset.v===val));
+  w.classList.add('open');
+  // если список вылезает за правый край вьюпорта — выровнять по правому краю
+  list.classList.remove('left');
+  if(list.getBoundingClientRect().right>window.innerWidth-8)list.classList.add('left');
+  const s=list.querySelector('.dd-search');if(s){s.value='';ddSearch(s);setTimeout(()=>s.focus(),0);}
+}
+
+function ddSearch(inp){
+  const q=inp.value.trim().toLowerCase();
+  inp.closest('.dd-list').querySelectorAll('.dd-opt').forEach(o=>{
+    if(o.classList.contains('none')){o.style.display='';return;}
+    o.style.display=o.textContent.toLowerCase().includes(q)?'':'none';
+  });
+}
+
+function ddPick(opt){
+  const w=opt.closest('.ddw');if(!w)return;
+  w.querySelector('input').value=opt.dataset.v;
+  w.classList.remove('open');
+  if(w.dataset.kind==='char')onCharPicked(w.dataset.slot);
+  else dcRefreshAmp(w.dataset.slot);
+}
+
+// Обновить «текущий выбор» в кнопке персонажа из её скрытого input.
+function dcRefreshChar(slot){
+  const inp=document.querySelector(`.draft-char[data-slot="${slot}"]`);
+  const w=inp&&inp.closest('.ddw');if(!w)return;
+  const ch=D.chars.find(c=>c.id===inp.value)||null;
+  w.querySelector('.dd-cur').innerHTML=charCurHtml(ch);
+}
+// Обновить картинку амплификатора в его кнопке.
+function dcRefreshAmp(slot){
+  const inp=document.querySelector(`.draft-sig[data-slot="${slot}"]`);
+  const w=inp&&inp.closest('.ddw');if(!w)return;
+  const sig=inp.value?D.sigs.find(s=>s.id===inp.value):null;
+  w.querySelector('.dd-cur').innerHTML=ampCurHtml(sig);
+}
+
+// Выбор персонажа: портрет, авто-M6 для A-ранга, дефолтный сигнатурный амплификатор.
+function onCharPicked(slot){
+  const inp=document.querySelector(`.draft-char[data-slot="${slot}"]`);
+  if(!inp)return;
+  const char=D.chars.find(c=>c.id===inp.value)||null;
   const msEl=document.querySelector(`.draft-ms[data-slot="${slot}"]`);
   if(msEl&&char?.rarity==='A')msEl.value='6';
   const img=document.querySelector(`.pk-img[data-imgslot="${slot}"]`);
-  if(img)img.innerHTML=iconChar(char,48);
-  // при выборе персонажа по умолчанию ставим его сигнатурный амплификатор (частый случай)
-  const sigSel=document.querySelector(`.draft-sig[data-slot="${slot}"]`);
-  if(sigSel){const own=sigForChar(el.value);sigSel.value=own?own.id:'';draftSigChanged(sigSel);}
+  if(img)img.innerHTML=iconChar(char,88);
+  dcRefreshChar(slot);
+  // по умолчанию ставим сигнатурный амплификатор персонажа (частый случай)
+  const ampInp=document.querySelector(`.draft-sig[data-slot="${slot}"]`);
+  if(ampInp){const own=sigForChar(inp.value);ampInp.value=own?own.id:'';dcRefreshAmp(slot);}
 }
 
-// смена амплификатора в дропдауне → обновить мини-иконку рядом
-function draftSigChanged(sel){
-  const amp=document.querySelector(`.pk-amp[data-ampslot="${sel.dataset.slot}"]`);
-  if(!amp)return;
-  const sig=sel.value?D.sigs.find(s=>s.id===sel.value):null;
-  amp.innerHTML=sig?sigImg(sig,16):'';
+// Совместимость со старыми вызовами (в т.ч. из импорта драфта).
+function draftCharChanged(el){onCharPicked(el.dataset.slot);}
+function draftSigChanged(el){dcRefreshAmp(el.dataset.slot);}
+
+// Закрытие открытого дропдауна по клику вне него.
+if(typeof document!=='undefined'&&!window._ddInit){
+  window._ddInit=true;
+  document.addEventListener('click',e=>{if(!e.target.closest('.ddw'))document.querySelectorAll('.ddw.open').forEach(w=>w.classList.remove('open'));});
 }
 
 function parseSec(s){if(!s)return null;const p=s.split(':').map(Number);if(p.length!==2||isNaN(p[0])||isNaN(p[1]))return null;return p[0]*60+p[1];}
