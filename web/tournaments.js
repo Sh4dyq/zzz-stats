@@ -214,10 +214,11 @@ async function syncChallonge(tourId,tourName){
   const{data,error}=await sb.functions.invoke('challonge-proxy',{body:{challonge:slug,db_id:tourId}});
   if(error||data?.error){return toast('Синк не удался: '+(data?.error||error.message||error),'err');}
   const s=data.sync||{};
-  let msg=`Сетка обновлена · мест записано: ${s.results_written||0}`;
+  if(s.cacheError)return toast('Кэш сетки НЕ записан: '+s.cacheError,'err');
+  let msg=`Сетка ${s.cached?'обновлена':'НЕ записана'} · мест записано: ${s.results_written||0}`;
   if(s.results_skipped_manual)msg+=` · ручных пропущено: ${s.results_skipped_manual}`;
   if((s.unmatched||[]).length)msg+=` · не сматчено: ${s.unmatched.join(', ')}`;
-  toast(msg);
+  toast(msg,s.cached?'':'err');
   openBracketEditor(tourId,tourName);
 }
 // Ручной редактор мест/призовых. Строки, сохранённые здесь → source='manual' (синк их не трогает).

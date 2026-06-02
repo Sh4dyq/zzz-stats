@@ -144,15 +144,24 @@ Deno.serve(async (req) => {
     const model = normalize(doc);
 
     const SB_URL = Deno.env.get("SUPABASE_URL")!;
-    const SB_SR = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const admin = createClient(SB_URL, SB_SR, { auth: { persistSession: false } });
+    // Пишем под ролью ВЫЗЫВАЮЩЕГО (синк жмут из админки залогиненным = authenticated,
+    // что удовлетворяет RLS-политики bracket_cache/tournament_results на запись). Это не
+    // зависит от легаси service_role-ключа (на новых API-ключах он может не работать).
+    // Фолбэк на service_role, если по какой-то причине нет заголовка авторизации.
+    const authHeader = req.headers.get("Authorization");
+    const SB_SR = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+    const SB_ANON = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
+    const admin = authHeader
+      ? createClient(SB_URL, SB_ANON, { auth: { persistSession: false }, global: { headers: { Authorization: authHeader } } })
+      : createClient(SB_URL, SB_SR, { auth: { persistSession: false } });
 
-    const synced = { cached: false, results_written: 0, results_skipped_manual: 0, unmatched: [] as string[] };
+    const synced = { cached: false, cacheError: null as string | null, results_written: 0, results_skipped_manual: 0, unmatched: [] as string[] };
 
     if (db_id) {
       // 1) кэш модели сетки (читается bracket.html напрямую)
       const cw = await admin.from("bracket_cache").upsert({ tournament_id: db_id, json: model, fetched_at: model.fetched_at });
       synced.cached = !cw.error;
+      synced.cacheError = cw.error ? (cw.error.message || JSON.stringify(cw.error)) : null;
 
       // 2) синк МЕСТ в tournament_results (граница ручное/авто)
       if (model.results.length) {
