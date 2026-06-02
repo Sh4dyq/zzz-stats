@@ -621,7 +621,7 @@ function placeCell(pl,cnt){
 }
 function renderMisc(){
   const data=computeMisc();
-  const head=`<thead><tr><th class="nc">Ник</th><th>Любимый персонаж</th><th>Σ матчей</th><th>Возраст</th><th>Σ турниров</th><th>Наивысшее место</th><th>Призовые ₽</th></tr></thead>`;
+  const head=`<thead><tr><th class="nc">Ник</th><th>Любимый персонаж</th><th>Σ матчей</th><th>Σ турниров</th><th>Наивысшее место</th><th>Призовые ₽</th><th>Возраст</th></tr></thead>`;
   // показываем всех игроков, у кого есть встречи в текущем фильтре
   const activePl=S.players.filter(p=>data[p.id]&&data[p.id].matches);
   if(!activePl.length){document.getElementById('players-area').innerHTML=`<table>${head}<tbody><tr><td class="empty" colspan="7">Нет данных</td></tr></tbody></table>`;return;}
@@ -633,7 +633,7 @@ function renderMisc(){
     const pr=S.playerMap[p.id]?.prize;
     const prize=pr!=null?`<span class="prize-rub">${String(pr).replace(/\B(?=(\d{3})+(?!\d))/g,' ')} ₽</span>`:'—';
     return`<tr><td class="nc"><div style="display:flex;align-items:center;gap:6px">${pic(p.nickname,'')}<span>${p.nickname}</span></div></td>`+
-      `<td>${fav}</td><td>${d.matches}</td><td>${p.age??'—'}</td><td>${d.tours.size}</td><td>${placeCell(p.highest_place,p.highest_place_count)}</td><td>${prize}</td></tr>`;
+      `<td>${fav}</td><td>${d.matches}</td><td>${d.tours.size}</td><td>${placeCell(p.highest_place,p.highest_place_count)}</td><td>${prize}</td><td>${p.age??'—'}</td></tr>`;
   });
   document.getElementById('players-area').innerHTML=`<table>${head}<tbody>${rows.join('')}</tbody></table>`;
 }
