@@ -237,13 +237,14 @@ async function bulkAddParticipants(tourId,tourName){
   if(!nicks.length)return toast('Список пуст','err');
   const{data:cur}=await sb.from('tournament_participants').select('seed').eq('tournament_id',tourId);
   let seed=(cur||[]).reduce((m,r)=>Math.max(m,r.seed||0),0);
-  let added=0,fail=0;
+  let added=0,fail=0,lastErr=null;
   for(const nick of nicks){
     const pid=await resolvePlayerNick(nick);
     if(!pid){fail++;continue;}
     const{error}=await sb.from('tournament_participants').upsert({tournament_id:tourId,player_id:pid,seed:++seed},{onConflict:'tournament_id,player_id'});
-    if(error){fail++;seed--;}else added++;
+    if(error){fail++;seed--;lastErr=error;}else added++;
   }
+  if(lastErr&&!added)return dbErr(lastErr,'добавление участников');
   toast(`Добавлено ${added}${fail?`, пропущено ${fail}`:''}`);
   await refreshData();openParticipants(tourId,tourName);
 }

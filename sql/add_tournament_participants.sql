@@ -10,6 +10,13 @@ create table if not exists tournament_participants (
   unique (tournament_id, player_id)
 );
 alter table tournament_participants enable row level security;
+-- ВАЖНО: RLS-политик недостаточно — таблицам, созданным сырым SQL, нужны ещё
+-- табличные GRANT'ы, иначе PostgREST отдаёт 42501 «permission denied» даже
+-- авторизованному пользователю (bulk-add участников молча падал именно из-за этого).
+grant select on tournament_participants to anon, authenticated;
+grant insert, update, delete on tournament_participants to authenticated;
+drop policy if exists "participants read"  on tournament_participants;
+drop policy if exists "participants write" on tournament_participants;
 create policy "participants read"  on tournament_participants for select using (true);
 create policy "participants write" on tournament_participants for all
   using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');

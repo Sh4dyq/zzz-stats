@@ -429,7 +429,14 @@ function computeChars(){
     if(pk.is_double){s.dp++;if(isW)s.dw++;else if(isD)s.dd++;}
     if(pk.has_signature){s.sp++;if(isW)s.sw++;else if(isD)s.sd++;}
   });
-  S.bans.forEach(b=>{banCount[b.character_id]=(banCount[b.character_id]||0)+1;});
+  // banCount — сколько раз забанен (сырые строки; обе стороны могут забанить одного перса в одном матче).
+  // banMatch — множество матчей, где перс забанен (для «доли от матчей»: presence ≤ 100%).
+  const banMatch={};
+  S.bans.forEach(b=>{
+    banCount[b.character_id]=(banCount[b.character_id]||0)+1;
+    (banMatch[b.character_id]=banMatch[b.character_id]||new Set()).add(b.match_id);
+  });
+  const banDist=cid=>banMatch[cid]?banMatch[cid].size:0;
 
   const rosterCount={};
   Object.values(S.rosters).forEach(arr=>arr.forEach(r=>{const k=r.character_id+'_'+r.mindscape;rosterCount[k]=(rosterCount[k]||0)+1;}));
@@ -449,7 +456,7 @@ function computeChars(){
       pk:s.pk,pw:s.pw,pd:s.pd,pl:s.pk-s.pw-s.pd,pwr:wr(s.pw,s.pd,s.pk),ppt:pctT(s.pk,T),
       fp:s.fp,fw:s.fw,fd:s.fd,fl:s.fp-s.fw-s.fd,fwr:wr(s.fw,s.fd,s.fp),
       dp:s.dp,dw:s.dw,dd:s.dd,dl:s.dp-s.dw-s.dd,dwr:wr(s.dw,s.dd,s.dp),
-      bn,bpt:pctT(bn,T),pbn:s.pk+bn,pbpt:pctT(s.pk+bn,T),
+      bn,bpt:pctT(banDist(s.cid),T),pbn:s.pk+bn,pbpt:pctT(s.pk+banDist(s.cid),T),
       rs,rspt:pctT(rs,totalPlayers),
       sp:s.sp,sw:s.sw,sd:s.sd,sl:s.sp-s.sw-s.sd,swr:wr(s.sw,s.sd,s.sp),spt:pctT(s.sp,T)
     });
@@ -459,17 +466,22 @@ function computeChars(){
   Object.values(groups).forEach(g=>{
     if(!g.variants.length){
       // персонаж ни разу не пикнут — показываем строку с нулями/прочерками
-      const cidv=g.char.id, bn=banCount[cidv]||0;
+      const cidv=g.char.id, bn=banCount[cidv]||0, bd=banDist(cidv);
       let rs=0;Object.keys(rosterCount).forEach(k=>{if(k.slice(0,cidv.length+1)===cidv+'_')rs+=rosterCount[k];});
       const totalP0=Object.keys(S.rosters).length||1;
+      // кост невыбранного персонажа берём из tournament_costs (по всем минскейпам → диапазон),
+      // иначе колонка «Кост» у непикнутых всегда показывала «—», хотя кост в турнире задан.
+      const costObj=S.costs[cidv]||{};
+      const rng=key=>{const xs=[...new Set(Object.values(costObj).map(c=>c[key]).filter(c=>c!=null))].sort((a,b)=>a-b);
+        return xs.length===0?'—':xs.length===1?xs[0]:`${xs[0]}–${xs[xs.length-1]}`;};
       result.push({char:g.char,variants:[],agg:{
         pk:0,pw:0,pd:0,pl:0,pwr:'—',ppt:0,
         fp:0,fw:0,fd:0,fl:0,fwr:'—',
         dp:0,dw:0,dd:0,dl:0,dwr:'—',
-        bn,bpt:pctT(bn,T),pbn:bn,pbpt:pctT(bn,T),
+        bn,bpt:pctT(bd,T),pbn:bn,pbpt:pctT(bd,T),
         rs,rspt:pctT(rs,totalP0),
         sp:0,sw:0,sd:0,sl:0,swr:'—',spt:0,
-        cost:'—',sc:'—'
+        cost:rng('cost'),sc:rng('sig_cost')
       }});
       return;
     }
@@ -477,10 +489,13 @@ function computeChars(){
     const sum={pk:0,pw:0,pd:0,fp:0,fw:0,fd:0,dp:0,dw:0,dd:0,bn:0,rs:0,sp:0,sw:0,sd:0};
     g.variants.forEach(v=>Object.keys(sum).forEach(k=>sum[k]+=typeof v[k]==='number'?v[k]:0));
     const T2=S.matches.length,totalP=Object.keys(S.rosters).length||1;
-    const agg={...sum,
+    // Баны не зависят от минскейпа: берём счётчик по персонажу ОДИН раз, а не sum по вариантам
+    // (иначе у S-ранга с несколькими минскейпами баны множились ×кол-во вариантов → presence >100%).
+    const aBn=banCount[g.char.id]||0,aBd=banDist(g.char.id);
+    const agg={...sum,bn:aBn,
       pl:sum.pk-sum.pw-sum.pd,fl:sum.fp-sum.fw-sum.fd,dl:sum.dp-sum.dw-sum.dd,sl:sum.sp-sum.sw-sum.sd,
       pwr:wr(sum.pw,sum.pd,sum.pk),fwr:wr(sum.fw,sum.fd,sum.fp),dwr:wr(sum.dw,sum.dd,sum.dp),swr:wr(sum.sw,sum.sd,sum.sp),
-      ppt:pctT(sum.pk,T2),bpt:pctT(sum.bn,T2),pbn:sum.pk+sum.bn,pbpt:pctT(sum.pk+sum.bn,T2),
+      ppt:pctT(sum.pk,T2),bpt:pctT(aBd,T2),pbn:sum.pk+aBn,pbpt:pctT(sum.pk+aBd,T2),
       rspt:pctT(sum.rs,totalP),spt:pctT(sum.sp,T2)
     };
     const costs=[...new Set(g.variants.map(v=>v.cost).filter(c=>c!=='—'))].sort((a,b)=>a-b);
