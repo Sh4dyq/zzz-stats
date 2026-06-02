@@ -795,7 +795,8 @@ function activateTour(id,tab){
 }
 async function init(){
   const{data:tours}=await sb.from('tournaments').select('*').order('created_at',{ascending:false});
-  TOURS=tours||[];
+  // ручной порядок (sort_order) поверх дефолтной сортировки; строки без него — в конец, стабильно.
+  TOURS=(tours||[]).slice().sort((a,b)=>(a.sort_order??1e9)-(b.sort_order??1e9));
 
   const tabAll=document.querySelector('.tour-tab[data-mode="all"]');
   const tabLast=document.querySelector('.tour-tab[data-mode="last"]');
