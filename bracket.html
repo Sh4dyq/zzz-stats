@@ -71,7 +71,7 @@
   .idx-h{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;text-transform:uppercase;font-size:30px;margin-bottom:4px}
   .idx-sub{color:var(--sub);font-size:14px;font-weight:500;margin-bottom:22px}
   .idx-tbl{border:1px solid var(--border);border-radius:13px;overflow:hidden;background:var(--card)}
-  .idx-head,.idx-row{display:grid;grid-template-columns:minmax(200px,2.3fr) 1.2fr .9fr .5fr .8fr 1fr .9fr;align-items:center;gap:14px;padding:13px 20px}
+  .idx-head,.idx-row{display:grid;grid-template-columns:minmax(200px,2.4fr) .8fr .7fr 1fr 1.4fr;align-items:center;gap:14px;padding:13px 20px}
   .idx-head{background:#101013;border-bottom:1px solid var(--border);font-family:'Rajdhani',sans-serif;font-weight:600;font-size:12px;letter-spacing:.05em;text-transform:uppercase;color:var(--sub)}
   .idx-row{border-top:1px solid var(--line);cursor:pointer;transition:.12s}
   .idx-row:first-child{border-top:none}
@@ -95,15 +95,43 @@
     .idx-h{font-size:25px}
     .idx-head{display:none}
     .idx-row{display:flex;flex-wrap:wrap;align-items:center;gap:9px 12px;padding:15px 16px}
-    .idx-row .ir-name{flex:1 1 55%;min-width:0;font-size:16px;order:0}
-    .idx-row .idx-cell:nth-child(2),                       /* game */
-    .idx-row .idx-cell:nth-child(3){display:none}          /* role */
-    .idx-row .idx-cell:nth-child(7){order:1;margin-left:auto}   /* status → end of line 1 */
-    .idx-row .idx-cell:nth-child(4){order:2}                    /* type pill   → line 2 */
-    .idx-row .idx-cell:nth-child(5){order:3}                    /* participants */
-    .idx-row .idx-cell:nth-child(6){order:4}                    /* date */
-    .idx-row .idx-cell:nth-child(5)::after{content:' уч.';color:#5e5e66}
+    .idx-row .ir-name{flex:1 1 100%;min-width:0;font-size:16px;order:0}
+    .idx-row .idx-cell:nth-child(2){order:1}                    /* формат */
+    .idx-row .idx-cell:nth-child(3){order:2}                    /* участники */
+    .idx-row .idx-cell:nth-child(3)::after{content:' уч.';color:#5e5e66}
+    .idx-row .idx-cell:nth-child(4){order:3}                    /* дата */
+    .idx-row .idx-cell:nth-child(5){order:4;flex:1 1 100%}      /* прогресс на всю строку */
   }
+
+  /* progress bar (index column + tournament meta) */
+  .prog{display:flex;align-items:center;gap:9px}
+  .prog .bar{position:relative;flex:1;height:7px;border-radius:5px;background:var(--panel-3);overflow:hidden;min-width:56px}
+  .prog .fill{position:absolute;left:0;top:0;bottom:0;border-radius:5px;background:var(--grad);transition:width .4s ease}
+  .prog .pln{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--sub);min-width:46px;text-align:right;white-space:nowrap}
+  .live-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--red);box-shadow:0 0 7px rgba(255,31,68,.85);margin-left:8px;flex-shrink:0;vertical-align:middle}
+
+  /* «текущий турнир» quick-button рядом с «Все сетки» (через разделитель) */
+  .tr-div{align-self:center;width:1px;height:26px;background:var(--line);margin:0 4px}
+  .cur-btn{display:flex;align-items:center;gap:9px;border:none;background:none;cursor:pointer;padding:0 18px;min-height:58px;transition:.15s}
+  .cur-btn .cb-dot{width:8px;height:8px;border-radius:50%;background:#5e5e66;flex-shrink:0}
+  .cur-btn .cb-dot.on{background:var(--red);box-shadow:0 0 7px rgba(255,31,68,.85)}
+  .cur-btn .cb-tx{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;font-size:16px;letter-spacing:.02em;color:var(--sub);transition:.15s;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .cur-btn:hover .cb-tx{color:#fff}
+
+  /* match review cards (вкладка Результаты, 4 в ряд) */
+  .rev-wrap{max-width:1080px;margin:30px auto 10px;padding:0 28px}
+  .rev-h{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;text-transform:uppercase;font-size:20px;margin-bottom:14px;color:var(--text)}
+  .rev-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+  @media(max-width:900px){.rev-grid{grid-template-columns:repeat(2,1fr)}}
+  @media(max-width:520px){.rev-grid{grid-template-columns:1fr}}
+  .rev-card{background:linear-gradient(180deg,#1d1d22,#161618 70%);border:1px solid var(--border);border-radius:11px;padding:11px 13px;transition:border-color .15s}
+  .rev-card:hover{border-color:#3a3a44}
+  .rev-stage{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;font-size:11px;letter-spacing:.04em;color:var(--sub);margin-bottom:8px}
+  .rev-row{display:flex;align-items:center;gap:8px;padding:5px 0}
+  .rev-row+.rev-row{border-top:1px solid var(--line)}
+  .rev-row .rev-nm{flex:1;font-weight:600;font-size:14px;color:#9a9aa3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .rev-row.win .rev-nm{color:#fff;font-weight:700}
+  .rev-row .rev-w{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;background:rgba(70,211,105,.16);color:var(--win);font-size:12px;font-weight:700}
 
   /* format sub-tabs (Сетка / Результаты) */
   .fmtrow{display:flex;gap:0;padding:0 24px;border-bottom:1px solid var(--border);background:rgba(11,11,13,.4)}
@@ -286,6 +314,11 @@ const S={tours:[],players:{},encounters:[],results:{},cur:null,fmt:'bracket',vie
 const GAME='Zenless Zone Zero';
 const fmtDate=d=>d?new Date(d).toLocaleDateString('ru',{day:'2-digit',month:'short',year:'numeric'}):'—';
 const partCount=tid=>{const s=new Set();S.encounters.filter(e=>e.tournament_id==tid).forEach(e=>{if(e.player1_id)s.add(e.player1_id);if(e.player2_id)s.add(e.player2_id)});return s.size};
+// прогресс турнира = доля сыгранных встреч (с победителем) от всех
+const tourProgress=tid=>{const e=S.encounters.filter(x=>x.tournament_id==tid);const total=e.length,done=e.filter(x=>x.winner_id).length;return{done,total,pct:total?Math.round(done/total*100):0};};
+const progHTML=pr=>`<div class="prog"><div class="bar"><div class="fill" style="width:${pr.pct}%"></div></div><span class="pln">${pr.done}/${pr.total}</span></div>`;
+// актуальный турнир: live → последний не-анонс → первый
+const curTour=()=>S.tours.find(t=>t.status==='live')||S.tours.find(t=>t.status!=='upcoming')||S.tours[0]||null;
 const $=id=>document.getElementById(id);
 const esc=s=>(s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
@@ -326,16 +359,27 @@ function renderTourbar(){
   if(inTour){
     const t=S.cur,st=t.status||'finished';
     const lbl={live:'LIVE',upcoming:'СКОРО',finished:'ЗАВЕРШЁН'}[st]||'';
+    // дату показываем только если задана (иначе под бейджем висел «—»)
+    const sub=t.event_date?`<span class="tt-sub">${fmtDate(t.event_date)}</span>`:'';
     right=`<div class="spacer"></div>
-      <div class="tour-tab"><span class="tt-main">${esc(t.name)}<span class="tt-badge ${st}">${lbl}</span></span>
-        <span class="tt-sub">${fmtDate(t.event_date)}</span></div>`;
+      <div class="tour-tab"><span class="tt-main">${esc(t.name)}<span class="tt-badge ${st}">${lbl}</span></span>${sub}</div>`;
+  }
+  // в индексе рядом с «Все сетки» — кнопка-переход на актуальный турнир (через разделитель)
+  let quick='';
+  if(!inTour){
+    const c=curTour();
+    if(c)quick=`<div class="tr-div"></div>
+      <button class="cur-btn" id="curBtn" title="Открыть актуальный турнир">
+        <span class="cb-dot ${c.status==='live'?'on':''}"></span><span class="cb-tx">${esc(c.name)}</span>
+      </button>`;
   }
   $('tourrow').innerHTML=`
     <button class="all-btn ${S.view==='all'?'active':''}" id="allBtn">
       <svg class="ab-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
       <span class="ab-tx">Все сетки</span>
-    </button>${right}`;
+    </button>${quick}${right}`;
   $('allBtn').onclick=openAll;
+  const cb=$('curBtn');if(cb)cb.onclick=()=>{const c=curTour();if(c)openTour(c);};
   $('fmtrow').hidden=!inTour;
 }
 function renderFmtTabs(){
@@ -361,24 +405,21 @@ function renderAll(){
   if(!S.tours.length){$('content').innerHTML='<div class="panel"><h3>Нет турниров</h3></div>';return;}
   const order={live:0,upcoming:1,finished:2};
   const rows=S.tours.slice().sort((a,b)=>(order[a.status]??3)-(order[b.status]??3));
-  const stPill=t=>{const st=t.status||'finished';const lbl={live:'Идёт',upcoming:'Скоро',finished:'Завершён'}[st]||st;
-    return `<span class="st-pill st-${st}"><span class="sdot"></span>${lbl}</span>`;};
+  const fmtLbl=t=>t.bracket_type==='DE'?'Double Elim':t.bracket_type==='SE'?'Single Elim':(t.bracket_type||'—');
   $('content').innerHTML=`<div class="idx-wrap">
     <div class="idx-h">Все сетки</div>
     <div class="idx-sub">Турнирные сетки Nexus Shiyu · нажми на турнир, чтобы открыть его сетку</div>
     <div class="idx-tbl">
       <div class="idx-head">
-        <div>Название</div><div>Игра</div><div>Роль</div><div>Тип</div><div>Участники</div><div>Дата проведения</div><div>Статус</div>
+        <div>Название</div><div>Формат</div><div>Участники</div><div>Даты проведения</div><div>Прогресс</div>
       </div>
       ${rows.map(t=>`
         <div class="idx-row${(t.status||'')==='live'?' live-row':''}" data-id="${t.id}">
-          <div class="ir-name"><span class="ir-thumb">${esc((t.name||'?').slice(0,2).toUpperCase())}</span>${esc(t.name)}</div>
-          <div class="idx-cell"><span class="gtag">${GAME}</span></div>
-          <div class="idx-cell mut">${esc(t.role||'Organizer')}</div>
-          <div class="idx-cell"><span class="fmt-pill">${t.bracket_type||'—'}</span></div>
+          <div class="ir-name"><span class="ir-thumb">${esc((t.name||'?').slice(0,2).toUpperCase())}</span>${esc(t.name)}${(t.status||'')==='live'?'<span class="live-dot" title="Идёт сейчас"></span>':''}</div>
+          <div class="idx-cell"><span class="fmt-pill">${esc(fmtLbl(t))}</span></div>
           <div class="idx-cell mut">${partCount(t.id)||'—'}</div>
           <div class="idx-cell mut">${fmtDate(t.event_date)}</div>
-          <div class="idx-cell">${stPill(t)}</div>
+          <div class="idx-cell">${progHTML(tourProgress(t.id))}</div>
         </div>`).join('')}
     </div>
   </div>`;
@@ -387,13 +428,13 @@ function renderAll(){
 
 function renderMeta(t){
   const slug=challongeSlug(t.challonge_url);
-  const encN=S.encounters.filter(e=>e.tournament_id==t.id).length;
+  const pr=tourProgress(t.id);
   $('tmeta').style.display='flex';
   $('tmeta').innerHTML=`
     <div class="tname">${esc(t.name)}</div>
     <span class="chip">Формат <b>${t.bracket_type==='DE'?'Double Elim':t.bracket_type==='SE'?'Single Elim':'—'}</b></span>
     <span class="chip">Дата <b>${fmtDate(t.event_date)}</b></span>
-    <span class="chip">Встреч <b>${encN}</b></span>
+    <span class="chip" style="gap:10px">Прогресс <div class="prog" style="width:130px"><div class="bar"><div class="fill" style="width:${pr.pct}%"></div></div><span class="pln">${pr.done}/${pr.total}</span></div></span>
     ${slug?`<a class="ch-link" href="https://challonge.com/ru/${slug}" target="_blank" rel="noopener">Открыть на Challonge ↗</a>`:''}`;
 }
 
@@ -460,11 +501,28 @@ function seedHTML(s){
     <span class="sc">${s.win?'✓':''}</span></div>`;
 }
 
+// плашки-обзор сыгранных встреч (только добавленные в статистику = с победителем), 4 в ряд
+function encReviewCards(t){
+  const encs=S.encounters.filter(e=>e.tournament_id==t.id&&e.winner_id)
+    .sort((a,b)=>(a.sort_order??1e9)-(b.sort_order??1e9));
+  if(!encs.length)return'';
+  const row=(name,win)=>`<div class="rev-row ${win?'win':''}"><span class="rev-nm">${esc(name||'—')}</span>${win?'<span class="rev-w">✓</span>':''}</div>`;
+  return`<div class="rev-wrap">
+    <div class="rev-h">Обзор встреч</div>
+    <div class="rev-grid">${encs.map(e=>`
+      <div class="rev-card">
+        ${e.stage?`<div class="rev-stage">${esc(e.stage)}</div>`:''}
+        ${row(S.players[e.player1_id],e.winner_id===e.player1_id)}
+        ${row(S.players[e.player2_id],e.winner_id===e.player2_id)}
+      </div>`).join('')}</div>
+  </div>`;
+}
 function renderResults(t){
   const rs=(S.results[t.id]||[]).slice().sort((a,b)=>(a.place||99)-(b.place||99));
+  const cards=encReviewCards(t);
   if(!rs.length){
     $('content').innerHTML=`<div class="panel"><h3>Результаты не заполнены</h3>
-      <p>Места и призовые появятся после завершения турнира — их подтянет синк с Challonge (final_rank) или ручной ввод в админке.</p></div>`;
+      <p>Места и призовые появятся после завершения турнира — их подтянет синк с Challonge (final_rank) или ручной ввод в админке.</p></div>${cards}`;
     return;
   }
   $('content').innerHTML=`<div class="rtbl">`+rs.map(r=>{
@@ -473,7 +531,7 @@ function renderResults(t){
       <span class="plc ${g}">${r.place||'—'}</span>
       <span class="rnm">${esc(S.players[r.player_id]||'—')}</span>
       ${r.prize?`<span class="rprz">${Number(r.prize).toLocaleString('ru')} ₽</span>`:''}</div>`;
-  }).join('')+`</div>`;
+  }).join('')+`</div>`+cards;
 }
 
 // twitch live pill (decapi, same as other pages)

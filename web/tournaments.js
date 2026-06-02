@@ -18,6 +18,7 @@ async function pgTournaments(){
     <div style="display:flex;gap:8px;align-items:center">
       ${statusSel}
       <button class="btn btn-g" style="font-size:12px;padding:5px 12px" onclick="renameTour('${t.id}','${t.name.replace(/'/g,"\\'")}')">✎</button>
+      <button class="btn btn-g" style="font-size:12px;padding:5px 12px" onclick="openBracketEditor('${t.id}','${t.name.replace(/'/g,"\\'")}')">Сетка</button>
       <button class="btn btn-g" style="font-size:12px;padding:5px 12px" onclick="openCosts('${t.id}','${t.name.replace(/'/g,"\\'")}')">Косты</button>
       <button class="btn-r" onclick="delTour('${t.id}')">✕</button>
     </div>
@@ -49,6 +50,64 @@ async function setTourStatus(id,status){
 }
 async function renameTour(id,cur){const n=prompt('Новое название турнира:',cur);if(n==null)return;const name=n.trim();if(!name||name===cur)return;const{error}=await sb.from('tournaments').update({name}).eq('id',id);if(dbErr(error,'переименование турнира'))return;toast('Название обновлено');await refreshData();pgTournaments();}
 async function delTour(id){if(!confirm('Удалить турнир?'))return;const{error}=await sb.from('tournaments').delete().eq('id',id);if(dbErr(error,'удаление турнира'))return;pgTournaments();}
+
+// ===== Редактор сетки турнира =====
+// Правка/добавление результатов встреч (когда с Challonge не подтянулось или нужна корректировка).
+// Победителя встречи можно выставить вручную (для сеток-результатов), а драфт/таймеры — через «Матч 1/2».
+async function openBracketEditor(tourId,tourName){
+  document.getElementById('page-title').textContent=`Сетка — ${tourName}`;
+  const{data:encsRaw}=await sb.from('encounters').select('*').eq('tournament_id',tourId).order('created_at',{ascending:false});
+  const encs=(encsRaw||[]).slice().sort((a,b)=>(a.sort_order??1e9)-(b.sort_order??1e9));
+  const plMap={};D.players.forEach(p=>plMap[p.id]=p);
+  const rows=encs.map(e=>{
+    const p1=plMap[e.player1_id],p2=plMap[e.player2_id];
+    const opts=[['','— не задан —'],[e.player1_id,p1?.nickname||'Игрок 1'],[e.player2_id,p2?.nickname||'Игрок 2']];
+    return`<div class="card" style="margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+        <div style="font-weight:600;min-width:160px">${p1?.nickname||'?'} <span style="color:var(--sub)">vs</span> ${p2?.nickname||'?'}</div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <input type="text" value="${escapeHtml(e.stage||'')}" placeholder="стадия" onchange="updateEncMeta('${e.id}',{stage:this.value.trim()||null})" style="font-size:12px;padding:5px 8px;width:150px" title="Стадия (Гранд-финал и т.п.)">
+          <label style="font-size:12px;color:var(--sub)">Победитель</label>
+          <select onchange="setEncWinner('${e.id}',this.value)" style="font-size:12px;padding:5px 8px">
+            ${opts.map(([val,l])=>`<option value="${val}" ${String(e.winner_id||'')===String(val)?'selected':''}>${escapeHtml(l)}</option>`).join('')}
+          </select>
+          <button class="btn btn-g" style="font-size:12px;padding:5px 12px" onclick="openMatch('${e.id}',1,'${e.player1_id}','${e.player2_id}')">Матч 1</button>
+          <button class="btn btn-g" style="font-size:12px;padding:5px 12px" onclick="openMatch('${e.id}',2,'${e.player1_id}','${e.player2_id}')">Матч 2</button>
+          <button class="btn-r" onclick="delEnc('${e.id}')">✕</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+  const plDatalist=`<datalist id="be-pl-list">${D.players.map(p=>`<option value="${escapeHtml(p.nickname)}"></option>`).join('')}</datalist>`;
+  html(`<button class="btn btn-g" style="margin-bottom:16px" onclick="go('tournaments')">← Назад</button>
+  ${plDatalist}
+  <div class="card" style="margin-bottom:16px">
+    <h3>Добавить встречу в сетку</h3>
+    <div class="grid2" style="margin-bottom:8px">
+      <div><label>Игрок 1 (фп матч 1)</label><input id="be-p1" type="text" list="be-pl-list" placeholder="ник"></div>
+      <div><label>Игрок 2 (фп матч 2)</label><input id="be-p2" type="text" list="be-pl-list" placeholder="ник"></div>
+    </div>
+    <div style="font-size:11px;color:var(--sub);margin-bottom:8px">Драфт и таймеры — через «Матч 1/2». Победителя можно выставить и вручную справа.</div>
+    <button class="btn btn-y" onclick="addEncTo('${tourId}','${tourName.replace(/'/g,"\\'")}')">Создать встречу</button>
+  </div>
+  <div class="space-y">${rows||'<p style="color:var(--sub);font-size:14px">Встреч ещё нет</p>'}</div>`);
+}
+async function setEncWinner(encId,winnerId){
+  const{error}=await sb.from('encounters').update({winner_id:winnerId||null}).eq('id',encId);
+  if(dbErr(error,'установка победителя встречи'))return;
+  toast('Победитель встречи обновлён');
+}
+async function addEncTo(tourId,tourName){
+  const n1=v('be-p1'),n2=v('be-p2');
+  if(!n1||!n2)return toast('Впиши ники обоих игроков','err');
+  if(n1.toLowerCase()===n2.toLowerCase())return toast('Игроки должны быть разными','err');
+  const p1=await resolvePlayerNick(n1);if(!p1)return;
+  const p2=await resolvePlayerNick(n2);if(!p2)return;
+  if(p1===p2)return toast('Игроки должны быть разными','err');
+  const{error}=await sb.from('encounters').insert({tournament_id:tourId,player1_id:p1,player2_id:p2});
+  if(dbErr(error,'создание встречи'))return;
+  toast('Встреча добавлена');openBracketEditor(tourId,tourName);
+}
 
 async function openCosts(tourId,tourName){
   document.getElementById('page-title').textContent=`Косты — ${tourName}`;

@@ -50,6 +50,7 @@ async function openRoster(pid,pnick){
   <div class="card" style="margin-bottom:12px">
     <h3>Профиль</h3>
     <div style="display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap">
+      <div><label>Никнейм</label><input id="r-nick" type="text" placeholder="ник" style="width:160px" value="${escapeHtml(player.nickname||'')}"></div>
       <div><label>Возраст</label><input id="r-age" type="number" min="10" max="99" placeholder="—" style="width:100px" value="${player.age??''}"></div>
       <div><label>Наивысшее место</label><input id="r-place" type="number" min="1" placeholder="—" style="width:120px" value="${player.highest_place??''}"></div>
       <div><label>Раз занято</label><input id="r-place-cnt" type="number" min="1" placeholder="1" style="width:100px" value="${player.highest_place_count??''}"></div>
@@ -158,6 +159,11 @@ async function saveProfile(pid){
     highest_place_count:plc===''||plc==null?null:+plc,
     prize:pr===''||pr==null?null:+pr
   };
+  // Ник меняем по id → все привязки (встречи/матчи/ростеры/результаты) сохраняются,
+  // т.к. ссылаются на players.id (uuid), а не на ник. Новый ник подхватится везде.
+  const nick=document.getElementById('r-nick')?.value?.trim();
+  const cur=D.players.find(p=>p.id===pid);
+  if(nick&&nick!==cur?.nickname)patch.nickname=nick;
   const{error}=await sb.from('players').update(patch).eq('id',pid);
   if(dbErr(error,'сохранение профиля'))return;
   await refreshData();

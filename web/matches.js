@@ -62,9 +62,20 @@ async function pgMatches(){
       <div><label>Игрок 2 (фп в матче 2)</label><input id="e-p2" type="text" list="pl-list" placeholder="ник игрока — впишите или выберите"></div>
     </div>
     <div style="font-size:11px;color:var(--sub);margin-bottom:8px">Если ник новый — игрок создастся автоматически.</div>
-    <button class="btn btn-y" onclick="addEnc()">Создать встречу</button>
+    <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px">
+      <input id="e-link1" type="text" placeholder="ссылка драфта shiyu.darte.gg — Матч 1 (для создания с результатом)" style="padding:6px 10px;font-size:13px">
+      <input id="e-link2" type="text" placeholder="ссылка драфта shiyu.darte.gg — Матч 2 (для создания с результатом)" style="padding:6px 10px;font-size:13px">
+    </div>
+    <div id="enc-quick-status" style="font-size:11px;color:var(--sub);min-height:13px;margin-bottom:8px"></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-y" onclick="addEnc()">Создать встречу</button>
+      <button class="btn btn-g" onclick="addEncWithResults()" title="Создаёт встречу и сразу импортирует матчи из вставленных ссылок">⚡ Создать с результатами</button>
+    </div>
   </div>
   <div class="space-y" id="enc-list">${list||'<p style="color:var(--sub);font-size:14px">Встреч ещё нет</p>'}</div>`);
+  // авто-подстановка актуального (live) турнира в селект новой встречи
+  const liveT=D.tours.find(t=>t.status==='live');
+  if(liveT){const es=document.getElementById('e-tour');if(es)es.value=liveT.id;}
   // drag-and-drop ручная сортировка встреч (порядок отражается и на главной)
   enableReorder(document.getElementById('enc-list'),'encounters',pgMatches);
 }
@@ -102,6 +113,99 @@ async function addEnc(){
   toast('Встреча создана');pgMatches();
 }
 async function delEnc(id){if(!confirm('Удалить встречу и все матчи?'))return;const{error}=await sb.from('encounters').delete().eq('id',id);if(dbErr(error,'удаление встречи'))return;pgMatches();}
+
+// «Создать с результатами» в один клик: создаёт встречу и сразу импортирует матч 1/2
+// из вставленных ссылок драфта (без открытия борда). Хватает одной ссылки.
+async function addEncWithResults(){
+  const t=v('e-tour'),n1=v('e-p1'),n2=v('e-p2');
+  const set=m=>{const el=document.getElementById('enc-quick-status');if(el)el.textContent=m;};
+  if(!t)return toast('Выбери турнир','err');
+  if(!n1||!n2)return toast('Впиши ники обоих игроков','err');
+  if(n1.toLowerCase()===n2.toLowerCase())return toast('Игроки должны быть разными','err');
+  const l1=v('e-link1'),l2=v('e-link2');
+  if(!l1&&!l2)return toast('Вставь хотя бы одну ссылку (иначе жми «Создать встречу»)','err');
+  const p1=await resolvePlayerNick(n1);if(!p1)return;
+  const p2=await resolvePlayerNick(n2);if(!p2)return;
+  if(p1===p2)return toast('Игроки должны быть разными','err');
+  set('Создаю встречу…');
+  const{data:enc,error}=await sb.from('encounters').insert({tournament_id:t,player1_id:p1,player2_id:p2}).select().single();
+  if(dbErr(error,'создание встречи'))return;
+  const{data:tRow}=await sb.from('tournaments').select('restart_penalties').eq('id',t).maybeSingle();
+  const pen=tRow?.restart_penalties||[];
+  let ok=0;const errs=[];
+  for(const[num,link]of[[1,l1],[2,l2]]){
+    if(!link)continue;
+    set(`Импорт матча ${num}…`);
+    try{await importMatchFromLink(enc.id,num,p1,p2,link,pen);ok++;}
+    catch(e){errs.push(`матч ${num}: ${e.message}`);}
+  }
+  set(`Готово: импортировано ${ok} матч(ей)`+(errs.length?` · ⚠ ${errs.join('; ')}`:''));
+  toast(errs.length?'Создано с предупреждениями':'Встреча с результатами создана',errs.length?'err':'ok');
+  pgMatches();
+}
+
+// Headless-импорт: ссылка драфта → матч + пики/баны в БД, без DOM-борда.
+// Зеркалит логику applyDraftToForm+saveMatch (ориентация сторон по нику, штрафы,
+// победитель по сумме таймеров). Бросает Error при сбое.
+async function importMatchFromLink(encId,num,p1Id,p2Id,link,pen){
+  pen=pen||[];
+  const parsed=parseDraftLink(link);
+  if(!parsed)throw new Error('не разобрал ссылку');
+  const ids=await loadShiyuIds();
+  const state=await fetchDraftState(parsed.id,parsed.key);
+  if(!state||!state.players)throw new Error('пустой драфт');
+  const norm=normalizeDraft(state,ids);
+  const fpId=num===1?p1Id:p2Id,dblId=num===1?p2Id:p1Id;
+  const fp=D.players.find(p=>p.id===fpId),dbl=D.players.find(p=>p.id===dblId);
+  const ps=[norm.players.player0,norm.players.player1];
+  const nm=s=>(s||'').trim().toLowerCase();
+  const find=n=>ps.find(p=>nm(p.name)===nm(n));
+  let sFp=find(fp?.nickname),sDbl=find(dbl?.nickname);
+  if(!sFp||!sDbl||sFp===sDbl){sFp=norm.players.player0;sDbl=norm.players.player1;}
+  const penSum=r=>{let s=0;for(let i=0;i<(r||0)&&i<pen.length;i++)s+=(+pen[i]||0);return s;};
+  const eff=p=>p.clearTime==null?null:p.clearTime+penSum(p.restarts);
+  const fpT=eff(sFp),dblT=eff(sDbl);
+  const p1Timer=fpId===p1Id?fpT:dblT,p2Timer=fpId===p1Id?dblT:fpT;
+  const p1R=fpId===p1Id?(sFp.restarts||0):(sDbl.restarts||0);
+  const p2R=fpId===p1Id?(sDbl.restarts||0):(sFp.restarts||0);
+  let winnerId=null;
+  if(fpT!=null&&dblT!=null)winnerId=fpT<=dblT?fpId:dblId;
+  const mData={encounter_id:encId,match_number:+num,fp_player_id:fpId,is_draw:false,winner_id:winnerId,
+    player1_timer_sec:p1Timer,player2_timer_sec:p2Timer,player1_restarts:p1R,player2_restarts:p2R};
+  const{data:exist}=await sb.from('matches').select('id').eq('encounter_id',encId).eq('match_number',+num).maybeSingle();
+  let mid=exist?.id;
+  if(mid){const{error}=await sb.from('matches').update(mData).eq('id',mid);if(error)throw error;}
+  else{const{data,error}=await sb.from('matches').insert(mData).select().single();if(error)throw error;mid=data.id;}
+  // баны/пики из шаблона (player_id, порядок) + ростера норм-драфта (минскейп/амп по actor)
+  const template=DRAFT_TEMPLATE(fpId,dblId);
+  const fpPickOrder=template.filter(s=>s.type==='pick'&&s.pid===fpId).map(s=>s.n);
+  const dblPickOrder=template.filter(s=>s.type==='pick'&&s.pid===dblId).map(s=>s.n);
+  const teamSlotFor=(pid,slot)=>{const o=pid===fpId?fpPickOrder:dblPickOrder;return o.indexOf(slot)<3?1:2;};
+  const sideForActor={player0:sFp,player1:sDbl};
+  const slotById={};norm.slots.forEach(s=>slotById[s.n]=s);
+  const bans=[],picks=[];
+  template.forEach(tp=>{
+    const ns=slotById[tp.n];if(!ns||!ns.enka)return;
+    const ch=charByEnka(ns.enka);if(!ch)return;
+    if(tp.type==='ban'){bans.push({match_id:mid,player_id:tp.pid,character_id:ch.id,ban_order:tp.n});}
+    else{
+      const pl=sideForActor[ns.actor]||sFp;
+      const ms=pl.mindscapeByEnka[ns.enka]??0;
+      const sg=sigByEngineEnka(pl.engineEnkaByAgentEnka[ns.enka]);
+      picks.push({match_id:mid,player_id:tp.pid,character_id:ch.id,mindscape:ms,team_slot:teamSlotFor(tp.pid,tp.n),
+        sig_id:sg?sg.id:null,has_signature:!!sg,pick_order:tp.n,is_fp:tp.pid===fpId,is_double:false});
+    }
+  });
+  const cc={};picks.forEach(p=>cc[p.character_id]=(cc[p.character_id]||0)+1);
+  picks.forEach(p=>p.is_double=cc[p.character_id]>1);
+  await sb.from('match_bans').delete().eq('match_id',mid);
+  if(bans.length){const{error}=await sb.from('match_bans').insert(bans);if(error)throw error;}
+  await sb.from('match_picks').delete().eq('match_id',mid);
+  if(picks.length){const{error}=await sb.from('match_picks').insert(picks);if(error)throw error;}
+  const{data:allMs}=await sb.from('matches').select('*').eq('encounter_id',encId);
+  if(allMs&&allMs.length>=2){let a=0,b=0;allMs.forEach(m=>{a+=m.player1_timer_sec||0;b+=m.player2_timer_sec||0;});
+    await sb.from('encounters').update({winner_id:a<=b?p1Id:p2Id}).eq('id',encId);}
+}
 
 async function openMatch(encId,num,p1Id,p2Id){
   const fpId=num===1?p1Id:p2Id;
