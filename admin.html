@@ -6,17 +6,19 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<title>ZZZ Stats — Управление</title>
+<title>Nexus Stats — Управление</title>
 <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Saira+Condensed:ital,wght@0,800;0,900;1,900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdn.tailwindcss.com"></script>
 <style>
   :root{--bg:#0b0b0d;--card:#161618;--border:#26262c;--accent:#ff1f44;--grad:linear-gradient(95deg,#ff1f44,#ec1862);--text:#f3f3f5;--sub:#8a8a93}
   *{box-sizing:border-box;margin:0;padding:0}
   body{background:var(--bg);color:var(--text);font-family:'Rajdhani',sans-serif;min-height:100vh;display:flex}
-  input[type=text],input[type=email],input[type=password],input[type=number],select,textarea{
+  input[type=text],input[type=email],input[type=password],input[type=number],input[type=date],input[type=search],input[type=url],select,textarea{
     background:#0d0f18;border:1px solid var(--border);color:var(--text);border-radius:6px;
     padding:8px 12px;font-family:'Rajdhani',sans-serif;font-size:14px;width:100%;outline:none;
   }
+  /* date picker indicator на тёмном фоне */
+  input[type=date]::-webkit-calendar-picker-indicator{filter:invert(.7)}
   input:focus,select:focus{border-color:#3b4260;}
   label{font-size:12px;color:var(--sub);display:block;margin-bottom:4px;letter-spacing:.04em}
   .btn{border:none;border-radius:6px;padding:8px 18px;font-family:'Rajdhani',sans-serif;font-size:14px;font-weight:600;cursor:pointer;letter-spacing:.04em;transition:.15s}
@@ -63,7 +65,7 @@
 <!-- Sidebar -->
 <aside id="sidebar" style="display:none;width:200px;background:#0b0d14;border-right:1px solid var(--border);flex-direction:column;min-height:100vh">
   <div style="padding:16px;border-bottom:1px solid var(--border)">
-    <div style="font-family:'Saira Condensed',sans-serif;font-style:italic;font-size:19px;font-weight:900;color:var(--accent);letter-spacing:.02em">ZZZ STATS</div>
+    <div style="font-family:'Saira Condensed',sans-serif;font-style:italic;font-size:19px;font-weight:900;letter-spacing:.02em"><span style="background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent">Nexus</span> <span style="color:#fff">Stats</span></div>
     <div style="font-size:11px;color:var(--sub);margin-top:2px" id="user-email"></div>
   </div>
   <nav style="padding:8px;flex:1">
@@ -86,7 +88,7 @@
   <!-- Login -->
   <div id="login-screen" style="flex:1;display:flex;align-items:center;justify-content:center">
     <div class="card" style="width:340px">
-      <div style="font-family:'Saira Condensed',sans-serif;font-style:italic;font-size:26px;font-weight:900;color:var(--accent);margin-bottom:20px;letter-spacing:.02em">ZZZ STATS</div>
+      <div style="font-family:'Saira Condensed',sans-serif;font-style:italic;font-size:26px;font-weight:900;margin-bottom:20px;letter-spacing:.02em"><span style="background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent">Nexus</span> <span style="color:#fff">Stats</span></div>
       <div id="auth-msg"></div>
       <div style="margin-bottom:12px"><label>Email</label><input id="a-email" type="email" placeholder="your@email.com"></div>
       <div style="margin-bottom:16px"><label>Пароль</label><input id="a-pass" type="password"></div>

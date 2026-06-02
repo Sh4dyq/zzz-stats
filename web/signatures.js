@@ -124,7 +124,7 @@ function startEditSig(id){
   const charSelect=selRaw('edit-char-'+id,D.chars,'id','name',s.character_id);
   row.innerHTML=`<div style="flex:1">
       <div style="display:flex;gap:8px;align-items:center">
-        <input id="edit-name-${id}" value="${escapeHtml(s.name)}" style="flex:1" />
+        <input id="edit-name-${id}" type="text" value="${escapeHtml(s.name)}" style="flex:1" />
         <div style="min-width:180px">${charSelect}</div>
       </div>
     </div>

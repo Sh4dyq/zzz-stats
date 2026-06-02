@@ -19,16 +19,19 @@ async function pgPlayers(){
   </div>`).join('');
   html(`<div class="card" style="margin-bottom:16px">
     <h3>Добавить игрока</h3>
-    <div class="grid2">
+    <div class="grid3">
       <div><label>Никнейм</label><input id="p-nick" type="text"></div>
-      <div><label>Возраст</label><input id="p-age" type="number" min="10" max="99"></div>
+      <div><label>Возраст</label><input id="p-age" type="number" min="10" max="99" placeholder="—"></div>
+      <div><label>Наивысшее место</label><input id="p-place" type="number" min="1" placeholder="—"></div>
+      <div><label>Раз занято</label><input id="p-place-cnt" type="number" min="1" placeholder="1"></div>
+      <div><label>Призовые (₽)</label><input id="p-prize" type="number" min="0" placeholder="0"></div>
     </div>
     <button class="btn btn-y" style="margin-top:12px" onclick="addPlayer()">Добавить</button>
   </div>
   <div class="space-y" id="player-list">${list||'<p style="color:var(--sub);font-size:14px">Игроков ещё нет</p>'}</div>`);
   if(typeof enableReorder==='function')enableReorder(document.getElementById('player-list'),'players',pgPlayers);
 }
-async function addPlayer(){const n=v('p-nick');if(!n)return;const{error}=await sb.from('players').insert({nickname:n,age:vn('p-age')});if(dbErr(error,'добавление игрока'))return;toast('Игрок добавлен');pgPlayers();}
+async function addPlayer(){const n=v('p-nick');if(!n)return;const{error}=await sb.from('players').insert({nickname:n,age:vn('p-age'),highest_place:vn('p-place'),highest_place_count:vn('p-place-cnt'),prize:vn('p-prize')});if(dbErr(error,'добавление игрока'))return;toast('Игрок добавлен');await refreshData();pgPlayers();}
 async function delPlayer(id){if(!confirm('Удалить?'))return;const{error}=await sb.from('players').delete().eq('id',id);if(dbErr(error,'удаление игрока'))return;pgPlayers();}
 
 async function openRoster(pid,pnick){

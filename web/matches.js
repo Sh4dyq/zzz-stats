@@ -35,7 +35,7 @@ async function pgMatches(){
       </div>
       ${win?`<div style="font-size:12px;margin-bottom:8px">Победитель встречи: <span style="color:var(--accent);font-weight:600">${win.nickname}</span></div>`:''}
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
-        <input id="stage-${e.id}" value="${escapeHtml(e.stage||'')}" placeholder="стадия (напр. Гранд-финал) — пусто = скрыто" draggable="false"
+        <input id="stage-${e.id}" type="text" value="${escapeHtml(e.stage||'')}" placeholder="стадия (напр. Гранд-финал) — пусто = скрыто" draggable="false"
           onchange="updateEncMeta('${e.id}',{stage:this.value.trim()||null})"
           title="Стадия встречи; показывается на главной в блоке последних матчей" style="font-size:12px;padding:5px 8px;flex:1;min-width:180px">
         <input type="date" id="date-${e.id}" value="${e.played_at||''}" draggable="false"
@@ -58,8 +58,8 @@ async function pgMatches(){
     ${plDatalist}
     <div class="grid2" style="margin-bottom:12px">
       <div><label>Турнир</label>${sel('e-tour',D.tours,x=>x.id,x=>x.name)}</div>
-      <div><label>Игрок 1 (фп в матче 1)</label><input id="e-p1" list="pl-list" placeholder="ник игрока — впишите или выберите"></div>
-      <div><label>Игрок 2 (фп в матче 2)</label><input id="e-p2" list="pl-list" placeholder="ник игрока — впишите или выберите"></div>
+      <div><label>Игрок 1 (фп в матче 1)</label><input id="e-p1" type="text" list="pl-list" placeholder="ник игрока — впишите или выберите"></div>
+      <div><label>Игрок 2 (фп в матче 2)</label><input id="e-p2" type="text" list="pl-list" placeholder="ник игрока — впишите или выберите"></div>
     </div>
     <div style="font-size:11px;color:var(--sub);margin-bottom:8px">Если ник новый — игрок создастся автоматически.</div>
     <button class="btn btn-y" onclick="addEnc()">Создать встречу</button>

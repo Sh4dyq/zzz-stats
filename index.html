@@ -605,6 +605,7 @@
     <a href="https://t.me/nexus_shiyu" target="_blank" rel="noopener noreferrer">Telegram</a> ·
     <a href="https://discord.gg/6nKP7kWR78" target="_blank" rel="noopener noreferrer">Discord</a>
   </div>
+  <div class="fcopy" style="margin-top:8px;opacity:.7">Statistics are tracked since June 2026</div>
 </footer>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -765,7 +766,7 @@
       const so=(a.sort_order??1e9)-(b.sort_order??1e9);if(so)return so;
       return new Date(b.played_at||b.created_at||0)-new Date(a.played_at||a.created_at||0);
     });
-    const list=done.slice(0,6);
+    const list=done.slice(0,3);
     if(!list.length){grid.innerHTML='<p style="color:var(--sub);font-size:14px">Матчей пока нет</p>';return;}
     grid.innerHTML=list.map(e=>{
       const a=P[e.player1_id]||{nickname:'?'}, b=P[e.player2_id]||{nickname:'?'};

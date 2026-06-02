@@ -17,6 +17,7 @@ async function pgTournaments(){
     </div>
     <div style="display:flex;gap:8px;align-items:center">
       ${statusSel}
+      <button class="btn btn-g" style="font-size:12px;padding:5px 12px" onclick="renameTour('${t.id}','${t.name.replace(/'/g,"\\'")}')">✎</button>
       <button class="btn btn-g" style="font-size:12px;padding:5px 12px" onclick="openCosts('${t.id}','${t.name.replace(/'/g,"\\'")}')">Косты</button>
       <button class="btn-r" onclick="delTour('${t.id}')">✕</button>
     </div>
@@ -46,6 +47,7 @@ async function setTourStatus(id,status){
   if(dbErr(error,'смена статуса турнира'))return;
   toast('Статус обновлён');await refreshData();pgTournaments();
 }
+async function renameTour(id,cur){const n=prompt('Новое название турнира:',cur);if(n==null)return;const name=n.trim();if(!name||name===cur)return;const{error}=await sb.from('tournaments').update({name}).eq('id',id);if(dbErr(error,'переименование турнира'))return;toast('Название обновлено');await refreshData();pgTournaments();}
 async function delTour(id){if(!confirm('Удалить турнир?'))return;const{error}=await sb.from('tournaments').delete().eq('id',id);if(dbErr(error,'удаление турнира'))return;pgTournaments();}
 
 async function openCosts(tourId,tourName){
