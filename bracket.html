@@ -77,8 +77,10 @@
   .idx-row:first-child{border-top:none}
   .idx-row:hover{background:#1a1a1f}
   .idx-row .ir-name{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;font-size:18px;color:#fff;display:flex;align-items:center;gap:10px;line-height:1}
-  .idx-row .ir-thumb{width:34px;height:34px;border-radius:8px;background:var(--panel-3);flex-shrink:0;display:flex;align-items:center;justify-content:center;overflow:hidden}
+  .idx-row .ir-thumb{width:36px;height:36px;border-radius:8px;background:linear-gradient(150deg,#2a2a31,#17171b);border:1px solid var(--border);flex-shrink:0;display:flex;align-items:center;justify-content:center;overflow:hidden;font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;font-size:13px;letter-spacing:.02em;background-clip:padding-box;color:#9a9aa3}
+  .idx-row:hover .ir-thumb{border-color:#3a3a44}
   .idx-row .ir-thumb img{width:100%;height:100%;object-fit:cover}
+  .idx-row.live-row .ir-thumb{background:linear-gradient(150deg,rgba(255,31,68,.28),rgba(236,24,98,.08));border-color:rgba(255,31,68,.35);color:#ff9aa8}
   .idx-cell{font-family:'Rajdhani',sans-serif;font-weight:600;font-size:14px;color:var(--text)}
   .idx-cell.mut{color:var(--sub);font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:500}
   .gtag{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--sub)}
@@ -88,7 +90,20 @@
   .st-live{background:rgba(255,31,68,.13);color:#ff7587}.st-live .sdot{background:var(--red);box-shadow:0 0 7px rgba(255,31,68,.8)}
   .st-upcoming{background:rgba(196,245,0,.1);color:var(--lime)}.st-upcoming .sdot{background:var(--lime)}
   .st-finished{background:var(--panel-2);color:var(--sub)}.st-finished .sdot{background:#5e5e66}
-  @media (max-width:760px){.idx-head{display:none}.idx-row{grid-template-columns:1fr auto;gap:6px 14px}.idx-row .idx-cell:nth-child(n+3){grid-column:auto}}
+  @media (max-width:760px){
+    .idx-wrap{padding:0 16px;margin:18px auto}
+    .idx-h{font-size:25px}
+    .idx-head{display:none}
+    .idx-row{display:flex;flex-wrap:wrap;align-items:center;gap:9px 12px;padding:15px 16px}
+    .idx-row .ir-name{flex:1 1 55%;min-width:0;font-size:16px;order:0}
+    .idx-row .idx-cell:nth-child(2),                       /* game */
+    .idx-row .idx-cell:nth-child(3){display:none}          /* role */
+    .idx-row .idx-cell:nth-child(7){order:1;margin-left:auto}   /* status → end of line 1 */
+    .idx-row .idx-cell:nth-child(4){order:2}                    /* type pill   → line 2 */
+    .idx-row .idx-cell:nth-child(5){order:3}                    /* participants */
+    .idx-row .idx-cell:nth-child(6){order:4}                    /* date */
+    .idx-row .idx-cell:nth-child(5)::after{content:' уч.';color:#5e5e66}
+  }
 
   /* format sub-tabs (Сетка / Результаты) */
   .fmtrow{display:flex;gap:0;padding:0 24px;border-bottom:1px solid var(--border);background:rgba(11,11,13,.4)}
@@ -107,34 +122,62 @@
   .tmeta .ch-link:hover{border-color:var(--red)}
 
   /* ===== bracket canvas ===== */
-  .bracket-wrap{overflow:auto;padding:30px 28px 50px}
+  .bracket-wrap{overflow:auto;padding:26px 28px 50px;-webkit-overflow-scrolling:touch}
   .bsec-title{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;font-size:15px;letter-spacing:.05em;color:var(--sub);margin:6px 0 14px;display:flex;align-items:center;gap:10px}
   .bsec-title::after{content:"";flex:1;height:1px;background:var(--border)}
   .bsec-title.upper{color:#ff7587}.bsec-title.lower{color:var(--purple)}.bsec-title.gf{color:var(--gold)}
 
-  .bracket{display:flex;gap:46px;align-items:flex-start;min-width:min-content;padding-bottom:8px}
-  .bround{display:flex;flex-direction:column;justify-content:space-around;gap:22px;min-width:230px}
-  .bround-h{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;font-size:13px;letter-spacing:.04em;color:var(--sub);padding-bottom:2px;text-align:center}
+  .bracket{display:flex;gap:54px;align-items:flex-start;min-width:min-content;padding-bottom:8px}
+  .bround{display:flex;flex-direction:column;justify-content:space-around;gap:24px;min-width:228px}
+  .bround-h{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;font-size:13px;letter-spacing:.05em;color:var(--sub);padding:0 0 10px;margin-bottom:2px;text-align:center;border-bottom:1px solid var(--line)}
 
   /* match card */
-  .match{position:relative;background:var(--card);border:1px solid var(--border);border-radius:9px;overflow:hidden;transition:.15s}
-  .match:hover{border-color:#3a3a42}
-  .match .seed{display:flex;align-items:center;gap:9px;padding:9px 12px;min-height:42px}
+  .match{position:relative;z-index:1;background:linear-gradient(180deg,#1d1d22,#161618 70%);border:1px solid var(--border);border-radius:12px;overflow:hidden;transition:border-color .15s,box-shadow .15s,transform .15s}
+  .match:hover{border-color:#43434d;transform:translateY(-1px);box-shadow:0 6px 20px -8px rgba(0,0,0,.7)}
+  .match .seed{position:relative;display:flex;align-items:center;gap:10px;padding:0 13px;min-height:46px}
   .match .seed+.seed{border-top:1px solid var(--line)}
-  .seed .sd{font-family:'JetBrains Mono',monospace;font-size:10px;color:#5e5e66;width:16px;flex-shrink:0;text-align:center}
-  .seed .av{width:24px;height:24px;border-radius:6px;background:var(--panel-3);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;flex-shrink:0;overflow:hidden}
-  .seed .av img{width:100%;height:100%;object-fit:cover}
-  .seed .nm{font-weight:600;font-size:15px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text)}
+  .seed .sd{font-family:'JetBrains Mono',monospace;font-size:10px;color:#5b5b64;width:14px;flex-shrink:0;text-align:center}
+  .seed .av{width:26px;height:26px;border-radius:7px;background:var(--panel-3);display:flex;align-items:center;justify-content:center;font-family:'Saira Condensed',sans-serif;font-style:italic;font-size:11px;font-weight:900;color:var(--sub);flex-shrink:0;overflow:hidden}
+  .seed .av img{width:100%;height:100%;object-fit:cover;display:block}
+  .seed .nm{font-weight:600;font-size:15px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#c9c9d0;letter-spacing:.01em}
   .seed .sc{font-family:'JetBrains Mono',monospace;font-weight:600;font-size:14px;color:var(--sub);min-width:18px;text-align:right}
+  /* winner row */
+  .seed.win{background:linear-gradient(90deg,rgba(255,31,68,.09),rgba(236,24,98,0) 62%)}
   .seed.win .nm{color:#fff;font-weight:700}
-  .seed.win .sc{color:var(--win)}
-  .seed.win::before{content:"";position:absolute;left:0;width:3px;height:42px;background:var(--grad)}
-  .seed.lose .nm,.seed.lose .sc{color:#6d6d76}
+  .seed.win .av{color:#fff}
+  .seed.win::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--grad)}
+  /* win checkmark badge */
+  .seed.win .sc{display:inline-flex;align-items:center;justify-content:center;width:19px;height:19px;min-width:19px;border-radius:50%;background:rgba(70,211,105,.16);color:var(--win);font-family:'Rajdhani',sans-serif;font-size:13px;font-weight:700;line-height:1}
+  .seed.lose .nm{color:#6d6d76}.seed.lose .sc{color:#5a5a62}
+  .seed.lose .av{opacity:.55}
   .seed.tbd .nm{color:#4d4d55;font-style:italic;font-weight:500}
-  .match.played{box-shadow:0 0 0 1px rgba(255,31,68,.12)}
+  .seed.tbd .av{background:transparent;border:1px dashed #34343b}
+  .match.played{border-color:#2f2f37;box-shadow:0 0 0 1px rgba(255,31,68,.10),0 4px 16px -10px rgba(255,31,68,.25)}
+  .match.played:hover{box-shadow:0 0 0 1px rgba(255,31,68,.2),0 8px 22px -10px rgba(255,31,68,.35)}
 
-  /* connectors (simple visual hint, refined by design) */
-  .bround.has-conn .match{margin-left:0}
+  /* ===== connectors (SVG overlay painted over .bracket) ===== */
+  .bracket{position:relative}
+  svg.bconn{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:0;overflow:visible}
+  svg.bconn path.link{fill:none;stroke:#43434e;stroke-width:2;stroke-linejoin:round;stroke-linecap:round}
+  svg.bconn path.link.dim{stroke:#2a2a31}
+  /* state nodes (diamonds): done=white · live=red glow · future=red outline */
+  svg.bconn .node{stroke-width:1.6}
+  svg.bconn .node.done{fill:#e9e9ee;stroke:#e9e9ee}
+  svg.bconn .node.future{fill:var(--bg);stroke:#ff1f44}
+  svg.bconn .node.live{fill:#ff1f44;stroke:#ff8094;filter:drop-shadow(0 0 5px rgba(255,31,68,.85))}
+  @media (prefers-reduced-motion:no-preference){svg.bconn .node.live{animation:nodepulse 1.7s ease-in-out infinite}}
+  @keyframes nodepulse{0%,100%{opacity:1}50%{opacity:.5}}
+  /* legend (mirrors official bracket graphic) */
+  .blegend{display:flex;gap:22px;flex-wrap:wrap;align-items:center;margin-top:24px;padding-top:16px;border-top:1px solid var(--line);font-family:'Rajdhani',sans-serif;font-size:13px;font-weight:600;color:var(--sub)}
+  .blegend span{display:inline-flex;align-items:center;gap:9px}
+  .blegend i{width:10px;height:10px;transform:rotate(45deg);display:inline-block;flex-shrink:0}
+  .blegend i.done{background:#e9e9ee}
+  .blegend i.live{background:#ff1f44;box-shadow:0 0 7px rgba(255,31,68,.85)}
+  .blegend i.future{background:var(--bg);box-shadow:inset 0 0 0 1.6px #ff1f44}
+  /* DE column tints (tagged by post-process from round header text) */
+  .bround.br-lower .bround-h{color:var(--purple);border-color:rgba(169,112,255,.25)}
+  .bround.br-gf .bround-h{color:var(--gold);border-color:rgba(245,200,66,.3)}
+  .bround.br-gf .match{border-color:rgba(245,200,66,.28)}
 
   /* states */
   .panel{max-width:560px;margin:60px auto;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:34px 30px;text-align:center}
@@ -328,7 +371,7 @@ function renderAll(){
         <div>Название</div><div>Игра</div><div>Роль</div><div>Тип</div><div>Участники</div><div>Дата проведения</div><div>Статус</div>
       </div>
       ${rows.map(t=>`
-        <div class="idx-row" data-id="${t.id}">
+        <div class="idx-row${(t.status||'')==='live'?' live-row':''}" data-id="${t.id}">
           <div class="ir-name"><span class="ir-thumb">${esc((t.name||'?').slice(0,2).toUpperCase())}</span>${esc(t.name)}</div>
           <div class="idx-cell"><span class="gtag">${GAME}</span></div>
           <div class="idx-cell mut">${esc(t.role||'Organizer')}</div>
@@ -408,10 +451,11 @@ function matchHTML(m){
 function seedHTML(s){
   if(!s||!s.name) return `<div class="seed tbd"><span class="sd"></span><span class="av"></span><span class="nm">TBD</span><span class="sc"></span></div>`;
   const cls=s.win?'win':(s.name!=='—'?'lose':'tbd');
-  const init=(s.name||'?').slice(0,2).toUpperCase();
+  const init=(s.name||'?').replace(/[^A-Za-zА-Яа-я0-9$]/g,'').slice(0,2).toUpperCase()||'—';
+  const sl=(s.name||'').trim().toLowerCase();
   return `<div class="seed ${cls}">
     <span class="sd">${s.seed||''}</span>
-    <span class="av">${init}</span>
+    <span class="av"><img src="web/players/${esc(sl)}.webp" alt="" onerror="this.remove()">${init}</span>
     <span class="nm">${esc(s.name)}</span>
     <span class="sc">${s.win?'✓':''}</span></div>`;
 }
@@ -436,6 +480,75 @@ function renderResults(t){
 fetch('https://decapi.me/twitch/uptime/Nexus_Shiyu').then(r=>r.text()).then(txt=>{
   if(/offline/i.test(txt))$('livetw').classList.add('offline');
 }).catch(()=>{});
+
+// ===== bracket connectors + state nodes (additive overlay — observes render output,
+//        does NOT modify renderRounds/modelFromEncounters/boot) =====
+(function(){
+  const NS='http://www.w3.org/2000/svg';
+  const rc=(el,base)=>{const r=el.getBoundingClientRect();return{l:r.left-base.left,r:r.right-base.left,cy:(r.top+r.bottom)/2-base.top};};
+  const mstate=m=>m.classList.contains('played')?'done':(m.querySelector('.seed.tbd')?'future':'live');
+  function diamond(x,y,st){const s=6.5,p=document.createElementNS(NS,'path');
+    p.setAttribute('d',`M${x} ${y-s}L${x+s} ${y}L${x} ${y+s}L${x-s} ${y}Z`);
+    p.setAttribute('class','node '+st);return p;}
+  function tagRounds(rounds){
+    rounds.forEach(r=>{
+      const h=r.querySelector('.bround-h'),t=((h&&h.textContent)||'').trim().toLowerCase();
+      r.classList.remove('br-lower','br-gf');
+      if(/нижн|lower|loser/.test(t))r.classList.add('br-lower');
+      else if(/гранд|grand|finale/.test(t)||t==='финал')r.classList.add('br-gf');
+    });
+  }
+  function paintOne(br){
+    br.querySelectorAll(':scope > svg.bconn').forEach(s=>s.remove());
+    const rounds=[...br.querySelectorAll(':scope > .bround')];
+    if(!rounds.length)return;
+    tagRounds(rounds);
+    const base=br.getBoundingClientRect();
+    const svg=document.createElementNS(NS,'svg');
+    svg.setAttribute('class','bconn');
+    const mr=rounds.map(r=>[...r.querySelectorAll(':scope > .match')]);
+    const lastIdx=rounds.length-1;
+    // links between adjacent rounds
+    for(let ri=0;ri<lastIdx;ri++){
+      const cur=mr[ri],nxt=mr[ri+1];
+      if(!cur.length||!nxt.length)continue;
+      cur.forEach((m,i)=>{
+        let ti;
+        if(nxt.length===cur.length)ti=i;
+        else if(nxt.length===Math.ceil(cur.length/2))ti=Math.floor(i/2);
+        else ti=Math.min(nxt.length-1,Math.floor(i*nxt.length/cur.length));
+        const tgt=nxt[ti];if(!tgt)return;
+        const a=rc(m,base),b=rc(tgt,base),midx=a.r+(b.l-a.r)/2;
+        const p=document.createElementNS(NS,'path');
+        p.setAttribute('d',`M${a.r} ${a.cy}H${midx}V${b.cy}H${b.l}`);
+        p.setAttribute('class','link'+(mstate(m)==='future'?' dim':''));
+        svg.appendChild(p);
+      });
+    }
+    // state diamonds: output (right) when a next round exists; junction (left) when fed
+    mr.forEach((arr,ri)=>arr.forEach(m=>{
+      const a=rc(m,base),st=mstate(m);
+      if(ri<lastIdx)svg.appendChild(diamond(a.r,a.cy,st));
+      if(ri>0)svg.appendChild(diamond(a.l,a.cy,st));
+    }));
+    br.prepend(svg);
+    // legend (once per bracket-wrap, only when there are connections to explain)
+    const wrap=br.closest('.bracket-wrap');
+    if(rounds.length>1&&wrap&&!wrap.querySelector('.blegend')){
+      const lg=document.createElement('div');lg.className='blegend';
+      lg.innerHTML='<span><i class="done"></i>матч завершён</span><span><i class="live"></i>активный матч</span><span><i class="future"></i>будущий матч</span>';
+      wrap.appendChild(lg);
+    }
+  }
+  let busy=false;
+  function paint(){busy=true;document.querySelectorAll('.bracket').forEach(paintOne);busy=false;}
+  let t;const schedule=()=>{clearTimeout(t);t=setTimeout(paint,60);};
+  const c=document.getElementById('content');
+  if(c)new MutationObserver(()=>{if(!busy)schedule();}).observe(c,{childList:true});
+  window.addEventListener('resize',schedule);
+  window.addEventListener('load',schedule);
+  if(document.fonts&&document.fonts.ready)document.fonts.ready.then(schedule);
+})();
 
 boot().catch(e=>{console.error(e);$('content').innerHTML='<div class="panel"><h3>Ошибка загрузки</h3><p>'+esc(e.message)+'</p></div>';});
 </script>
