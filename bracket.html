@@ -67,16 +67,16 @@
   .tt-badge.live{color:var(--red)}.tt-badge.upcoming{color:var(--lime)}.tt-badge.finished{color:var(--sub)}
 
   /* ===== «Все сетки» — tournaments index table (Challonge-style) ===== */
-  .idx-wrap{max-width:1080px;margin:26px auto;padding:0 28px}
+  .idx-wrap{max-width:1320px;margin:26px auto;padding:0 28px}
   .idx-h{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;text-transform:uppercase;font-size:30px;margin-bottom:4px}
   .idx-sub{color:var(--sub);font-size:14px;font-weight:500;margin-bottom:22px}
   .idx-tbl{border:1px solid var(--border);border-radius:13px;overflow:hidden;background:var(--card)}
-  .idx-head,.idx-row{display:grid;grid-template-columns:minmax(200px,2.4fr) .8fr .7fr 1fr 1.4fr;align-items:center;gap:14px;padding:13px 20px}
+  .idx-head,.idx-row{display:grid;grid-template-columns:minmax(260px,2.8fr) minmax(150px,1.3fr) .6fr .9fr 1.3fr;align-items:center;gap:16px;padding:14px 22px}
   .idx-head{background:#101013;border-bottom:1px solid var(--border);font-family:'Rajdhani',sans-serif;font-weight:600;font-size:12px;letter-spacing:.05em;text-transform:uppercase;color:var(--sub)}
   .idx-row{border-top:1px solid var(--line);cursor:pointer;transition:.12s}
   .idx-row:first-child{border-top:none}
   .idx-row:hover{background:#1a1a1f}
-  .idx-row .ir-name{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;font-size:18px;color:#fff;display:flex;align-items:center;gap:10px;line-height:1}
+  .idx-row .ir-name{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;font-size:23px;color:#fff;display:flex;align-items:center;gap:12px;line-height:1.05}
   .idx-row .ir-thumb{width:36px;height:36px;border-radius:8px;background:linear-gradient(150deg,#2a2a31,#17171b);border:1px solid var(--border);flex-shrink:0;display:flex;align-items:center;justify-content:center;overflow:hidden;font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;font-size:13px;letter-spacing:.02em;background-clip:padding-box;color:#9a9aa3}
   .idx-row:hover .ir-thumb{border-color:#3a3a44}
   .idx-row .ir-thumb img{width:100%;height:100%;object-fit:cover}
@@ -84,7 +84,7 @@
   .idx-cell{font-family:'Rajdhani',sans-serif;font-weight:600;font-size:14px;color:var(--text)}
   .idx-cell.mut{color:var(--sub);font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:500}
   .gtag{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--sub)}
-  .fmt-pill{display:inline-block;font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:600;padding:3px 9px;border-radius:6px;background:var(--panel-2);border:1px solid var(--border);color:var(--text)}
+  .fmt-pill{display:inline-block;font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:600;padding:4px 10px;border-radius:6px;background:var(--panel-2);border:1px solid var(--border);color:var(--text);white-space:normal;line-height:1.35}
   .st-pill{display:inline-flex;align-items:center;gap:6px;font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;font-size:12px;letter-spacing:.03em;padding:4px 11px;border-radius:7px}
   .st-pill .sdot{width:7px;height:7px;border-radius:50%}
   .st-live{background:rgba(255,31,68,.13);color:#ff7587}.st-live .sdot{background:var(--red);box-shadow:0 0 7px rgba(255,31,68,.8)}
@@ -155,23 +155,24 @@
   .bsec-title::after{content:"";flex:1;height:1px;background:var(--border)}
   .bsec-title.upper{color:#ff7587}.bsec-title.lower{color:var(--purple)}.bsec-title.gf{color:var(--gold)}
 
-  .bracket{display:flex;gap:54px;align-items:flex-start;min-width:min-content;padding-bottom:8px}
-  .bround{display:flex;flex-direction:column;justify-content:space-around;gap:24px;min-width:228px}
-  .bround-h{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;font-size:13px;letter-spacing:.05em;color:var(--sub);padding:0 0 10px;margin-bottom:2px;text-align:center;border-bottom:1px solid var(--line)}
+  .bracket{display:flex;gap:48px;align-items:flex-start;min-width:min-content;padding-bottom:8px;position:relative}
+  .bround{display:flex;flex-direction:column;min-width:206px}
+  .bcol{position:relative;width:100%}
+  .bround-h{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;font-size:13px;letter-spacing:.05em;color:var(--sub);padding:0 0 9px;margin-bottom:6px;text-align:center;border-bottom:1px solid var(--line)}
 
-  /* match card */
-  .match{position:relative;z-index:1;background:linear-gradient(180deg,#1d1d22,#161618 70%);border:1px solid var(--border);border-radius:12px;overflow:hidden;transition:border-color .15s,box-shadow .15s,transform .15s}
+  /* match card (абсолютно позиционируется внутри .bcol по рассчитанному top) */
+  .match{position:absolute;left:0;right:0;z-index:1;background:linear-gradient(180deg,#1d1d22,#161618 70%);border:1px solid var(--border);border-radius:10px;overflow:hidden;transition:border-color .15s,box-shadow .15s}
   /* Challonge-style match identifier (порядковый номер встречи слева от карточки) */
-  .match .m-id{position:absolute;left:-26px;top:50%;transform:translateY(-50%);font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:600;color:#4d4d55;width:22px;text-align:center;pointer-events:none}
-  .match:hover{border-color:#43434d;transform:translateY(-1px);box-shadow:0 6px 20px -8px rgba(0,0,0,.7)}
-  .match .seed{position:relative;display:flex;align-items:center;gap:10px;padding:0 13px;min-height:46px}
+  .match .m-id{position:absolute;left:-23px;top:50%;transform:translateY(-50%);font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:600;color:#4d4d55;width:20px;text-align:center;pointer-events:none}
+  .match:hover{border-color:#43434d;box-shadow:0 6px 20px -8px rgba(0,0,0,.7);z-index:2}
+  .match .seed{position:relative;display:flex;align-items:center;gap:8px;padding:0 10px;min-height:23px}
   .match .seed+.seed{border-top:1px solid var(--line)}
-  .seed .sd{font-family:'JetBrains Mono',monospace;font-size:10px;color:#7a7a85;width:22px;flex-shrink:0;text-align:center;align-self:stretch;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.03);border-right:1px solid var(--line);margin:0 4px 0 -13px}
+  .seed .sd{font-family:'JetBrains Mono',monospace;font-size:9px;color:#7a7a85;width:18px;flex-shrink:0;text-align:center;align-self:stretch;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.03);border-right:1px solid var(--line);margin:0 3px 0 -10px}
   .seed.win .sd{color:#fff;background:rgba(255,31,68,.12)}
-  .seed .av{width:26px;height:26px;border-radius:7px;background:var(--panel-3);display:flex;align-items:center;justify-content:center;font-family:'Saira Condensed',sans-serif;font-style:italic;font-size:11px;font-weight:900;color:var(--sub);flex-shrink:0;overflow:hidden}
+  .seed .av{width:19px;height:19px;border-radius:5px;background:var(--panel-3);display:flex;align-items:center;justify-content:center;font-family:'Saira Condensed',sans-serif;font-style:italic;font-size:9px;font-weight:900;color:var(--sub);flex-shrink:0;overflow:hidden}
   .seed .av img{width:100%;height:100%;object-fit:cover;display:block}
-  .seed .nm{font-weight:600;font-size:15px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#c9c9d0;letter-spacing:.01em}
-  .seed .sc{font-family:'JetBrains Mono',monospace;font-weight:600;font-size:14px;color:var(--sub);min-width:18px;text-align:right}
+  .seed .nm{font-weight:600;font-size:12.5px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#c9c9d0;letter-spacing:.01em}
+  .seed .sc{font-family:'JetBrains Mono',monospace;font-weight:600;font-size:12px;color:var(--sub);min-width:16px;text-align:right}
   /* winner row */
   .seed.win{background:linear-gradient(90deg,rgba(255,31,68,.09),rgba(236,24,98,0) 62%)}
   .seed.win .nm{color:#fff;font-weight:700}
@@ -317,17 +318,29 @@ const sb=supabase.createClient(SB_URL,SB_KEY);
 const S={tours:[],players:{},encounters:[],results:{},parts:{},cache:{},cur:null,fmt:'bracket',view:'all'};
 const GAME='Zenless Zone Zero';
 const fmtDate=d=>d?new Date(d).toLocaleDateString('ru',{day:'2-digit',month:'short',year:'numeric'}):'—';
-// диапазон дат проведения (event_date .. event_date_end)
+// дата в формате 02.06 (день.месяц)
+const fmtDM=d=>{const x=new Date(d);return String(x.getDate()).padStart(2,'0')+'.'+String(x.getMonth()+1).padStart(2,'0');};
+// диапазон дат проведения (event_date .. event_date_end) → «02.06 - 03.06»
 const fmtRange=t=>{
   if(!t.event_date)return'—';
-  const sd=x=>new Date(x).toLocaleDateString('ru',{day:'2-digit',month:'short'});
-  return t.event_date_end&&t.event_date_end!==t.event_date?`${sd(t.event_date)} – ${fmtDate(t.event_date_end)}`:fmtDate(t.event_date);
+  return t.event_date_end&&t.event_date_end!==t.event_date?`${fmtDM(t.event_date)} - ${fmtDM(t.event_date_end)}`:fmtDM(t.event_date);
 };
+// полные названия форматов; поддержка многоэтапных через «->»/«→» (Round Robin → Double Elimination)
+const FMT_FULL={SE:'Single Elimination',DE:'Double Elimination',GROUPS:'Round Robin',RR:'Round Robin',ROUNDROBIN:'Round Robin',SWISS:'Swiss'};
+const fmtFull=t=>{
+  const raw=(t.bracket_type||'').trim();
+  if(!raw)return'—';
+  return raw.split(/\s*(?:->|→|>)\s*/).map(p=>FMT_FULL[p.toUpperCase().replace(/[\s_]/g,'')]||p).join(' → ');
+};
+// подсветка «Nexus Shiyu» в названии нашим (малиновым) цветом
+const hlName=name=>esc(name).replace(/(nexus\s*shiyu)/i,'<span style="color:var(--pink)">$1</span>');
 // участники: из tournament_participants (по сеянию), иначе уникальные из встреч
 const seedsOf=tid=>(S.parts[tid]||[]).slice().sort((a,b)=>(a.seed||1e9)-(b.seed||1e9)).map(p=>S.players[p.player_id]).filter(Boolean);
 const partCount=tid=>{const sd=(S.parts[tid]||[]).length;if(sd)return sd;const s=new Set();S.encounters.filter(e=>e.tournament_id==tid).forEach(e=>{if(e.player1_id)s.add(e.player1_id);if(e.player2_id)s.add(e.player2_id)});return s.size};
-// прогресс турнира = доля сыгранных встреч (с победителем) от всех
-const tourProgress=tid=>{const e=S.encounters.filter(x=>x.tournament_id==tid);const total=e.length,done=e.filter(x=>x.winner_id).length;return{done,total,pct:total?Math.round(done/total*100):0};};
+// максимально возможное число матчей турнира по формату и числу участников
+const maxMatches=t=>{const n=Math.max(partCount(t.id),t.expected_players||0);if(n<2)return 0;return t.bracket_type==='DE'?2*(n-1):n-1;};
+// прогресс турнира = сыгранные встречи (с победителем) от максимума матчей (сразу полная шкала)
+const tourProgress=tid=>{const t=S.tours.find(x=>x.id==tid)||{};const e=S.encounters.filter(x=>x.tournament_id==tid);const done=e.filter(x=>x.winner_id).length;const total=Math.max(maxMatches(t),e.length);return{done,total,pct:total?Math.round(done/total*100):0};};
 const progHTML=pr=>`<div class="prog"><div class="bar"><div class="fill" style="width:${pr.pct}%"></div></div><span class="pln">${pr.done}/${pr.total}</span></div>`;
 // актуальный турнир: live → последний не-анонс → первый
 const curTour=()=>S.tours.find(t=>t.status==='live')||S.tours.find(t=>t.status!=='upcoming')||S.tours[0]||null;
@@ -378,7 +391,7 @@ function renderTourbar(){
     // дату показываем только если задана (иначе под бейджем висел «—»)
     const sub=t.event_date?`<span class="tt-sub">${fmtRange(t)}</span>`:'';
     right=`<div class="spacer"></div>
-      <div class="tour-tab"><span class="tt-main">${esc(t.name)}<span class="tt-badge ${st}">${lbl}</span></span>${sub}</div>`;
+      <div class="tour-tab"><span class="tt-main">${hlName(t.name)}<span class="tt-badge ${st}">${lbl}</span></span>${sub}</div>`;
   }
   // рядом с «Все сетки» — кнопка-переход на актуальный турнир (через разделитель);
   // показываем всегда, в т.ч. при открытой сетке, чтобы актуальный турнир не пропадал
@@ -425,7 +438,6 @@ function renderAll(){
   if(!S.tours.length){$('content').innerHTML='<div class="panel"><h3>Нет турниров</h3></div>';return;}
   const order={live:0,upcoming:1,finished:2};
   const rows=S.tours.slice().sort((a,b)=>(order[a.status]??3)-(order[b.status]??3));
-  const fmtLbl=t=>t.bracket_type==='DE'?'Double Elim':t.bracket_type==='SE'?'Single Elim':(t.bracket_type||'—');
   $('content').innerHTML=`<div class="idx-wrap">
     <div class="idx-h">Все сетки</div>
     <div class="idx-sub">Турнирные сетки Nexus Shiyu · нажми на турнир, чтобы открыть его сетку</div>
@@ -435,8 +447,8 @@ function renderAll(){
       </div>
       ${rows.map(t=>`
         <div class="idx-row${(t.status||'')==='live'?' live-row':''}" data-id="${t.id}">
-          <div class="ir-name"><span class="ir-thumb">${esc((t.name||'?').slice(0,2).toUpperCase())}</span>${esc(t.name)}${(t.status||'')==='live'?'<span class="live-dot" title="Идёт сейчас"></span>':''}</div>
-          <div class="idx-cell"><span class="fmt-pill">${esc(fmtLbl(t))}</span></div>
+          <div class="ir-name"><span class="ir-thumb">${esc((t.name||'?').slice(0,2).toUpperCase())}</span>${hlName(t.name)}${(t.status||'')==='live'?'<span class="live-dot" title="Идёт сейчас"></span>':''}</div>
+          <div class="idx-cell"><span class="fmt-pill">${esc(fmtFull(t))}</span></div>
           <div class="idx-cell mut">${partCount(t.id)||t.expected_players||'—'}</div>
           <div class="idx-cell mut">${fmtRange(t)}</div>
           <div class="idx-cell">${progHTML(tourProgress(t.id))}</div>
@@ -451,8 +463,8 @@ function renderMeta(t){
   const pr=tourProgress(t.id);
   $('tmeta').style.display='flex';
   $('tmeta').innerHTML=`
-    <div class="tname">${esc(t.name)}</div>
-    <span class="chip">Формат <b>${t.bracket_type==='DE'?'Double Elim':t.bracket_type==='SE'?'Single Elim':'—'}</b></span>
+    <div class="tname">${hlName(t.name)}</div>
+    <span class="chip">Формат <b>${esc(fmtFull(t))}</b></span>
     <span class="chip">Дата <b>${fmtRange(t)}</b></span>
     <span class="chip" style="gap:10px">Прогресс <div class="prog" style="width:130px"><div class="bar"><div class="fill" style="width:${pr.pct}%"></div></div><span class="pln">${pr.done}/${pr.total}</span></div></span>
     ${slug?`<a class="ch-link" href="https://challonge.com/ru/${slug}" target="_blank" rel="noopener">Открыть на Challonge ↗</a>`:''}`;
@@ -471,12 +483,23 @@ function modelFromEncounters(t){
     const ia=ORDER.findIndex(o=>a.includes(o)),ib=ORDER.findIndex(o=>b.includes(o));
     return (ia<0?99:ia)-(ib<0?99:ib);
   });
-  return {rounds:keys.map(k=>({name:k,matches:byStage[k].sort((a,b)=>(a.sort_order||0)-(b.sort_order||0)).map(e=>encMatch(e))}))};
+  // раунды сырых встреч (в порядке sort_order)
+  const er=keys.map(k=>({name:k,encs:byStage[k].slice().sort((a,b)=>(a.sort_order||0)-(b.sort_order||0))}));
+  // сквозная нумерация встреч (как на Challonge)
+  let id=0;er.forEach(r=>r.encs.forEach(e=>e._mid=++id));
+  // фидеры: встреча раунда r питается встречами раунда r-1, чей победитель играет в ней
+  // (обычная турнирная логика 2→1; при «bye» у встречи будет 1 фидер)
+  er.forEach((r,ri)=>r.encs.forEach(e=>{
+    e._fd=[];
+    if(ri>0)er[ri-1].encs.forEach(pe=>{if(pe.winner_id&&(pe.winner_id===e.player1_id||pe.winner_id===e.player2_id))e._fd.push(pe._mid);});
+  }));
+  return {rounds:er.map(r=>({name:r.name,matches:r.encs.map(encMatch)}))};
 }
 function encMatch(e){
   const n=id=>id?(S.players[id]||'—'):null;
   // score: count match wins within encounter is unknown here → show winner only (Bo2)
   return {
+    id:e._mid,feeders:e._fd||[],
     a:{name:n(e.player1_id),win:e.winner_id&&e.winner_id===e.player1_id,seed:''},
     b:{name:n(e.player2_id),win:e.winner_id&&e.winner_id===e.player2_id,seed:''},
     played:!!e.winner_id
@@ -513,20 +536,58 @@ function renderBracket(t){
     ?`<span style="display:inline-block;padding:2px 9px;border-radius:99px;background:linear-gradient(90deg,#ff3b6b,#ff8a5b);color:#fff;font-size:11px;font-weight:700;letter-spacing:.4px">CHALLONGE · авто-синк${ch.fetched_at?' · '+fmtDate(ch.fetched_at):''}</span>`
     :src==='enc'?`<span style="display:inline-block;padding:2px 9px;border-radius:99px;background:#1a1d27;border:1px solid var(--border);color:var(--sub);font-size:11px;font-weight:600">Ручной ввод</span>`:'';
   const note=(badge||skeleton)?`<div style="max-width:1080px;margin:0 auto;padding:16px 28px 0;color:var(--sub);font-size:13px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">${badge}${skeleton?`<span>Предварительный каркас сетки${seedsOf(t.id).length?' (участники по посеву)':' — участники появятся по мере заполнения'}.</span>`:''}</div>`:'';
-  $('content').innerHTML=note+`<div class="bracket-wrap">${renderRounds(model.rounds)}</div>`;
+  $('content').innerHTML=note+`<div class="bracket-wrap">${renderBracketBody(model.rounds,t.bracket_type||'')}</div>`;
 }
 
+// Каркас сетки: для Double Elimination раскладываем горизонтально по секциям
+// (Верхняя сетка / Нижняя сетка / Гранд-финал) — как на Challonge и в нашей графике.
+// Single Elimination и прочие — одна горизонтальная лента.
+function renderBracketBody(rounds, bracketType=''){
+  const isLower=n=>/нижн|lower|loser/i.test(n||'');
+  const isGf=n=>/гранд|grand|finale/i.test(n||'');
+  const hasDE=rounds.some(r=>isLower(r.name)||isGf(r.name));
+  if(!hasDE) return renderRounds(rounds);
+  const strip=arr=>arr.map(r=>({...r,name:(r.name||'').replace(/^(верхняя|нижняя)\s*·?\s*/i,'').trim()||r.name}));
+  const upper=strip(rounds.filter(r=>!isLower(r.name)));
+  const lower=strip(rounds.filter(r=>isLower(r.name)));
+  let out='';
+  if(upper.length)out+=`<div class="bsec-title upper">Верхняя сетка</div>${renderRounds(upper)}`;
+  if(lower.length)out+=`<div class="bsec-title lower">Нижняя сетка</div>${renderRounds(lower)}`;
+  return out;
+}
+
+// геометрия раскладки: высота карточки + вертикальный зазор (шаг сетки)
+const MATCH_H=50,ROW_GAP=20,UNIT=MATCH_H+ROW_GAP;
+// Раскладка раундов: каждая встреча вертикально центрируется между своими фидерами
+// (обычная турнирная логика 2→1). Если фидеры неизвестны (каркас/Challonge-кэш) —
+// равномерное распределение (space-around) по высоте базового раунда.
+function layoutRounds(rounds){
+  let gid=0;rounds.forEach(r=>r.matches.forEach(m=>{if(m.id==null)m.id=++gid;}));
+  const byId={};rounds.forEach(r=>r.matches.forEach(m=>byId[m.id]=m));
+  const hasFeeders=rounds.some(r=>r.matches.some(m=>(m.feeders||[]).length));
+  if(hasFeeders){
+    rounds.forEach((r,ri)=>r.matches.forEach((m,i)=>{
+      const fd=(m.feeders||[]).map(id=>byId[id]).filter(x=>x&&x._top!=null);
+      m._top=(ri>0&&fd.length)?fd.reduce((s,f)=>s+f._top,0)/fd.length:i*UNIT;
+    }));
+  }else{
+    const base=rounds[0].matches.length||1;const totalH=base*UNIT;
+    rounds.forEach(r=>{const n=r.matches.length||1,span=totalH/n;
+      r.matches.forEach((m,i)=>{m._top=span*(i+0.5)-MATCH_H/2;});});
+  }
+  return Math.max(MATCH_H,...rounds.flatMap(r=>r.matches.map(m=>m._top+MATCH_H)));
+}
 function renderRounds(rounds){
-  // Challonge нумерует встречи сквозно по порядку раундов (1,2,3…) — слева от карточки.
-  let id=0;
+  const h=layoutRounds(rounds);
   return `<div class="bracket">`+rounds.map(r=>`
     <div class="bround">
       <div class="bround-h">${esc(r.name)}</div>
-      ${r.matches.map(m=>matchHTML(m,++id)).join('')}
+      <div class="bcol" style="height:${Math.ceil(h)}px">${r.matches.map(m=>matchHTML(m)).join('')}</div>
     </div>`).join('')+`</div>`;
 }
-function matchHTML(m,id){
-  return `<div class="match ${m.played?'played':''}">
+function matchHTML(m){
+  const id=m.id;
+  return `<div class="match ${m.played?'played':''}" data-id="${id}" data-feeders="${(m.feeders||[]).join(',')}" style="top:${Math.round(m._top)}px">
     ${id?`<span class="m-id">${id}</span>`:''}
     ${seedHTML(m.a,m.played)}${seedHTML(m.b,m.played)}</div>`;
 }
@@ -607,31 +668,43 @@ fetch('https://decapi.me/twitch/uptime/Nexus_Shiyu').then(r=>r.text()).then(txt=
     const base=br.getBoundingClientRect();
     const svg=document.createElementNS(NS,'svg');
     svg.setAttribute('class','bconn');
-    const mr=rounds.map(r=>[...r.querySelectorAll(':scope > .match')]);
+    const mcol=r=>[...(r.querySelector('.bcol')||r).querySelectorAll(':scope > .match')];
+    const mr=rounds.map(mcol);
     const lastIdx=rounds.length-1;
-    // links between adjacent rounds
-    for(let ri=0;ri<lastIdx;ri++){
-      const cur=mr[ri],nxt=mr[ri+1];
-      if(!cur.length||!nxt.length)continue;
-      cur.forEach((m,i)=>{
-        let ti;
-        if(nxt.length===cur.length)ti=i;
-        else if(nxt.length===Math.ceil(cur.length/2))ti=Math.floor(i/2);
-        else ti=Math.min(nxt.length-1,Math.floor(i*nxt.length/cur.length));
-        const tgt=nxt[ti];if(!tgt)return;
-        const a=rc(m,base),b=rc(tgt,base),midx=a.r+(b.l-a.r)/2;
-        const p=document.createElementNS(NS,'path');
-        p.setAttribute('d',`M${a.r} ${a.cy}H${midx}V${b.cy}H${b.l}`);
-        p.setAttribute('class','link'+(mstate(m)==='future'?' dim':''));
-        svg.appendChild(p);
-      });
+    const all=mr.flat();
+    const byId={};all.forEach(m=>byId[m.dataset.id]=m);
+    const hasFeeders=all.some(m=>m.dataset.feeders);
+    const link=(f,m)=>{const a=rc(f,base),b=rc(m,base),midx=a.r+(b.l-a.r)/2;
+      const p=document.createElementNS(NS,'path');
+      p.setAttribute('d',`M${a.r} ${a.cy}H${midx}V${b.cy}H${b.l}`);
+      p.setAttribute('class','link'+(mstate(f)==='future'?' dim':''));svg.appendChild(p);};
+    if(hasFeeders){
+      // обычная турнирная логика: тянем связи строго по фидерам (2→1)
+      const parent=new Set();
+      all.forEach(m=>{(m.dataset.feeders||'').split(',').filter(Boolean).forEach(fid=>{
+        const f=byId[fid];if(!f)return;parent.add(fid);link(f,m);});});
+      all.forEach(m=>{const a=rc(m,base),st=mstate(m);
+        if((m.dataset.feeders||'').split(',').filter(Boolean).length)svg.appendChild(diamond(a.l,a.cy,st));
+        if(parent.has(m.dataset.id))svg.appendChild(diamond(a.r,a.cy,st));});
+    }else{
+      // фолбэк (каркас/Challonge-кэш без явных фидеров): эвристика по индексам
+      for(let ri=0;ri<lastIdx;ri++){
+        const cur=mr[ri],nxt=mr[ri+1];
+        if(!cur.length||!nxt.length)continue;
+        cur.forEach((m,i)=>{
+          let ti;
+          if(nxt.length===cur.length)ti=i;
+          else if(nxt.length===Math.ceil(cur.length/2))ti=Math.floor(i/2);
+          else ti=Math.min(nxt.length-1,Math.floor(i*nxt.length/cur.length));
+          const tgt=nxt[ti];if(tgt)link(m,tgt);
+        });
+      }
+      mr.forEach((arr,ri)=>arr.forEach(m=>{
+        const a=rc(m,base),st=mstate(m);
+        if(ri<lastIdx)svg.appendChild(diamond(a.r,a.cy,st));
+        if(ri>0)svg.appendChild(diamond(a.l,a.cy,st));
+      }));
     }
-    // state diamonds: output (right) when a next round exists; junction (left) when fed
-    mr.forEach((arr,ri)=>arr.forEach(m=>{
-      const a=rc(m,base),st=mstate(m);
-      if(ri<lastIdx)svg.appendChild(diamond(a.r,a.cy,st));
-      if(ri>0)svg.appendChild(diamond(a.l,a.cy,st));
-    }));
     br.prepend(svg);
     // legend (once per bracket-wrap, only when there are connections to explain)
     const wrap=br.closest('.bracket-wrap');

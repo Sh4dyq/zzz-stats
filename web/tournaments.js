@@ -1,7 +1,17 @@
 // tournaments.js — турниры и косты
 
 const TOUR_STATUSES=[['live','🔴 Идёт сейчас'],['upcoming','🗓 Анонс'],['finished','✓ Завершён']];
-const BRACKET_TYPES=[['SE','Single Elimination'],['DE','Double Elimination'],['GROUPS','Группы']];
+const BRACKET_TYPES=[['SE','Single Elimination'],['DE','Double Elimination'],['RR','Round Robin'],['SWISS','Swiss'],['GROUPS','Группы']];
+const FMT_FULL={SE:'Single Elimination',DE:'Double Elimination',RR:'Round Robin',GROUPS:'Группы',SWISS:'Swiss'};
+// полное имя формата турнира; многоэтапный «RR->DE» → «Round Robin → Double Elimination»
+const fmtFullName=bt=>String(bt||'').split(/\s*->\s*/).filter(Boolean).map(c=>FMT_FULL[c]||c).join(' → ')||'—';
+// два селекта: формат этапа 1 + опциональный этап 2 (хранится в bracket_type как «fmt1->fmt2»)
+function fmtSelects(p,bt){
+  const [s1='SE',s2='']=String(bt||'SE').split(/\s*->\s*/);
+  const opt=(sel)=>BRACKET_TYPES.map(([v,l])=>`<option value="${v}" ${sel===v?'selected':''}>${l}</option>`).join('');
+  return`<div><label>Формат (этап 1)</label><select id="${p}fmt">${opt(s1)}</select></div>
+    <div><label>Формат этапа 2 (опц.)</label><select id="${p}fmt2"><option value="">— один этап —</option>${opt(s2)}</select></div>`;
+}
 const fmtTourDates=t=>{
   if(!t.event_date)return'—';
   const d=x=>new Date(x).toLocaleDateString('ru',{day:'2-digit',month:'short'});
@@ -18,7 +28,7 @@ async function pgTournaments(){
       <span title="Перетащить для сортировки" style="cursor:grab;color:var(--sub);font-size:15px;user-select:none">⠿</span>
       <div>
         <div style="font-weight:600">${st==='live'?'<span style="color:var(--red)">●</span> ':''}${t.name}</div>
-        <div style="font-size:12px;color:var(--sub)">${(t.bracket_type||'—')} · ${fmtTourDates(t)} · уч.: ${t.expected_players||'—'}${t.stages_count>1?` · этапов: ${t.stages_count}`:''}</div>
+        <div style="font-size:12px;color:var(--sub)">${fmtFullName(t.bracket_type)} · ${fmtTourDates(t)} · уч.: ${t.expected_players||'—'}${t.stages_count>1?` · этапов: ${t.stages_count}`:''}</div>
       </div>
     </div>
     <div style="display:flex;gap:8px;align-items:center">
@@ -37,7 +47,7 @@ async function pgTournaments(){
     <h3>Новый турнир</h3>
     <div class="grid2">
       <div><label>Название</label><input id="t-name" type="text" placeholder="Nexus Shiyu Proxy Rush 6"></div>
-      <div><label>Формат</label><select id="t-fmt">${BRACKET_TYPES.map(([v,l])=>`<option value="${v}">${l}</option>`).join('')}</select></div>
+      ${fmtSelects('t-','SE')}
       <div><label>Дата начала</label><input id="t-date" type="date"></div>
       <div><label>Дата конца (опц.)</label><input id="t-date2" type="date"></div>
       <div><label>Участников (предполагаемо)</label><input id="t-exp" type="number" min="2" placeholder="30"></div>
@@ -51,12 +61,14 @@ async function pgTournaments(){
 }
 function tourFormPatch(p){
   const fmt=document.getElementById(p+'fmt')?.value||'SE';
+  const fmt2=document.getElementById(p+'fmt2')?.value||'';
+  const bracket=fmt2?`${fmt}->${fmt2}`:fmt;
   const d1=document.getElementById(p+'date')?.value||null;
   const d2=document.getElementById(p+'date2')?.value||null;
   const exp=document.getElementById(p+'exp')?.value;
   const stg=document.getElementById(p+'stages')?.value;
   const ch=document.getElementById(p+'ch')?.value?.trim()||null;
-  return{bracket_type:fmt,event_date:d1,event_date_end:d2,expected_players:exp?+exp:null,stages_count:stg?+stg:1,challonge_url:ch};
+  return{bracket_type:bracket,event_date:d1,event_date_end:d2,expected_players:exp?+exp:null,stages_count:stg?+stg:(fmt2?2:1),challonge_url:ch};
 }
 async function addTour(){
   const n=v('t-name');if(!n)return toast('Впиши название','err');
@@ -73,7 +85,7 @@ async function openTourSettings(id,name){
     <h3>Настройки — ${escapeHtml(name)}</h3>
     <div class="grid2">
       <div><label>Название</label><input id="${p}name" type="text" value="${escapeHtml(t.name||'')}"></div>
-      <div><label>Формат</label><select id="${p}fmt">${BRACKET_TYPES.map(([v,l])=>`<option value="${v}" ${t.bracket_type===v?'selected':''}>${l}</option>`).join('')}</select></div>
+      ${fmtSelects(p,t.bracket_type)}
       <div><label>Дата начала</label><input id="${p}date" type="date" value="${t.event_date||''}"></div>
       <div><label>Дата конца (опц.)</label><input id="${p}date2" type="date" value="${t.event_date_end||''}"></div>
       <div><label>Участников (предполагаемо)</label><input id="${p}exp" type="number" min="2" value="${t.expected_players??''}"></div>
