@@ -152,7 +152,7 @@ async function openBracketEditor(tourId,tourName){
     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:6px">
       <h3 style="margin:0">Каркас сетки <span style="color:var(--sub);font-weight:400;font-size:13px">${t.bracket_type||'SE'} · ${seeds.length?seeds.length+' уч.':((t.expected_players||0)+' уч. (предпол.)')}</span></h3>
       <div style="display:flex;gap:8px">
-        ${t.challonge_url?`<button class="btn btn-y" style="font-size:12px;padding:5px 12px" onclick="syncChallonge('${tourId}','${tourName.replace(/'/g,"\\'")}')">⟳ Синк с Challonge</button>`:''}
+        <button class="btn btn-y" style="font-size:12px;padding:5px 12px" onclick="syncChallonge('${tourId}','${tourName.replace(/'/g,"\\'")}')">⟳ Синк с Challonge</button>
         <a class="btn btn-g" style="font-size:12px;padding:5px 12px" onclick="openParticipants('${tourId}','${tourName.replace(/'/g,"\\'")}')">Править участников</a>
       </div>
     </div>
@@ -201,8 +201,15 @@ async function openBracketEditor(tourId,tourName){
 function challongeSlug(url){if(!url)return null;const m=String(url).match(/challonge\.com\/(?:[a-z]{2}\/)?([A-Za-z0-9_]+)/);return m?m[1]:String(url).replace(/^.*\//,'');}
 async function syncChallonge(tourId,tourName){
   const t=D.tours.find(x=>x.id===tourId)||{};
-  const slug=challongeSlug(t.challonge_url);
-  if(!slug)return toast('У турнира не задана ссылка Challonge','err');
+  let slug=challongeSlug(t.challonge_url);
+  if(!slug){
+    const inp=prompt('У турнира не задана ссылка Challonge. Впиши ссылку или slug (напр. NSPR6):');
+    slug=challongeSlug(inp);
+    if(!slug)return toast('Синк отменён','err');
+    // запоминаем ссылку в турнире, чтобы дальше не спрашивать
+    await sb.from('tournaments').update({challonge_url:inp.includes('challonge.com')?inp:('https://challonge.com/'+slug)}).eq('id',tourId);
+    await refreshData();
+  }
   toast('Синкаю с Challonge…');
   const{data,error}=await sb.functions.invoke('challonge-proxy',{body:{challonge:slug,db_id:tourId}});
   if(error||data?.error){return toast('Синк не удался: '+(data?.error||error.message||error),'err');}
