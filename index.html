@@ -57,6 +57,14 @@
   .ms-tag{font-size:10px;padding:1px 6px;border-radius:4px;background:rgba(255,31,68,.14);border:1px solid rgba(255,31,68,.35);color:#ff7587;font-family:'JetBrains Mono',monospace;font-weight:600}
   .hl-cell{background:rgba(255,31,68,.13);color:#ff6b7d;font-weight:800;font-size:14px!important;font-family:'Saira Condensed',sans-serif;font-style:italic}
   .note{font-size:12px;color:var(--sub);margin-top:10px;font-family:'Rajdhani',sans-serif;font-weight:500}
+  .fav{display:inline-flex;align-items:center;gap:7px;flex-wrap:wrap}
+  .fav .cnt{color:var(--sub);font-size:12px;font-family:'JetBrains Mono',monospace;margin-left:-2px}
+  .plc{display:inline-block;font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;font-size:18px;line-height:1;color:var(--text);padding-right:.18em}
+  .plc.g1,.plc.g2,.plc.g3{-webkit-background-clip:text;background-clip:text;color:transparent}
+  .plc.g1{background-image:linear-gradient(90deg,#f8d36a,#d99a16)}
+  .plc.g2{background-image:linear-gradient(90deg,#eef1f6,#aeb4c0)}
+  .plc.g3{background-image:linear-gradient(90deg,#f0a06b,#c46a32)}
+  .prize-rub{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;font-size:16px;background:linear-gradient(90deg,#f8d36a,#d99a16);-webkit-background-clip:text;background-clip:text;color:transparent;padding-right:.1em;white-space:nowrap}
   .empty{padding:48px 0;text-align:center;color:var(--sub);font-size:15px;font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;letter-spacing:.04em}
   .spinner{width:22px;height:22px;border:2px solid var(--border);border-top-color:var(--red);border-radius:50%;animation:spin .7s linear infinite;margin:0 auto}
   /* читаемость таблицы персонажей */
@@ -192,6 +200,7 @@
       <button id="seg-v" class="seg-btn on" onclick="setView('v')">По встречам (Bo2)</button>
       <button id="seg-m" class="seg-btn" onclick="setView('m')">По матчам</button>
       <button id="seg-r" class="seg-btn" onclick="setView('r')">Ростеры</button>
+      <button id="seg-x" class="seg-btn" onclick="setView('x')">Разное</button>
     </div>
     <div id="players-area" class="tbl-wrap">
       <table><tbody><tr><td class="empty" colspan="12">Нет данных</td></tr></tbody></table>
@@ -489,29 +498,27 @@ function rosterCols(pid){
 }
 
 function renderPV(vStats,isAll){
-  const head=`<thead><tr><th class="nc">Ник</th><th onclick="sortP(1)">Σ встреч</th><th onclick="sortP(2)">W</th><th onclick="sortP(3)">L</th><th onclick="sortP(4)">WR%</th><th onclick="sortP(5)">AVG таймер</th><th onclick="sortP(6)">Возраст</th><th onclick="sortP(7)">Призовые</th></tr></thead>`;
+  const head=`<thead><tr><th class="nc">Ник</th><th onclick="sortP(1)">Σ встреч</th><th onclick="sortP(2)">W</th><th onclick="sortP(3)">L</th><th onclick="sortP(4)">WR%</th><th onclick="sortP(5)">AVG таймер</th></tr></thead>`;
   const activePl=S.players.filter(p=>vStats[p.id]);
-  if(!activePl.length){document.getElementById('players-area').innerHTML=`<table><tbody><tr><td class="empty" colspan="8">Нет данных</td></tr></tbody></table>`;return;}
+  if(!activePl.length){document.getElementById('players-area').innerHTML=`<table><tbody><tr><td class="empty" colspan="6">Нет данных</td></tr></tbody></table>`;return;}
   const rows=activePl.map(p=>{
     const s=vStats[p.id]||{v:0,w:0,l:0,timers:[]};
     const wrPct=wr(s.w,0,s.v);
     const avgT=fSec(avg(s.timers));
-    const pr=S.playerMap[p.id]?.prize;
-    return`<tr><td class="nc"><div style="display:flex;align-items:center;gap:6px">${pic(p.nickname,'')}<span>${p.nickname}</span></div></td><td>${s.v}</td><td>${s.w}</td><td>${s.l}</td><td class="${wc(wrPct)}">${f1(wrPct)}</td><td>${avgT}</td><td>${p.age??'—'}</td><td>${pr!=null?pr+'$':'—'}</td></tr>`;
+    return`<tr><td class="nc"><div style="display:flex;align-items:center;gap:6px">${pic(p.nickname,'')}<span>${p.nickname}</span></div></td><td>${s.v}</td><td>${s.w}</td><td>${s.l}</td><td class="${wc(wrPct)}">${f1(wrPct)}</td><td>${avgT}</td></tr>`;
   });
   document.getElementById('players-area').innerHTML=`<table>${head}<tbody>${rows.join('')}</tbody></table>`;
 }
 
 function renderPM(mStats,isAll){
-  const head=`<thead><tr><th class="nc">Ник</th><th onclick="sortP(1)">Σ матч</th><th onclick="sortP(2)">W</th><th>D</th><th onclick="sortP(4)">L</th><th onclick="sortP(5)">WR%</th><th onclick="sortP(6)">WR фп%</th><th onclick="sortP(7)">WR дабл%</th><th onclick="sortP(8)">Σ рест</th><th onclick="sortP(9)">AVG рест</th><th onclick="sortP(10)">AVG таймер</th><th onclick="sortP(11)">Возраст</th><th onclick="sortP(12)">Призовые</th></tr></thead>`;
+  const head=`<thead><tr><th class="nc">Ник</th><th onclick="sortP(1)">Σ матч</th><th onclick="sortP(2)">W</th><th>D</th><th onclick="sortP(4)">L</th><th onclick="sortP(5)">WR%</th><th onclick="sortP(6)">WR фп%</th><th onclick="sortP(7)">WR дабл%</th><th onclick="sortP(8)">Σ рест</th><th onclick="sortP(9)">AVG рест</th><th onclick="sortP(10)">AVG таймер</th></tr></thead>`;
   const activePl=S.players.filter(p=>mStats[p.id]);
-  if(!activePl.length){document.getElementById('players-area').innerHTML=`<table><tbody><tr><td class="empty" colspan="13">Нет данных</td></tr></tbody></table>`;return;}
+  if(!activePl.length){document.getElementById('players-area').innerHTML=`<table><tbody><tr><td class="empty" colspan="11">Нет данных</td></tr></tbody></table>`;return;}
   const rows=activePl.map(p=>{
     const s=mStats[p.id]||{m:0,w:0,d:0,l:0,fpm:0,fpw:0,fpd:0,dm:0,dw2:0,dd:0,rests:0,wtimers:[],ltimers:[]};
     const wrPct=wr(s.w,s.d,s.m),wrfp=wr(s.fpw,s.fpd,s.fpm),wrdbl=wr(s.dw2,s.dd,s.dm);
     const allT=[...s.wtimers,...s.ltimers];
-    const pr=S.playerMap[p.id]?.prize;
-    return`<tr><td class="nc"><div style="display:flex;align-items:center;gap:6px">${pic(p.nickname,'')}<span>${p.nickname}</span></div></td><td>${s.m}</td><td>${s.w}</td><td class="m">${s.d}</td><td>${s.l}</td><td class="${wc(wrPct)}">${f1(wrPct)}</td><td class="${wc(wrfp)}">${f1(wrfp)}</td><td class="${wc(wrdbl)}">${f1(wrdbl)}</td><td>${s.rests}</td><td>${s.m?(s.rests/s.m).toFixed(2):'—'}</td><td>${fSec(avg(allT))}</td><td>${p.age??'—'}</td><td>${pr!=null?pr+'$':'—'}</td></tr>`;
+    return`<tr><td class="nc"><div style="display:flex;align-items:center;gap:6px">${pic(p.nickname,'')}<span>${p.nickname}</span></div></td><td>${s.m}</td><td>${s.w}</td><td class="m">${s.d}</td><td>${s.l}</td><td class="${wc(wrPct)}">${f1(wrPct)}</td><td class="${wc(wrfp)}">${f1(wrfp)}</td><td class="${wc(wrdbl)}">${f1(wrdbl)}</td><td>${s.rests}</td><td>${s.m?(s.rests/s.m).toFixed(2):'—'}</td><td>${fSec(avg(allT))}</td></tr>`;
   });
   document.getElementById('players-area').innerHTML=`<table>${head}<tbody>${rows.join('')}</tbody></table>`;
 }
@@ -521,8 +528,10 @@ function setView(v){
   document.getElementById('seg-v').className='seg-btn'+(v==='v'?' on':'');
   document.getElementById('seg-m').className='seg-btn'+(v==='m'?' on':'');
   document.getElementById('seg-r').className='seg-btn'+(v==='r'?' on':'');
+  document.getElementById('seg-x').className='seg-btn'+(v==='x'?' on':'');
   const isAll=S.tour===ALL;
   if(v==='r'){renderRosters(isAll);return;}
+  if(v==='x'){renderMisc();return;}
   const{mStats,vStats}=computePlayers();
   if(v==='v')renderPV(vStats,isAll);else renderPM(mStats,isAll);
 }
@@ -568,6 +577,63 @@ function renderRosters(isAll){
     return`<tr><td class="nc"><span>${p.nickname}</span></td>`+
       `<td class="ic">${fmt(a.atk)}</td><td class="ic">${fmt(a.stun)}</td><td class="ic">${fmt(a.rupt)}</td><td class="ic">${fmt(a.sd)}</td><td class="ic">${fmt(a.ano)}</td>`+
       `${isAll?`<td class="ic">${data[p.id].n}</td>`:''}</tr>`;
+  });
+  document.getElementById('players-area').innerHTML=`<table>${head}<tbody>${rows.join('')}</tbody></table>`;
+}
+
+// Разное: любимый персонаж (по пикам, без A-ранга), Σ матчей (встреч),
+// возраст, Σ турниров, наивысшее место, призовые ₽. Уважает фильтр турнира.
+function computeMisc(){
+  const out={};
+  S.players.forEach(p=>out[p.id]={fav:[],favN:0,matches:0,tours:new Set()});
+  S.encounters.forEach(enc=>{
+    [enc.player1_id,enc.player2_id].forEach(pid=>{
+      if(!out[pid])return;
+      out[pid].matches++;
+      if(enc.tournament_id!=null)out[pid].tours.add(enc.tournament_id);
+    });
+  });
+  const pickCnt={}; // pickCnt[pid][cid] — считаем все ранги
+  S.picks.forEach(pk=>{
+    if(!S.charMap[pk.character_id])return;
+    (pickCnt[pk.player_id]=pickCnt[pk.player_id]||{});
+    pickCnt[pk.player_id][pk.character_id]=(pickCnt[pk.player_id][pk.character_id]||0)+1;
+  });
+  Object.entries(pickCnt).forEach(([pid,m])=>{
+    if(!out[pid])return;
+    const max=Math.max(...Object.values(m));
+    let tied=Object.keys(m).filter(cid=>m[cid]===max);
+    // A-ранги прячем только при ничьей; если в ничьей одни A — показываем одного случайного
+    if(tied.length>1){
+      const sOnly=tied.filter(cid=>S.charMap[cid].rarity!=='A');
+      tied=sOnly.length?sOnly:[tied[Math.floor(Math.random()*tied.length)]];
+    }
+    out[pid].fav=tied;
+    out[pid].favN=max;
+  });
+  return out;
+}
+function placeCell(pl,cnt){
+  if(pl==null||pl==='')return'—';
+  const cls=(pl===1||pl===2||pl===3)?' g'+pl:'';
+  const c=(cnt!=null&&cnt>1)?` <span class="cnt">(${cnt})</span>`:'';
+  return`<span class="plc${cls}">${pl} место</span>${c}`;
+}
+function renderMisc(){
+  const data=computeMisc();
+  const head=`<thead><tr><th class="nc">Ник</th><th>Любимый персонаж</th><th>Σ матчей</th><th>Возраст</th><th>Σ турниров</th><th>Наивысшее место</th><th>Призовые ₽</th></tr></thead>`;
+  // показываем всех игроков, у кого есть встречи в текущем фильтре
+  const activePl=S.players.filter(p=>data[p.id]&&data[p.id].matches);
+  if(!activePl.length){document.getElementById('players-area').innerHTML=`<table>${head}<tbody><tr><td class="empty" colspan="7">Нет данных</td></tr></tbody></table>`;return;}
+  const rows=activePl.map(p=>{
+    const d=data[p.id];
+    const fav=d.fav.length
+      ? `<span class="fav">${d.fav.map(cid=>pic(S.charMap[cid].name,'')).join('')}${d.favN>1?`<span class="cnt">(${d.favN})</span>`:''}</span>`
+      : '—';
+    const pr=S.playerMap[p.id]?.prize;
+    const prize=pr!=null?`<span class="prize-rub">${String(pr).replace(/\B(?=(\d{3})+(?!\d))/g,' ')} ₽</span>`:'—';
+    return`<tr><td class="nc"><div style="display:flex;align-items:center;gap:6px">${pic(p.nickname,'')}<span>${p.nickname}</span></div></td>`+
+      `<td>${fav}</td><td>${d.matches}</td><td>${p.age??'—'}</td><td>${d.tours.size}</td><td>${placeCell(p.highest_place,p.highest_place_count)}</td><td>${prize}</td></tr>`;
   });
   document.getElementById('players-area').innerHTML=`<table>${head}<tbody>${rows.join('')}</tbody></table>`;
 }

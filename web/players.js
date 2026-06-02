@@ -7,7 +7,7 @@ async function pgPlayers(){
   const list=D.players.map(p=>`<div class="row-item">
     <div>
       <div style="font-weight:600">${p.nickname}</div>
-      <div style="font-size:12px;color:var(--sub)">${p.age||'—'} ${p.prize!=null?'· '+p.prize+'$':''}</div>
+      <div style="font-size:12px;color:var(--sub)">${p.age||'—'}${p.prize!=null?' · '+p.prize+' ₽':''}${p.highest_place!=null?' · '+p.highest_place+' место':''}</div>
     </div>
     <div style="display:flex;gap:8px">
       <button class="btn btn-g" style="font-size:12px;padding:5px 12px" onclick="openRoster('${p.id}','${p.nickname.replace(/'/g,"\'")}')">Ростер</button>
@@ -41,10 +41,13 @@ async function openRoster(pid,pnick){
   html(`<button class="btn btn-g" style="margin-bottom:16px" onclick="go('players')">← Назад</button>
 
   <div class="card" style="margin-bottom:12px">
-    <h3>Призовые</h3>
-    <div style="display:flex;align-items:flex-end;gap:10px">
-      <div><label>Сумма ($)</label><input id="r-prize" type="number" min="0" placeholder="0" style="width:140px" value="${player.prize??''}"></div>
-      <button class="btn btn-y" onclick="savePrize('${pid}')">Сохранить</button>
+    <h3>Профиль</h3>
+    <div style="display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap">
+      <div><label>Возраст</label><input id="r-age" type="number" min="10" max="99" placeholder="—" style="width:100px" value="${player.age??''}"></div>
+      <div><label>Наивысшее место</label><input id="r-place" type="number" min="1" placeholder="—" style="width:120px" value="${player.highest_place??''}"></div>
+      <div><label>Раз занято</label><input id="r-place-cnt" type="number" min="1" placeholder="1" style="width:100px" value="${player.highest_place_count??''}"></div>
+      <div><label>Призовые (₽)</label><input id="r-prize" type="number" min="0" placeholder="0" style="width:140px" value="${player.prize??''}"></div>
+      <button class="btn btn-y" onclick="saveProfile('${pid}')">Сохранить</button>
     </div>
   </div>
 
@@ -137,13 +140,21 @@ async function loadTourRoster(pid){
   renderSelected();
 }
 
-async function savePrize(pid){
-  const val=document.getElementById('r-prize')?.value;
-  if(val===''||val==null)return toast('Введи сумму','err');
-  const{error}=await sb.from('players').update({prize:+val}).eq('id',pid);
-  if(dbErr(error,'сохранение призовых'))return;
+async function saveProfile(pid){
+  const a=document.getElementById('r-age')?.value;
+  const pl=document.getElementById('r-place')?.value;
+  const plc=document.getElementById('r-place-cnt')?.value;
+  const pr=document.getElementById('r-prize')?.value;
+  const patch={
+    age:a===''||a==null?null:+a,
+    highest_place:pl===''||pl==null?null:+pl,
+    highest_place_count:plc===''||plc==null?null:+plc,
+    prize:pr===''||pr==null?null:+pr
+  };
+  const{error}=await sb.from('players').update(patch).eq('id',pid);
+  if(dbErr(error,'сохранение профиля'))return;
   await refreshData();
-  toast('Призовые сохранены');
+  toast('Профиль сохранён');
 }
 
 async function saveRoster(pid){
