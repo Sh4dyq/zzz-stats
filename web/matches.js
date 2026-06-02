@@ -183,11 +183,11 @@ const DRAFT_CSS=`<style>
 .dcell.ban .pk-thumb img,.dcell.ban .pk-thumb .pic{filter:grayscale(1) brightness(.62)}
 .dcell.ban .pk-num{background:#dc2626}
 
-/* движок-амплификатор: бейдж снизу-слева (чекбокс + иконка) — клик переключает sig */
-.pk-eng{position:absolute;left:2px;bottom:2px;z-index:3;display:flex;align-items:center;gap:2px;background:rgba(8,8,12,.7);border:1px solid #2a2d3a;border-radius:6px;padding:1px 2px;margin:0;cursor:pointer}
-.pk-eng input[type=checkbox]{width:8px;height:8px;margin:0;accent-color:var(--accent);cursor:pointer;flex-shrink:0}
-.pk-amp{display:inline-flex;align-items:center;line-height:0}
-.pk-amp img,.pk-amp .pic{width:10px!important;height:10px!important;border-radius:2px!important;object-fit:contain;background:transparent!important}
+/* амплификатор: отдельная строка-дропдаун под селектом персонажа (мини-иконка + список всех ампов) */
+.amp-pick{display:flex;align-items:center;gap:4px;min-width:0}
+.amp-pick .pk-amp{display:inline-flex;align-items:center;line-height:0;flex-shrink:0}
+.amp-pick .pk-amp img,.amp-pick .pk-amp .pic{width:16px!important;height:16px!important;border-radius:3px!important;object-fit:cover;background:transparent!important}
+.amp-pick .draft-sig{flex:1;min-width:0;font-size:11px;padding:3px 4px;border-radius:5px}
 
 /* минскейп: бейдж M0..M6 снизу-справа (нативный select без стрелки) */
 .pk-ms{position:absolute;right:3px;bottom:3px;z-index:3;appearance:none;-webkit-appearance:none;background:rgba(8,8,12,.82);border:1px solid #2a2d3a;color:#fff;border-radius:5px;font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;padding:2px 5px;width:auto;min-width:0;cursor:pointer;text-align:center;text-align-last:center}
@@ -211,19 +211,22 @@ const DRAFT_ORDER_DBL=[2,3,6,7, 10,11,14,15, null,18,null,null];
 
 // Универсальная ячейка драфта. slot===null → пустая распорка.
 // Бан: портрет ч/б + красная рамка + №. Пик: + минскейп M0..M6, чекбокс sig и картинка амплификатора.
-function draftCellHtml(slot,banMap,pickMap,charOpts,setSel){
+function draftCellHtml(slot,banMap,pickMap,charOpts,ampOpts,setSel){
   if(!slot)return`<div class="dcell empty"></div>`;
   const isBan=slot.type==='ban';
   const ex=(isBan?banMap:pickMap)[slot.n]||{};
   const ch=D.chars.find(c=>c.id===ex.character_id)||null;
-  let ov='';
+  let ov='',ampRow='';
   if(!isBan){
-    const sig=sigForChar(ex.character_id);
-    const ampOp=ex.has_signature?1:.3;
-    ov=`<label class="pk-eng" title="Сигнатурный амплификатор">
-        <input type="checkbox" class="draft-sig" data-slot="${slot.n}" onchange="draftSigChanged(this)" ${ex.has_signature?'checked':''}>
-        <span class="pk-amp" data-ampslot="${slot.n}" style="opacity:${ampOp}">${sig?sigImg(sig,13):''}</span></label>
-      <select class="draft-ms pk-ms" data-slot="${slot.n}" title="Минскейп">${setSel(msOpts,String(ex.mindscape||0))}</select>`;
+    // минскейп — оверлей снизу-справа на портрете
+    ov=`<select class="draft-ms pk-ms" data-slot="${slot.n}" title="Минскейп">${setSel(msOpts,String(ex.mindscape||0))}</select>`;
+    // амплификатор — отдельная строка-дропдаун под селектом персонажа (любой амп на любом персе)
+    const curSig=ex.sig_id?D.sigs.find(s=>s.id===ex.sig_id):null;
+    ampRow=`<div class="amp-pick">
+      <span class="pk-amp" data-ampslot="${slot.n}">${curSig?sigImg(curSig,16):''}</span>
+      <select class="draft-sig" data-slot="${slot.n}" onchange="draftSigChanged(this)" title="Амплификатор (W-движок)">
+        <option value="">— амп —</option>${setSel(ampOpts,ex.sig_id||'')}</select>
+    </div>`;
   }
   return`<div class="dcell ${isBan?'ban':'pick'}">
     <div class="pk-thumb">
@@ -232,6 +235,7 @@ function draftCellHtml(slot,banMap,pickMap,charOpts,setSel){
       ${ov}</div>
     <select class="draft-char" data-slot="${slot.n}" data-type="${slot.type}" data-pid="${slot.pid}" onchange="draftCharChanged(this)">
       <option value="">—</option>${setSel(charOpts,ex.character_id)}</select>
+    ${ampRow}
   </div>`;
 }
 
@@ -243,10 +247,15 @@ function renderDraftBoard(slots,fpId,dblId,fpName,dblName,match){
   (match?.picks||[]).forEach(p=>pickMap[p.pick_order]=p);
 
   const charOpts=D.chars.map(c=>`<option value="${c.id}">${c.name}</option>`).join('');
+  // амплификаторы: имя + (персонаж-владелец) для ориентира
+  const ampOpts=[...D.sigs].sort((a,b)=>(a.name||'').localeCompare(b.name||'')).map(s=>{
+    const c=D.chars.find(x=>x.id===s.character_id);
+    return`<option value="${s.id}">${escapeHtml(s.name)}${c?' · '+escapeHtml(c.name):''}</option>`;
+  }).join('');
   const setSel=(opts,val)=>val?opts.replace(`value="${val}"`,`value="${val}" selected`):opts;
 
   const byN={};slots.forEach(s=>byN[s.n]=s);
-  const cells=order=>order.map(n=>draftCellHtml(n?byN[n]:null,banMap,pickMap,charOpts,setSel)).join('');
+  const cells=order=>order.map(n=>draftCellHtml(n?byN[n]:null,banMap,pickMap,charOpts,ampOpts,setSel)).join('');
 
   return DRAFT_CSS+`<div class="dboard">
     <div class="dgrid">
@@ -270,13 +279,17 @@ function draftCharChanged(el){
   if(msEl&&char?.rarity==='A')msEl.value='6';
   const img=document.querySelector(`.pk-img[data-imgslot="${slot}"]`);
   if(img)img.innerHTML=iconChar(char,48);
-  const amp=document.querySelector(`.pk-amp[data-ampslot="${slot}"]`);
-  if(amp){const sig=sigForChar(el.value);amp.innerHTML=sig?sigImg(sig,13):'';}
+  // при выборе персонажа по умолчанию ставим его сигнатурный амплификатор (частый случай)
+  const sigSel=document.querySelector(`.draft-sig[data-slot="${slot}"]`);
+  if(sigSel){const own=sigForChar(el.value);sigSel.value=own?own.id:'';draftSigChanged(sigSel);}
 }
 
-function draftSigChanged(cb){
-  const amp=document.querySelector(`.pk-amp[data-ampslot="${cb.dataset.slot}"]`);
-  if(amp)amp.style.opacity=cb.checked?1:.35;
+// смена амплификатора в дропдауне → обновить мини-иконку рядом
+function draftSigChanged(sel){
+  const amp=document.querySelector(`.pk-amp[data-ampslot="${sel.dataset.slot}"]`);
+  if(!amp)return;
+  const sig=sel.value?D.sigs.find(s=>s.id===sel.value):null;
+  amp.innerHTML=sig?sigImg(sig,16):'';
 }
 
 function parseSec(s){if(!s)return null;const p=s.split(':').map(Number);if(p.length!==2||isNaN(p[0])||isNaN(p[1]))return null;return p[0]*60+p[1];}
@@ -325,10 +338,10 @@ async function saveMatch(encId,num,p1Id,p2Id,fpId,existingId){
       bans.push({match_id:mid,player_id:pid,character_id:el.value,ban_order:slot});
     }else{
       const ms=+document.querySelector(`.draft-ms[data-slot="${slot}"]`)?.value||0;
-      const sig=document.querySelector(`.draft-sig[data-slot="${slot}"]`)?.checked||false;
+      const sigId=document.querySelector(`.draft-sig[data-slot="${slot}"]`)?.value||null;
       const team=teamSlotFor(pid,slot);
       picks.push({match_id:mid,player_id:pid,character_id:el.value,
-        mindscape:ms,team_slot:team,has_signature:sig,pick_order:slot,
+        mindscape:ms,team_slot:team,sig_id:sigId,has_signature:!!sigId,pick_order:slot,
         is_fp:pid===fpId,is_double:false});
     }
   });

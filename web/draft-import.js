@@ -63,9 +63,10 @@ function normalizeDraft(state,ids){
 
 // Резолв enka → персонаж БД; движок enka + персонаж → has_signature.
 function charByEnka(enka){return D.chars.find(c=>baseEnka(c.enka_id)===enka);}
-function isSignature(charId,engineEnka){
-  if(!engineEnka)return false;
-  return D.sigs.some(s=>s.character_id===charId&&baseEnka(s.enka_id)===engineEnka);
+// движок enka → амплификатор из БД (ЛЮБОЙ владелец — нестандартные движки тоже ловим).
+function sigByEngineEnka(engineEnka){
+  if(!engineEnka)return null;
+  return D.sigs.find(s=>baseEnka(s.enka_id)===engineEnka)||null;
 }
 
 // Заполнение DOM формы openMatch из нормализованного драфта.
@@ -102,14 +103,14 @@ function applyDraftToForm(norm,pen){
       const pl=sideForActor[slot.actor]||fp;
       const ms=document.querySelector(`.draft-ms[data-slot="${slot.n}"]`);
       if(ms)ms.value=String(pl.mindscapeByEnka[slot.enka]??0);
+      // реальный движок персонажа из драфта → конкретный амплификатор (любой владелец)
       const sig=document.querySelector(`.draft-sig[data-slot="${slot.n}"]`);
-      if(sig&&ch){sig.checked=isSignature(ch.id,pl.engineEnkaByAgentEnka[slot.enka]);}
+      if(sig){const sg=ch?sigByEngineEnka(pl.engineEnkaByAgentEnka[slot.enka]):null;sig.value=sg?sg.id:'';}
     }
-    // обновить портрет/амплификатор под новый выбор (без авто-M6 из draftCharChanged)
+    // обновить портрет под новый выбор (без авто-M6 из draftCharChanged)
     const img=document.querySelector(`.pk-img[data-imgslot="${slot.n}"]`);
     if(img&&typeof iconChar==='function')img.innerHTML=iconChar(ch,48);
-    const amp=document.querySelector(`.pk-amp[data-ampslot="${slot.n}"]`);
-    if(amp&&typeof sigForChar==='function'){const sg=ch?sigForChar(ch.id):null;amp.innerHTML=sg?sigImg(sg,13):'';}
+    // обновить мини-иконку амплификатора по выбранному в дропдауне
     const sig2=document.querySelector(`.draft-sig[data-slot="${slot.n}"]`);
     if(sig2&&typeof draftSigChanged==='function')draftSigChanged(sig2);
   });

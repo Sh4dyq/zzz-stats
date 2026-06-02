@@ -640,7 +640,8 @@ function computeAmps(){
   S.picks.forEach(pk=>{
     if(!pk.has_signature)return;
     const m=S.matchMap[pk.match_id];if(!m)return;
-    const sid=charSig[pk.character_id];if(!sid)return;
+    // реальный амплификатор пика (любой), фолбэк — сигнатура персонажа (старые записи)
+    const sid=pk.sig_id||charSig[pk.character_id];if(!sid)return;
     if(!amp[sid])amp[sid]={pk:0,pw:0,pd:0,perChar:{}};
     const a=amp[sid];a.pk++;
     const isW=m.winner_id===pk.player_id,isD=m.is_draw;
