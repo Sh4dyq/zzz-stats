@@ -266,7 +266,7 @@
     <nav class="nav">
       <a href="index.html">Главная</a>
       <a href="statistics.html#chars">Статистика</a>
-      <a href="#" class="active">Сетки</a>
+      <a href="#" class="active">Турнирная сетка</a>
     </nav>
   </div>
   <div style="display:flex;align-items:center;gap:14px">
@@ -380,14 +380,18 @@ function renderTourbar(){
     right=`<div class="spacer"></div>
       <div class="tour-tab"><span class="tt-main">${esc(t.name)}<span class="tt-badge ${st}">${lbl}</span></span>${sub}</div>`;
   }
-  // в индексе рядом с «Все сетки» — кнопка-переход на актуальный турнир (через разделитель)
+  // рядом с «Все сетки» — кнопка-переход на актуальный турнир (через разделитель);
+  // показываем всегда, в т.ч. при открытой сетке, чтобы актуальный турнир не пропадал
   let quick='';
-  if(!inTour){
+  {
     const c=curTour();
-    if(c)quick=`<div class="tr-div"></div>
-      <button class="cur-btn" id="curBtn" title="Открыть актуальный турнир">
+    if(c){
+      const open=inTour&&S.cur&&c.id==S.cur.id;
+      quick=`<div class="tr-div"></div>
+      <button class="cur-btn ${open?'active':''}" id="curBtn" title="Открыть актуальный турнир">
         <span class="cb-dot ${c.status==='live'?'on':''}"></span><span class="cb-tx">${esc(c.name)}</span>
       </button>`;
+    }
   }
   $('tourrow').innerHTML=`
     <button class="all-btn ${S.view==='all'?'active':''}" id="allBtn">

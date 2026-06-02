@@ -49,13 +49,25 @@
 
   .nav{display:flex;align-items:center;gap:4px;margin-left:14px}
   .nav a{position:relative;font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;
-    text-transform:uppercase;font-size:18px;letter-spacing:.02em;color:var(--sub);padding:8px 16px;transition:.15s}
+    text-transform:uppercase;font-size:20px;letter-spacing:.02em;color:var(--sub);padding:8px 16px;transition:.15s}
   .nav a:hover{color:var(--text)}
   .nav a.active{color:#fff}
   .nav a.active::after{content:"";position:absolute;left:16px;right:16px;bottom:-2px;height:3px;border-radius:3px;background:var(--grad)}
   .nav a.soon{color:#54545c;cursor:default}
   .nav a.soon::before{content:"СКОРО";position:absolute;top:-3px;right:2px;font-size:8px;font-weight:800;letter-spacing:.05em;color:var(--red);font-style:normal}
   .nav a.soon:hover{color:#54545c}
+  /* nav dropdown */
+  .nav-dd{position:relative}
+  .nav-dd>.nav-dd-t{display:inline-flex;align-items:center;gap:6px}
+  .nav-dd>.nav-dd-t::after{content:"";width:7px;height:7px;border-right:2px solid currentColor;border-bottom:2px solid currentColor;
+    transform:rotate(45deg) translateY(-2px);transition:.15s;opacity:.7}
+  .nav-dd:hover>.nav-dd-t{color:var(--text)}
+  .nav-dd-menu{position:absolute;left:8px;top:100%;min-width:184px;display:flex;flex-direction:column;gap:2px;
+    padding:7px;border:1px solid var(--border);border-radius:12px;background:rgba(16,16,20,.97);backdrop-filter:blur(12px);
+    box-shadow:0 16px 40px rgba(0,0,0,.5);opacity:0;visibility:hidden;transform:translateY(6px);transition:.15s;z-index:50}
+  .nav-dd:hover .nav-dd-menu{opacity:1;visibility:visible;transform:translateY(0)}
+  .nav-dd-menu a{padding:8px 14px;border-radius:8px;font-size:16px}
+  .nav-dd-menu a:hover{background:rgba(145,70,255,.14);color:#fff}
 
   .hdr-right{display:flex;align-items:center;gap:14px}
   /* combined LIVE + Twitch pill */
@@ -84,7 +96,7 @@
   .kicker .kbrand{color:#fff}
   .kicker .ksep{width:16px;height:3px;background:var(--grad);transform:skewX(-24deg);border-radius:1px}
   .kicker .kmuted{color:var(--sub)}
-  .sponsor{position:relative;overflow:hidden;display:flex;flex-direction:column;gap:7px;align-items:flex-end;text-align:right;
+  .sponsor{position:relative;overflow:hidden;display:flex;flex-direction:column;gap:7px;align-items:flex-end;text-align:right;text-decoration:none;
     background:
       radial-gradient(135% 160% at 88% -12%, rgba(196,245,0,.26), transparent 58%),
       linear-gradient(135deg, rgba(196,245,0,.13), rgba(10,14,2,.34) 70%),
@@ -102,13 +114,13 @@
   @keyframes sp-sheen{0%{left:-60%}55%,100%{left:150%}}
   @media (prefers-reduced-motion:reduce){.sponsor,.sponsor::after{animation:none}}
   .sponsor .sp-top{position:relative;z-index:1;display:flex;align-items:center;gap:14px}
-  .sponsor .slabel{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;
-    font-size:13px;letter-spacing:.08em;padding-right:.14em;
+  .sponsor .slabel{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:850;text-transform:uppercase;
+    font-size:16px;letter-spacing:.08em;padding-right:.14em;
     background:linear-gradient(92deg,#e9ff66,#c4f500 52%,#9bd400);-webkit-background-clip:text;background-clip:text;color:transparent}
-  .sponsor .sp-top a{position:relative;z-index:1;display:inline-flex;align-items:center;
-    background:#0b0d04;border:1px solid rgba(196,245,0,.32);border-radius:8px;padding:5px 10px;
+  .sponsor .hbbox{position:relative;z-index:1;display:inline-flex;align-items:center;
+    background:#0b0d04;border:1px solid rgba(196,245,0,.32);border-radius:8px;padding:6px 12px;
     box-shadow:inset 0 0 12px rgba(196,245,0,.10)}
-  .sponsor .hblogo{height:22px;width:auto;display:block}
+  .sponsor .hblogo{height:26px;width:auto;display:block}
   .sponsor .sslogan{position:relative;z-index:1;font-size:13px;font-weight:600;font-style:italic;color:var(--text)}
 
   /* hero */
@@ -432,13 +444,27 @@
       </div>
       <nav class="nav">
         <a href="#" class="active">Главная</a>
-        <a href="statistics.html#chars">Персонажи</a>
-        <a href="statistics.html#players">Игроки</a>
-        <a href="statistics.html#ext">Расширенная</a>
-        <a href="bracket.html">Сетки</a>
+        <div class="nav-dd">
+          <a href="statistics.html" class="nav-dd-t">Статистика</a>
+          <div class="nav-dd-menu">
+            <a href="statistics.html#chars">Персонажи</a>
+            <a href="statistics.html#players">Игроки</a>
+            <a href="statistics.html#ext">Расширенная</a>
+          </div>
+        </div>
+        <a href="bracket.html">Турнирные сетки</a>
       </nav>
     </div>
     <div class="hdr-right">
+      <a href="https://hornybox.ru/?r=Nexus_Shiyu" target="_blank" rel="noopener noreferrer" class="sponsor">
+        <div class="sp-top">
+          <span class="slabel">Генеральный спонсор</span>
+          <span class="hbbox">
+            <img class="hblogo" src="hornybox-logo.png" alt="HornyBox">
+          </span>
+        </div>
+        <div class="sslogan">«Экономишь — значит зарабатываешь»</div>
+      </a>
       <a href="https://twitch.tv/Nexus_Shiyu" target="_blank" class="livetw">
         <svg viewBox="0 0 24 24"><path d="M4 2 2 6v14h5v3l3-3h4l6-6V2H4zm16 11-3 3h-4l-3 3v-3H6V4h14v9z"/><path d="M15 7h2v5h-2zM10 7h2v5h-2z"/></svg>
         <span class="tw">Twitch</span>
@@ -461,15 +487,6 @@
         <span class="ksep"></span>
         <span class="kmuted" id="kicker-tour">Qualifiers II</span>
       </div>
-      <div class="sponsor">
-        <div class="sp-top">
-          <span class="slabel">Генеральный спонсор</span>
-          <a href="https://hornybox.ru/?r=Nexus_Shiyu" target="_blank" rel="noopener noreferrer">
-            <img class="hblogo" src="hornybox-logo.png" alt="HornyBox">
-          </a>
-        </div>
-        <div class="sslogan">«Экономишь — значит зарабатываешь»</div>
-      </div>
     </div>
 
     <h1 class="title">
@@ -477,7 +494,7 @@
       <span class="l2">Турниров</span>
     </h1>
 
-    <p class="lede">Аналитика турниров <b>Nexus Shiyu</b> по Zenless Zone Zero — рейтинги игроков, пики и баны агентов, история матчей и разбор драфтов.</p>
+    <p class="lede">Аналитика турниров <b>Nexus Shiyu</b> по Zenless Zone Zero — статистика игроков, винрейты, пикрейты, история матчей и турнирные сетки.</p>
 
     <div class="seasons" id="seasons">
       <a class="sbtn on" href="statistics.html?t=Proxy%20Rush%206" data-tour="Proxy Rush 6">Proxy Rush<small>6th · текущий</small></a>

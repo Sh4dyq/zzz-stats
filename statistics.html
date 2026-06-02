@@ -37,12 +37,12 @@
   .tab-btn.active{color:#fff}
   .tab-btn.active::after{content:"";position:absolute;left:14px;right:14px;bottom:-1px;height:3px;border-radius:3px 3px 0 0;background:var(--grad)}
   .tbl-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:12px;background:var(--card)}
-  table{border-collapse:collapse;font-size:12px;white-space:nowrap;width:100%;font-family:'JetBrains Mono',monospace}
-  th,td{padding:6px 11px;border:1px solid var(--border);text-align:center}
-  th{background:#101013;font-size:11px;font-weight:500;color:var(--sub);cursor:pointer;user-select:none;font-family:'Rajdhani',sans-serif;font-weight:600;letter-spacing:.04em}
+  table{border-collapse:collapse;font-size:13.5px;white-space:nowrap;width:100%;font-family:'JetBrains Mono',monospace}
+  th,td{padding:8px 13px;border:1px solid var(--border);text-align:center}
+  th{background:#101013;font-size:12px;font-weight:500;color:var(--sub);cursor:pointer;user-select:none;font-family:'Rajdhani',sans-serif;font-weight:600;letter-spacing:.04em}
   th:hover{color:var(--text);background:#17171c}
   .th-g{text-align:center!important;background:#121214!important;color:#fff!important;font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;font-size:13px;letter-spacing:.03em;border-bottom:2px solid var(--red)!important}
-  td.nc{text-align:left;font-weight:600;color:var(--text);min-width:150px;font-family:'Rajdhani',sans-serif;font-size:14px}
+  td.nc{text-align:left;font-weight:600;color:var(--text);min-width:150px;font-family:'Rajdhani',sans-serif;font-size:15px}
   th.nc{text-align:left}
   .g{color:#46d369;font-weight:700}.r{color:#ff6b7d;font-weight:700}.m{color:var(--sub)}
   .vrow{background:#101014}.vrow td.nc{color:var(--sub);font-weight:500;padding-left:22px;font-size:12px}
@@ -195,7 +195,7 @@
     <nav class="nav">
       <a href="index.html">Главная</a>
       <a href="#" class="active">Статистика</a>
-      <a href="bracket.html">Сетки</a>
+      <a href="bracket.html">Турнирная сетка</a>
     </nav>
   </div>
   <div style="display:flex;align-items:center;gap:14px">
@@ -346,7 +346,7 @@ const sb=supabase.createClient(SB_URL,SB_KEY);
 
 const ROLES={atk:{bg:'#3b1010',fg:'#fca5a5'},stun:{bg:'#0f1f3b',fg:'#93c5fd'},rupt:{bg:'#2d1a00',fg:'#fcd34d'},sup:{bg:'#0a2218',fg:'#6ee7b7'},def:{bg:'#0a2218',fg:'#86efac'},ano:{bg:'#1a0d3b',fg:'#c4b5fd'}};
 
-let S={tournaments:[],characters:[],players:[],encounters:[],matches:[],picks:[],bans:[],costs:{},rosters:{},sigs:[],allCosts:[],tour:'__all__',view:'v',cSort:{k:'name',asc:true},aSort:{k:'pk',asc:false}};
+let S={tournaments:[],characters:[],players:[],encounters:[],matches:[],picks:[],bans:[],costs:{},rosters:{},sigs:[],allCosts:[],tour:'__all__',view:'v',cSort:{k:'name',asc:true},aSort:{k:'name',asc:true}};
 
 const ALL='__all__';
 const f1=v=>typeof v==='number'?v.toFixed(2)+'%':v;
@@ -369,7 +369,7 @@ async function loadAll(){
     sb.from('signatures').select('*'),
     sb.from('tournament_costs').select('*')
   ]);
-  S.characters=chars||[];S.players=pls||[];S.sigs=sigs||[];S.allCosts=allCosts||[];
+  S.characters=chars||[];S.players=(pls||[]).slice().sort((a,b)=>(a.nickname||'').localeCompare(b.nickname||'','ru',{sensitivity:'base'}));S.sigs=sigs||[];S.allCosts=allCosts||[];
   S.charMap={};S.characters.forEach(c=>S.charMap[c.id]=c);
   S.playerMap={};S.players.forEach(p=>S.playerMap[p.id]=p);
 
