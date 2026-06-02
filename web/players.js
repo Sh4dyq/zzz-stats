@@ -4,10 +4,13 @@ let _RS=[];
 const RC={atk:'#fca5a5',stun:'#93c5fd',rupt:'#fcd34d',sup:'#6ee7b7',def:'#86efac',ano:'#c4b5fd'};
 
 async function pgPlayers(){
-  const list=D.players.map(p=>`<div class="row-item">
-    <div>
-      <div style="font-weight:600">${p.nickname}</div>
-      <div style="font-size:12px;color:var(--sub)">${p.age||'—'}${p.prize!=null?' · '+p.prize+' ₽':''}${p.highest_place!=null?' · '+p.highest_place+' место':''}</div>
+  const list=D.players.map(p=>`<div class="row-item" draggable="true" data-id="${p.id}">
+    <div style="display:flex;align-items:center;gap:10px">
+      <span title="Перетащить для сортировки" style="cursor:grab;color:var(--sub);font-size:15px;user-select:none">⠿</span>
+      <div>
+        <div style="font-weight:600">${p.nickname}</div>
+        <div style="font-size:12px;color:var(--sub)">${p.age||'—'}${p.prize!=null?' · '+p.prize+' ₽':''}${p.highest_place!=null?' · '+p.highest_place+' место':''}</div>
+      </div>
     </div>
     <div style="display:flex;gap:8px">
       <button class="btn btn-g" style="font-size:12px;padding:5px 12px" onclick="openRoster('${p.id}','${p.nickname.replace(/'/g,"\'")}')">Ростер</button>
@@ -22,7 +25,8 @@ async function pgPlayers(){
     </div>
     <button class="btn btn-y" style="margin-top:12px" onclick="addPlayer()">Добавить</button>
   </div>
-  <div class="space-y">${list||'<p style="color:var(--sub);font-size:14px">Игроков ещё нет</p>'}</div>`);
+  <div class="space-y" id="player-list">${list||'<p style="color:var(--sub);font-size:14px">Игроков ещё нет</p>'}</div>`);
+  if(typeof enableReorder==='function')enableReorder(document.getElementById('player-list'),'players',pgPlayers);
 }
 async function addPlayer(){const n=v('p-nick');if(!n)return;const{error}=await sb.from('players').insert({nickname:n,age:vn('p-age')});if(dbErr(error,'добавление игрока'))return;toast('Игрок добавлен');pgPlayers();}
 async function delPlayer(id){if(!confirm('Удалить?'))return;const{error}=await sb.from('players').delete().eq('id',id);if(dbErr(error,'удаление игрока'))return;pgPlayers();}

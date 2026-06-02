@@ -58,7 +58,36 @@ async function refreshData(){
     sb.from('players').select('*').order('nickname'),
     sb.from('signatures').select('*').order('name')
   ]);
-  D.tours=t||[];D.chars=c||[];D.players=p||[];D.sigs=s||[];
+  // ручной порядок (sort_order) поверх дефолтной сортировки; строки без него — в конец, стабильно.
+  const byOrder=arr=>(arr||[]).slice().sort((a,b)=>(a.sort_order??1e9)-(b.sort_order??1e9));
+  D.tours=byOrder(t);D.chars=c||[];D.players=byOrder(p);D.sigs=s||[];
+}
+
+// Drag-and-drop ручная сортировка списка в админке. listEl — контейнер с детьми
+// [draggable="true"][data-id]; при дропе пишет sort_order=индекс в таблицу и перерисовывает.
+// Колонка sort_order добавляется миграцией sql/add_sort_order.sql.
+let _dragId=null;
+function enableReorder(listEl,table,onSaved){
+  if(!listEl)return;
+  [...listEl.querySelectorAll('[draggable="true"]')].forEach(row=>{
+    row.addEventListener('dragstart',e=>{_dragId=row.dataset.id;e.dataTransfer.effectAllowed='move';row.style.opacity='.4';});
+    row.addEventListener('dragend',()=>{row.style.opacity='';row.style.outline='';});
+    row.addEventListener('dragover',e=>{e.preventDefault();e.dataTransfer.dropEffect='move';if(row.dataset.id!==_dragId)row.style.outline='2px solid var(--accent)';});
+    row.addEventListener('dragleave',()=>{row.style.outline='';});
+    row.addEventListener('drop',async e=>{
+      e.preventDefault();row.style.outline='';
+      const targetId=row.dataset.id;
+      if(!_dragId||_dragId===targetId)return;
+      const ids=[...listEl.querySelectorAll('[draggable="true"]')].map(r=>r.dataset.id);
+      const from=ids.indexOf(_dragId),to=ids.indexOf(targetId);
+      if(from<0||to<0)return;
+      ids.splice(to,0,ids.splice(from,1)[0]);
+      const res=await Promise.all(ids.map((id,i)=>sb.from(table).update({sort_order:i}).eq('id',id)));
+      const bad=res.find(r=>r.error);
+      if(bad){dbErr(bad.error,'сохранение порядка');return;}
+      await refreshData();toast('Порядок сохранён');if(onSaved)onSaved();
+    });
+  });
 }
 
 // --- UTILS ---

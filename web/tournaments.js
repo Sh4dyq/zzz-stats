@@ -1,19 +1,26 @@
 // tournaments.js — турниры и косты
 
 async function pgTournaments(){
-  const list=D.tours.map(t=>`<div class="row-item"><div>
-    <div style="font-weight:600">${t.name}</div>
-    <div style="font-size:12px;color:var(--sub)">${new Date(t.created_at).toLocaleDateString('ru')}</div>
-  </div><div style="display:flex;gap:8px">
-    <button class="btn btn-g" style="font-size:12px;padding:5px 12px" onclick="openCosts('${t.id}','${t.name.replace(/'/g,"\\'")}')">Косты</button>
-    <button class="btn-r" onclick="delTour('${t.id}')">✕</button>
-  </div></div>`).join('');
+  const list=D.tours.map(t=>`<div class="row-item" draggable="true" data-id="${t.id}">
+    <div style="display:flex;align-items:center;gap:10px">
+      <span title="Перетащить для сортировки" style="cursor:grab;color:var(--sub);font-size:15px;user-select:none">⠿</span>
+      <div>
+        <div style="font-weight:600">${t.name}</div>
+        <div style="font-size:12px;color:var(--sub)">${new Date(t.created_at).toLocaleDateString('ru')}</div>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-g" style="font-size:12px;padding:5px 12px" onclick="openCosts('${t.id}','${t.name.replace(/'/g,"\\'")}')">Косты</button>
+      <button class="btn-r" onclick="delTour('${t.id}')">✕</button>
+    </div>
+  </div>`).join('');
   html(`<div class="card" style="margin-bottom:16px">
     <h3>Новый турнир</h3>
-    <div class="grid2"><div><label>Название</label><input id="t-name" type="text" placeholder="Nexus Shiyu"></div></div>
+    <div class="grid2"><div><label>Название</label><input id="t-name" type="text" placeholder="Nexus Shiyu Proxy Rush 6"></div></div>
     <button class="btn btn-y" style="margin-top:12px" onclick="addTour()">Добавить</button>
   </div>
-  <div class="space-y">${list||'<p style="color:var(--sub);font-size:14px">Турниров ещё нет</p>'}</div>`);
+  <div class="space-y" id="tour-list">${list||'<p style="color:var(--sub);font-size:14px">Турниров ещё нет</p>'}</div>`);
+  if(typeof enableReorder==='function')enableReorder(document.getElementById('tour-list'),'tournaments',pgTournaments);
 }
 async function addTour(){const n=v('t-name');if(!n)return;const{error}=await sb.from('tournaments').insert({name:n});if(dbErr(error,'добавление турнира'))return;toast('Турнир добавлен');pgTournaments();}
 async function delTour(id){if(!confirm('Удалить турнир?'))return;const{error}=await sb.from('tournaments').delete().eq('id',id);if(dbErr(error,'удаление турнира'))return;pgTournaments();}
@@ -163,7 +170,17 @@ async function importTourRuleset(tourId){
     const pen=Array(sys.restart?.free||0).fill(0).concat(sys.restart?.paid||[]);
     document.querySelectorAll('.rp-in').forEach((el,i)=>{el.value=pen[i]??'';});
     if(typeof updatePenaltyHint==='function')updatePenaltyHint();
-    set(`Заполнено ${filled} костов из «${sys.title}» (лимит ${sys.costLimit}), штрафы [${pen.join(',')||'нет'}]`+(miss?` · ${miss} агентов нет в БД`:'')+'. Проверь и нажми «Сохранить все косты».');
+    // Косты амплификаторов R1–R5: bis[ownerEnka] (точнее), иначе own-role base[0..4]. Нули сохраняем.
+    let ampFilled=0;
+    D.sigs.forEach(s=>{
+      const engEnka=s.enka_id?base(s.enka_id):null;
+      const ch=D.chars.find(x=>x.id===s.character_id);
+      const ownerEnka=ch&&ch.enka_id?base(ch.enka_id):null;
+      const e=engEnka?sys.engines?.[engEnka]:null;if(!e)return;
+      const costs=(ownerEnka&&e.bis&&e.bis[ownerEnka])?e.bis[ownerEnka]:(e.base||[]).slice(0,5);
+      for(let i=0;i<5;i++){const el=document.querySelector(`.ac-in[data-sig="${s.id}"][data-r="${i}"]`);if(el&&costs[i]!=null){el.value=costs[i];ampFilled++;}}
+    });
+    set(`Заполнено ${filled} костов персонажей + ${ampFilled} ячеек амплификаторов из «${sys.title}» (лимит ${sys.costLimit}), штрафы [${pen.join(',')||'нет'}]`+(miss?` · ${miss} агентов нет в БД`:'')+'. Проверь и нажми «Сохранить» в обоих блоках.');
   }catch(e){set('Ошибка: '+e.message);}
 }
 
@@ -207,16 +224,24 @@ async function saveCosts(tourId){
 // Список амплификаторов, у каждого — кост на его персонаже.
 // По дефолту ничего не проставляется; заполняем только там, где кост в этом турнире задан.
 function ampCostsSection(tourId,tourName,existing){
-  // текущая сигна+кост у персонажа (поля продублированы по строкам минскейпов — берём любую заполненную)
+  // текущая сигна+косты R1–R5 у персонажа (поля продублированы по строкам минскейпов — берём первую заполненную)
   const charSig={};
-  existing.forEach(c=>{if(c.sig_id!=null&&!charSig[c.character_id])charSig[c.character_id]={sig_id:c.sig_id,sig_cost:c.sig_cost};});
+  existing.forEach(c=>{if(c.sig_id!=null&&!charSig[c.character_id])charSig[c.character_id]={sig_id:c.sig_id,sig_cost:c.sig_cost,sig_costs:Array.isArray(c.sig_costs)?c.sig_costs:[]};});
 
+  const RN=5;
+  const rHeads=Array.from({length:RN},(_,i)=>`<th style="padding:8px 4px;color:var(--sub);text-align:center;min-width:50px">R${i+1}</th>`).join('');
   const sigs=[...D.sigs].sort((a,b)=>(a.name||'').localeCompare(b.name||''));
   const rows=sigs.map(s=>{
     const c=D.chars.find(x=>x.id===s.character_id);
     if(!c)return'';
     const cur=charSig[c.id]?.sig_id===s.id?charSig[c.id]:null;
+    const arr=cur?.sig_costs||[];
     const img=typeof sigImg==='function'?sigImg(s,28):'';
+    // R1–R5: из sig_costs; легаси-фолбэк — одиночный sig_cost в R1. Нули показываем как есть.
+    const rCells=Array.from({length:RN},(_,i)=>{
+      const val=arr.length?arr[i]:(i===0?cur?.sig_cost:undefined);
+      return`<td style="padding:6px 4px;text-align:center"><input class="ac-in" data-sig="${s.id}" data-char="${c.id}" data-r="${i}" type="number" min="0" placeholder="—" value="${val??''}" style="width:48px;padding:4px 4px;font-size:13px;text-align:center"></td>`;
+    }).join('');
     return`<tr style="border-top:1px solid var(--border)">
       <td style="padding:8px 10px;white-space:nowrap">
         <div style="display:flex;align-items:center;gap:8px">${img}<span style="font-weight:500">${s.name}</span></div>
@@ -224,49 +249,57 @@ function ampCostsSection(tourId,tourName,existing){
       <td style="padding:8px 10px;white-space:nowrap">
         <div style="display:flex;align-items:center;gap:8px">${iconChar(c,28)}<span>${c.name}</span></div>
       </td>
-      <td style="padding:6px 10px;text-align:center">
-        <input class="ac-in" data-sig="${s.id}" data-char="${c.id}" type="number" min="0" placeholder="—" value="${cur?.sig_cost??''}" style="width:75px;padding:4px 6px;font-size:13px;text-align:center">
-      </td>
+      ${rCells}
     </tr>`;
   }).join('');
 
   return`<div class="card" style="margin-bottom:16px">
-    <div style="font-size:12px;color:var(--sub)">Кост указывается на персонаже, для которого амплификатор сигнатурный. Пустое поле — амплификатор не котируется в этом турнире.</div>
+    <div style="font-size:12px;color:var(--sub)">Кост сигнатурного амплификатора на его персонаже по наложениям R1–R5. Пустая ячейка — не котируется (прочерк); 0 — это реальный 0. Импорт из ссылки заполняет автоматически.</div>
   </div>
   <div class="card" style="overflow-x:auto;padding:0">
     <table style="width:100%;border-collapse:collapse;font-size:13px">
       <thead><tr style="background:#0b0d14">
         <th style="padding:8px 10px;text-align:left;color:var(--sub)">Амплификатор</th>
         <th style="padding:8px 10px;text-align:left;color:var(--sub)">Персонаж</th>
-        <th style="padding:8px 10px;color:var(--sub);text-align:center">Кост</th>
+        ${rHeads}
       </tr></thead>
-      <tbody>${rows||'<tr><td colspan="3" style="padding:14px;color:var(--sub)">Сначала добавь амплификаторы в разделе «Амплификаторы»</td></tr>'}</tbody>
+      <tbody>${rows||'<tr><td colspan="7" style="padding:14px;color:var(--sub)">Сначала добавь амплификаторы в разделе «Амплификаторы»</td></tr>'}</tbody>
     </table>
   </div>
   <button class="btn btn-y" style="margin-top:16px" onclick="saveAmpCosts('${tourId}')">Сохранить косты амплификаторов</button>`;
 }
 
 async function saveAmpCosts(tourId){
-  const inputs=[...document.querySelectorAll('.ac-in')];
+  // группируем 5 ячеек P1–P5 по паре (амплификатор, персонаж)
+  const groups={};
+  document.querySelectorAll('.ac-in').forEach(el=>{
+    const key=el.dataset.sig+'|'+el.dataset.char;
+    (groups[key]=groups[key]||{sig:el.dataset.sig,char:el.dataset.char,p:[]});
+    groups[key].p[+el.dataset.r]=el.value!==''?+el.value:null;
+  });
   let set=0,cleared=0;
-  for(const el of inputs){
-    const charId=el.dataset.char,sigId=el.dataset.sig;
-    const val=el.value!==''?+el.value:null;
-    if(val!=null){
-      // проставляем sig_id+sig_cost на существующие строки персонажа; если строк нет — заводим заглушку M0
+  for(const k in groups){
+    const g=groups[k];
+    // массив R1–R5: нормализуем дыры в null, обрезаем хвостовые null (0 сохраняем как есть)
+    const arr=[];for(let i=0;i<5;i++)arr[i]=g.p[i]===undefined?null:g.p[i];
+    while(arr.length&&arr[arr.length-1]==null)arr.pop();
+    const hasAny=arr.some(x=>x!=null);
+    const p1=arr.length?arr[0]:null; // зеркало для статистики (index.html читает sig_cost)
+    if(hasAny){
+      // проставляем sig_id+sig_cost(P1)+sig_costs на строки персонажа; если строк нет — заводим заглушку M0
       const{data:upd,error}=await sb.from('tournament_costs')
-        .update({sig_id:sigId,sig_cost:val}).eq('tournament_id',tourId).eq('character_id',charId).select('id');
+        .update({sig_id:g.sig,sig_cost:p1,sig_costs:arr}).eq('tournament_id',tourId).eq('character_id',g.char).select('id');
       if(dbErr(error,'сохранение коста амплификатора'))return;
       if(!upd||!upd.length){
         const{error:insErr}=await sb.from('tournament_costs')
-          .insert({tournament_id:tourId,character_id:charId,mindscape:0,cost:null,sig_id:sigId,sig_cost:val,is_allowed:true});
+          .insert({tournament_id:tourId,character_id:g.char,mindscape:0,cost:null,sig_id:g.sig,sig_cost:p1,sig_costs:arr,is_allowed:true});
         if(dbErr(insErr,'создание строки коста амплификатора'))return;
       }
       set++;
     }else{
       // снимаем кост только если этот амплификатор был привязан к персонажу
       const{data:upd,error}=await sb.from('tournament_costs')
-        .update({sig_id:null,sig_cost:null}).eq('tournament_id',tourId).eq('character_id',charId).eq('sig_id',sigId).select('id');
+        .update({sig_id:null,sig_cost:null,sig_costs:[]}).eq('tournament_id',tourId).eq('character_id',g.char).eq('sig_id',g.sig).select('id');
       if(dbErr(error,'очистка коста амплификатора'))return;
       if(upd&&upd.length)cleared++;
     }
