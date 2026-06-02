@@ -314,7 +314,7 @@ const SB_URL='https://zoavnckfbfiejxfjakue.supabase.co';
 const SB_KEY='sb_publishable_37RZBsmdp3O1i795EuEfeg_vFpdPTFZ';
 const sb=supabase.createClient(SB_URL,SB_KEY);
 
-const S={tours:[],players:{},encounters:[],results:{},parts:{},cur:null,fmt:'bracket',view:'all'};
+const S={tours:[],players:{},encounters:[],results:{},parts:{},cache:{},cur:null,fmt:'bracket',view:'all'};
 const GAME='Zenless Zone Zero';
 const fmtDate=d=>d?new Date(d).toLocaleDateString('ru',{day:'2-digit',month:'short',year:'numeric'}):'—';
 // диапазон дат проведения (event_date .. event_date_end)
@@ -342,18 +342,20 @@ function challongeSlug(url){
 }
 
 async function boot(){
-  const [ts,ps,es,rs,pa]=await Promise.all([
+  const [ts,ps,es,rs,pa,bc]=await Promise.all([
     sb.from('tournaments').select('*').order('created_at',{ascending:false}),
     sb.from('players').select('id,nickname'),
     sb.from('encounters').select('*'),
     sb.from('tournament_results').select('*').then(r=>r,()=>({data:[]})),
-    sb.from('tournament_participants').select('*').then(r=>r,()=>({data:[]}))
+    sb.from('tournament_participants').select('*').then(r=>r,()=>({data:[]})),
+    sb.from('bracket_cache').select('*').then(r=>r,()=>({data:[]}))
   ]);
   S.tours=ts.data||[];
   (ps.data||[]).forEach(p=>S.players[p.id]=p.nickname);
   S.encounters=es.data||[];
   (rs.data||[]).forEach(r=>{(S.results[r.tournament_id]=S.results[r.tournament_id]||[]).push(r)});
   (pa.data||[]).forEach(p=>{(S.parts[p.tournament_id]=S.parts[p.tournament_id]||[]).push(p)});
+  (bc.data||[]).forEach(c=>{S.cache[c.tournament_id]=c.json});
   // default landing = «Все сетки» index
   S.view='all';S.cur=null;
   renderTourbar();
@@ -479,10 +481,16 @@ function encMatch(e){
 
 function renderBracket(t){
   const slug=challongeSlug(t.challonge_url);
-  let model=modelFromEncounters(t);
+  // ИСТОЧНИК (гибрид): для турниров с challonge_url авторитет сетки = кэш Challonge (синк на бэке),
+  // иначе фолбэк на encounters, иначе каркас.
+  const ch=S.cache[t.id];
+  let src='enc';
+  let model=(ch&&Array.isArray(ch.rounds)&&ch.rounds.length)?(src='challonge',{rounds:ch.rounds}):modelFromEncounters(t);
+  if(model&&src!=='challonge')src='enc';
   let skeleton=false;
   // нет сохранённых встреч → показываем КАРКАС по формату+числу участников
   if(!model){
+    src='skeleton';
     const seeds=seedsOf(t.id);
     const n=Math.max(seeds.length,t.expected_players||0);
     model=(typeof BracketModel!=='undefined')?BracketModel.skeletonModel(t.bracket_type||'SE',n,seeds):null;
@@ -497,7 +505,10 @@ function renderBracket(t){
     </div>`;
     return;
   }
-  const note=skeleton?`<div style="max-width:1080px;margin:0 auto;padding:16px 28px 0;color:var(--sub);font-size:13px">Предварительный каркас сетки${seedsOf(t.id).length?' (участники по посеву)':' — участники появятся по мере заполнения'}.</div>`:'';
+  const badge=src==='challonge'
+    ?`<span style="display:inline-block;padding:2px 9px;border-radius:99px;background:linear-gradient(90deg,#ff3b6b,#ff8a5b);color:#fff;font-size:11px;font-weight:700;letter-spacing:.4px">CHALLONGE · авто-синк${ch.fetched_at?' · '+fmtDate(ch.fetched_at):''}</span>`
+    :src==='enc'?`<span style="display:inline-block;padding:2px 9px;border-radius:99px;background:#1a1d27;border:1px solid var(--border);color:var(--sub);font-size:11px;font-weight:600">Ручной ввод</span>`:'';
+  const note=(badge||skeleton)?`<div style="max-width:1080px;margin:0 auto;padding:16px 28px 0;color:var(--sub);font-size:13px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">${badge}${skeleton?`<span>Предварительный каркас сетки${seedsOf(t.id).length?' (участники по посеву)':' — участники появятся по мере заполнения'}.</span>`:''}</div>`:'';
   $('content').innerHTML=note+`<div class="bracket-wrap">${renderRounds(model.rounds)}</div>`;
 }
 

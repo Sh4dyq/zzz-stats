@@ -151,10 +151,15 @@ async function openBracketEditor(tourId,tourName){
   const skeleton=`<div class="card" style="margin-bottom:16px">
     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:6px">
       <h3 style="margin:0">Каркас сетки <span style="color:var(--sub);font-weight:400;font-size:13px">${t.bracket_type||'SE'} · ${seeds.length?seeds.length+' уч.':((t.expected_players||0)+' уч. (предпол.)')}</span></h3>
-      <a class="btn btn-g" style="font-size:12px;padding:5px 12px" onclick="openParticipants('${tourId}','${tourName.replace(/'/g,"\\'")}')">Править участников</a>
+      <div style="display:flex;gap:8px">
+        ${t.challonge_url?`<button class="btn btn-y" style="font-size:12px;padding:5px 12px" onclick="syncChallonge('${tourId}','${tourName.replace(/'/g,"\\'")}')">⟳ Синк с Challonge</button>`:''}
+        <a class="btn btn-g" style="font-size:12px;padding:5px 12px" onclick="openParticipants('${tourId}','${tourName.replace(/'/g,"\\'")}')">Править участников</a>
+      </div>
     </div>
+    ${t.challonge_url?`<div style="font-size:11px;color:var(--sub);margin-bottom:8px">Синк тянет сетку и МЕСТА из Challonge (авто). Призовые и строки результата, помеченные «вручную», синк не трогает.</div>`:''}
     ${compactSkeletonHTML(t,seeds)}
-  </div>`;
+  </div>
+  ${await resultsEditorHTML(tourId)}`;
   const rows=encs.map(e=>{
     const p1=plMap[e.player1_id],p2=plMap[e.player2_id];
     const opts=[['','— не задан —'],[e.player1_id,p1?.nickname||'Игрок 1'],[e.player2_id,p2?.nickname||'Игрок 2']];
@@ -191,6 +196,68 @@ async function openBracketEditor(tourId,tourName){
     .enc-acts{display:flex;gap:6px}
   </style>
   <div class="enc-grid">${rows||'<p style="color:var(--sub);font-size:14px">Встреч ещё нет</p>'}</div>`);
+}
+// ===== ГИБРИД: синк с Challonge (авто) + ручной редактор результатов =====
+function challongeSlug(url){if(!url)return null;const m=String(url).match(/challonge\.com\/(?:[a-z]{2}\/)?([A-Za-z0-9_]+)/);return m?m[1]:String(url).replace(/^.*\//,'');}
+async function syncChallonge(tourId,tourName){
+  const t=D.tours.find(x=>x.id===tourId)||{};
+  const slug=challongeSlug(t.challonge_url);
+  if(!slug)return toast('У турнира не задана ссылка Challonge','err');
+  toast('Синкаю с Challonge…');
+  const{data,error}=await sb.functions.invoke('challonge-proxy',{body:{challonge:slug,db_id:tourId}});
+  if(error||data?.error){return toast('Синк не удался: '+(data?.error||error.message||error),'err');}
+  const s=data.sync||{};
+  let msg=`Сетка обновлена · мест записано: ${s.results_written||0}`;
+  if(s.results_skipped_manual)msg+=` · ручных пропущено: ${s.results_skipped_manual}`;
+  if((s.unmatched||[]).length)msg+=` · не сматчено: ${s.unmatched.join(', ')}`;
+  toast(msg);
+  openBracketEditor(tourId,tourName);
+}
+// Ручной редактор мест/призовых. Строки, сохранённые здесь → source='manual' (синк их не трогает).
+async function resultsEditorHTML(tourId){
+  const{data:res}=await sb.from('tournament_results').select('*').eq('tournament_id',tourId).order('place',{ascending:true});
+  const plMap={};D.players.forEach(p=>plMap[p.id]=p);
+  const rows=(res||[]).map(r=>`<div class="enc-card">
+    <div class="enc-head"><span class="enc-vs">${escapeHtml(plMap[r.player_id]?.nickname||'—')}</span>
+      <span style="font-size:10px;padding:1px 7px;border-radius:99px;${r.source==='manual'?'background:#1a1d27;border:1px solid var(--border);color:var(--sub)':'background:linear-gradient(90deg,#ff3b6b,#ff8a5b);color:#fff;font-weight:700'}">${r.source==='manual'?'вручную':'Challonge'}</span></div>
+    <div style="display:flex;gap:6px">
+      <input id="rp-${r.id}" type="number" value="${r.place??''}" placeholder="место" style="font-size:12px;padding:5px 8px;width:50%">
+      <input id="rz-${r.id}" type="number" value="${r.prize??''}" placeholder="приз ₽" style="font-size:12px;padding:5px 8px;width:50%">
+    </div>
+    <button class="btn btn-y" style="font-size:12px;padding:5px 10px" onclick="saveResultRow('${tourId}','${r.id}','${r.player_id}')">Сохранить (вручную)</button>
+  </div>`).join('');
+  const plDatalist=`<datalist id="re-pl-list">${D.players.map(p=>`<option value="${escapeHtml(p.nickname)}"></option>`).join('')}</datalist>`;
+  return`<div class="card" style="margin-bottom:16px">
+    <h3>Результаты (места / призовые)</h3>
+    <div style="font-size:11px;color:var(--sub);margin-bottom:10px">Места могут прийти авто из Challonge. <b>Призовые — только вручную</b> (в Challonge их нет). Сохранение здесь помечает строку «вручную» — синк её больше не перетирает.</div>
+    ${plDatalist}
+    <div class="grid2" style="margin-bottom:8px">
+      <div><label>Игрок</label><input id="re-nick" type="text" list="re-pl-list" placeholder="ник"></div>
+      <div style="display:flex;gap:8px">
+        <div style="flex:1"><label>Место</label><input id="re-place" type="number" placeholder="1"></div>
+        <div style="flex:1"><label>Приз ₽</label><input id="re-prize" type="number" placeholder="0"></div>
+      </div>
+    </div>
+    <button class="btn btn-y" onclick="addResultRow('${tourId}')">Добавить результат (вручную)</button>
+    <div class="enc-grid" style="margin-top:14px">${rows||'<p style="color:var(--sub);font-size:13px">Результатов пока нет</p>'}</div>
+  </div>`;
+}
+async function saveResultRow(tourId,id,playerId){
+  const place=document.getElementById('rp-'+id).value,prize=document.getElementById('rz-'+id).value;
+  const{error}=await sb.from('tournament_results').update({place:place?+place:null,prize:prize?+prize:null,source:'manual'}).eq('id',id);
+  if(dbErr(error,'сохранение результата'))return;
+  toast('Результат сохранён (вручную)');
+}
+async function addResultRow(tourId){
+  const nick=v('re-nick'),place=v('re-place'),prize=v('re-prize');
+  if(!nick)return toast('Впиши ник','err');
+  const pid=await resolvePlayerNick(nick);if(!pid)return;
+  const{error}=await sb.from('tournament_results').upsert(
+    {tournament_id:tourId,player_id:pid,place:place?+place:null,prize:prize?+prize:null,source:'manual'},
+    {onConflict:'tournament_id,player_id'});
+  if(dbErr(error,'добавление результата'))return;
+  toast('Результат добавлен (вручную)');
+  const t=D.tours.find(x=>x.id===tourId);openBracketEditor(tourId,t?.name||'');
 }
 async function setEncWinner(encId,winnerId){
   const{error}=await sb.from('encounters').update({winner_id:winnerId||null}).eq('id',encId);
