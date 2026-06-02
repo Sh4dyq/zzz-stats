@@ -12,6 +12,10 @@ create table if not exists tournament_results (
   unique (tournament_id, player_id)
 );
 alter table tournament_results enable row level security;
+drop policy if exists "results read"  on tournament_results;
+drop policy if exists "results write" on tournament_results;
 create policy "results read"  on tournament_results for select using (true);
 create policy "results write" on tournament_results for all
   using (auth.role() = 'authenticated') with check (auth.role() = 'authenticated');
+grant select on tournament_results to anon, authenticated;
+grant insert, update, delete on tournament_results to authenticated;
