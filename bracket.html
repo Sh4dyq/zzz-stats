@@ -154,9 +154,16 @@
   svg.gflink{inset:0 auto auto 0;width:auto;height:auto}
   /* DE: верхняя+нижняя сетки слева (стопкой), грандфинал — отдельной колонкой справа,
      по вертикали между финалами обеих сеток */
-  .de-grid{display:flex;align-items:center;gap:90px;min-width:min-content}
+  .de-grid{display:flex;align-items:stretch;gap:90px;min-width:min-content}
   .de-left{display:flex;flex-direction:column;min-width:min-content}
-  .de-gf{min-width:min-content;flex-shrink:0}
+  /* грандфинал: заголовок раунда на уровне шапок раундов верхней сетки (margin-top =
+     высота секц.заголовка), матч центрируется по вертикали; подчёркивание шапки
+     продлеваем влево через зазор к верхней сетке */
+  .de-gf{display:flex;flex-direction:column;min-width:206px;flex-shrink:0;margin-top:44px}
+  .de-gf .gf-hdr{position:relative;color:var(--gold);border-color:rgba(245,200,66,.3)}
+  .de-gf .gf-hdr::before{content:"";position:absolute;right:100%;width:90px;bottom:0;border-top:1px solid var(--line)}
+  .de-gf .gf-body{flex:1;display:flex;align-items:center;justify-content:center}
+  .de-gf .gf-body .match{position:relative;top:auto!important;left:auto;right:auto;width:206px;border-color:rgba(245,200,66,.28)}
   .bsec-title{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;font-size:15px;letter-spacing:.05em;color:var(--sub);margin:6px 0 14px;display:flex;align-items:center;gap:10px}
   .bsec-title::after{content:"";flex:1;height:1px;background:var(--border)}
   .bsec-title.upper{color:#ff7587}.bsec-title.lower{color:var(--purple)}.bsec-title.gf{color:var(--gold)}
@@ -565,8 +572,15 @@ function renderBracketBody(rounds, bracketType=''){
   if(upper.length)left+=`<div class="bsec-title upper">Верхняя сетка</div>${renderRounds(upper)}`;
   if(lower.length)left+=`<div class="bsec-title lower">Нижняя сетка</div>${renderRounds(lower)}`;
   if(!gf.length) return left;
-  const gfHtml=`<div class="bsec-title gf">Гранд-финал</div>${renderRounds(gf)}`;
-  return `<div class="de-grid"><div class="de-left">${left}</div><div class="de-gf">${gfHtml}</div></div>`;
+  // Гранд-финал: единственная подпись (как название раунда) — в одном ряду с шапками
+  // раундов верхней сетки; сам матч центрируется по вертикали (между финалами).
+  const gm=gf[0].matches[0]||{a:{name:null},b:{name:null},played:false};
+  gm._top=0;if(gm.id==null)gm.id='';
+  const gfHtml=`<div class="de-gf">
+    <div class="bround-h gf-hdr">Гранд-финал</div>
+    <div class="gf-body">${matchHTML(gm)}</div>
+  </div>`;
+  return `<div class="de-grid"><div class="de-left">${left}</div>${gfHtml}</div>`;
 }
 
 // геометрия раскладки: высота карточки + вертикальный зазор (шаг сетки)
