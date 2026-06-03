@@ -33,11 +33,21 @@ def main():
         return {"name":a.get('name',{}).get('en',oid),"enkaId":a.get('enkaId'),
                 "element":ATTR.get(a.get('attribute')),"role":SPEC.get(a.get('specialty')),"rarity":a.get('rarity')}
     out={"draft_id":state['_id'],"status":state['status'],"details":state.get('details'),"players":[]}
+    def eng(oid):
+        e=engines.get(oid,{})
+        return {"name":e.get('name',{}).get('en',oid),"enkaId":e.get('enkaId')}
     for p in state['players']:
         roster={r['agent']:r for r in p['roster']['agents']}
+        # Джойн pick→движок: teams[].agent.agent → engine(enka) + refinement (R1–R5).
+        teams={t['agent']['agent']:t for t in p.get('teams',[]) if t.get('agent') and t.get('engine')}
+        def pick_engine(aid):
+            t=teams.get(aid)
+            if not t: return {"engine":None,"refinement":None}
+            return {"engine":eng(t['engine']['engine']),"refinement":t['engine'].get('refinement',1)}
         picks=[{**ag(s['agent']),
                 "mindscape":roster.get(s['agent'],{}).get('mindscape'),
-                "potential":roster.get(s['agent'],{}).get('potential')}
+                "potential":roster.get(s['agent'],{}).get('potential'),
+                **pick_engine(s['agent'])}
                for s in state['selectedAgents'] if s['type']=='PICK' and s['actor']==p_id(p,state)]
         bans=[ag(s['agent']) for s in state['selectedAgents'] if s['type']=='BAN' and s['actor']==p_id(p,state)]
         out['players'].append({"name":p['fullName'],"costAgents":p.get('costAgents'),

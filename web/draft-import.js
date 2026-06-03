@@ -47,11 +47,14 @@ function normalizeDraft(state,ids){
   const eEnka=o=>baseEnka(ids.engines[o]);
   const side=p=>{
     const roster={}; (p.roster?.agents||[]).forEach(a=>roster[a.agent]=a);
-    const engineByAgent={}; (p.teams||[]).forEach(t=>{ if(t.agent&&t.engine)engineByAgent[t.agent.agent]=eEnka(t.engine.engine); });
+    // Джойн pick→движок: agent oid → enka движка + реальное наложение (refinement R1–R5).
+    const engineByAgent={},refByAgent={};
+    (p.teams||[]).forEach(t=>{ if(t.agent&&t.engine){engineByAgent[t.agent.agent]=eEnka(t.engine.engine);refByAgent[t.agent.agent]=t.engine.refinement||1;} });
     return {
       name:p.fullName, clearTime:p.clearTime, restarts:p.restarts||0,
       mindscapeByEnka:Object.fromEntries((p.roster?.agents||[]).map(a=>[aEnka(a.agent),a.mindscape||0])),
       engineEnkaByAgentEnka:Object.fromEntries(Object.entries(engineByAgent).map(([oid,e])=>[aEnka(oid),e])),
+      refByAgentEnka:Object.fromEntries(Object.entries(refByAgent).map(([oid,r])=>[aEnka(oid),r])),
     };
   };
   const players={player0:side(state.players[0]),player1:side(state.players[1])};
@@ -108,6 +111,9 @@ function applyDraftToForm(norm,pen){
       // реальный движок персонажа из драфта → конкретный амплификатор (любой владелец)
       const sig=document.querySelector(`.draft-sig[data-slot="${slot.n}"]`);
       if(sig){const sg=ch?sigByEngineEnka(pl.engineEnkaByAgentEnka[slot.enka]):null;sig.value=sg?sg.id:'';}
+      // реальное наложение движка (R1–R5) для коста сигны в статистике
+      const ref=document.querySelector(`.draft-ref[data-slot="${slot.n}"]`);
+      if(ref)ref.value=String(pl.refByAgentEnka?.[slot.enka]??1);
     }
     // обновить портрет под новый выбор (без авто-M6 из draftCharChanged)
     const img=document.querySelector(`.pk-img[data-imgslot="${slot.n}"]`);

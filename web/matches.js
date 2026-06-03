@@ -261,8 +261,9 @@ async function importMatchFromLink(encId,num,p1Id,p2Id,link,pen){
       const pl=sideForActor[ns.actor]||sFp;
       const ms=pl.mindscapeByEnka[ns.enka]??0;
       const sg=sigByEngineEnka(pl.engineEnkaByAgentEnka[ns.enka]);
+      const ref=pl.refByAgentEnka?.[ns.enka]??1;
       picks.push({match_id:mid,player_id:tp.pid,character_id:ch.id,mindscape:ms,team_slot:teamSlotFor(tp.pid,tp.n),
-        sig_id:sg?sg.id:null,has_signature:!!sg,pick_order:tp.n,is_fp:tp.pid===fpId,is_double:tp.pid!==fpId});
+        sig_id:sg?sg.id:null,has_signature:!!sg,refinement:ref,pick_order:tp.n,is_fp:tp.pid===fpId,is_double:tp.pid!==fpId});
     }
   });
   await sb.from('match_bans').delete().eq('match_id',mid);
@@ -502,6 +503,7 @@ function draftCellHtml(slot,banMap,pickMap){
     const curSig=ex.sig_id?D.sigs.find(s=>s.id===ex.sig_id):null;
     ampRow=`<div class="ddw" data-kind="amp" data-slot="${slot.n}">
       <input type="hidden" class="draft-sig" data-slot="${slot.n}" value="${ex.sig_id||''}">
+      <input type="hidden" class="draft-ref" data-slot="${slot.n}" value="${ex.refinement||1}">
       <button type="button" class="dd-btn" onclick="ddToggle(this,event)" title="Амплификатор (W-движок)"><span class="dd-cur">${ampCurHtml(curSig)}</span><span class="dd-arr">▾</span></button>
       <div class="dd-list"></div>
     </div>`;
@@ -689,9 +691,10 @@ async function saveMatch(encId,num,p1Id,p2Id,fpId,existingId){
     }else{
       const ms=+document.querySelector(`.draft-ms[data-slot="${slot}"]`)?.value||0;
       const sigId=document.querySelector(`.draft-sig[data-slot="${slot}"]`)?.value||null;
+      const ref=+document.querySelector(`.draft-ref[data-slot="${slot}"]`)?.value||1;
       const team=teamSlotFor(pid,slot);
       picks.push({match_id:mid,player_id:pid,character_id:el.value,
-        mindscape:ms,team_slot:team,sig_id:sigId,has_signature:!!sigId,pick_order:slot,
+        mindscape:ms,team_slot:team,sig_id:sigId,has_signature:!!sigId,refinement:ref,pick_order:slot,
         is_fp:pid===fpId,is_double:pid!==fpId});
     }
   });

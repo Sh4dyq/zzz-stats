@@ -596,15 +596,29 @@ async function importTourRuleset(tourId){
     const pen=Array(sys.restart?.free||0).fill(0).concat(sys.restart?.paid||[]);
     document.querySelectorAll('.rp-in').forEach((el,i)=>{el.value=pen[i]??'';});
     if(typeof updatePenaltyHint==='function')updatePenaltyHint();
-    // Косты амплификаторов R1–R5: bis[ownerEnka] (точнее), иначе own-role base[0..4]. Нули сохраняем.
+    // Косты амплификаторов: R1–R5 = own-role base[0..4]; оффроль = base[5]; bis → отдельные строки.
     let ampFilled=0;
     D.sigs.forEach(s=>{
       const engEnka=s.enka_id?base(s.enka_id):null;
       const ch=D.chars.find(x=>x.id===s.character_id);
       const ownerEnka=ch&&ch.enka_id?base(ch.enka_id):null;
       const e=engEnka?sys.engines?.[engEnka]:null;if(!e)return;
-      const costs=(ownerEnka&&e.bis&&e.bis[ownerEnka])?e.bis[ownerEnka]:(e.base||[]).slice(0,5);
-      for(let i=0;i<5;i++){const el=document.querySelector(`.ac-in[data-sig="${s.id}"][data-r="${i}"]`);if(el&&costs[i]!=null){el.value=costs[i];ampFilled++;}}
+      const bs=e.base||[];
+      for(let i=0;i<5;i++){const el=document.querySelector(`.ac-in[data-sig="${s.id}"][data-r="${i}"]`);if(el&&bs[i]!=null){el.value=bs[i];ampFilled++;}}
+      // оффроль (флэт base[5])
+      const offEl=document.querySelector(`.ac-off[data-sig="${s.id}"]`);
+      if(offEl&&bs[5]!=null){offEl.value=bs[5];ampFilled++;}
+      // bis: строка на каждого не-владельца с переопределением
+      const cont=document.getElementById('bis-rows-'+s.id);
+      if(cont&&e.bis){
+        cont.innerHTML='';
+        Object.entries(e.bis).forEach(([agentEnka,costs])=>{
+          if(agentEnka===ownerEnka)return;          // владелец котируется через own-role base
+          const bc=byEnka[agentEnka];if(!bc)return;  // агента нет в БД
+          cont.insertAdjacentHTML('beforeend',bisRowHtml(s.id,s.character_id,bc.id,costs||[]));
+          ampFilled++;
+        });
+      }
     });
     set(`Заполнено ${filled} костов персонажей + ${ampFilled} ячеек амплификаторов из «${sys.title}» (лимит ${sys.costLimit}), штрафы [${pen.join(',')||'нет'}]`+(miss?` · ${miss} агентов нет в БД`:'')+'. Проверь и нажми «Сохранить» в обоих блоках.');
   }catch(e){set('Ошибка: '+e.message);}
@@ -652,7 +666,10 @@ async function saveCosts(tourId){
 function ampCostsSection(tourId,tourName,existing){
   // текущая сигна+косты R1–R5 у персонажа (поля продублированы по строкам минскейпов — берём первую заполненную)
   const charSig={};
-  existing.forEach(c=>{if(c.sig_id!=null&&!charSig[c.character_id])charSig[c.character_id]={sig_id:c.sig_id,sig_cost:c.sig_cost,sig_costs:Array.isArray(c.sig_costs)?c.sig_costs:[]};});
+  existing.forEach(c=>{if(c.sig_id!=null&&!charSig[c.character_id])charSig[c.character_id]={sig_id:c.sig_id,sig_cost:c.sig_cost,
+    sig_costs:Array.isArray(c.sig_costs)?c.sig_costs:[],
+    offrole:c.sig_offrole_cost,
+    bis:(c.sig_bis&&typeof c.sig_bis==='object')?c.sig_bis:{}};});
 
   const RN=5;
   const rHeads=Array.from({length:RN},(_,i)=>`<th style="padding:8px 4px;color:var(--sub);text-align:center;min-width:50px">R${i+1}</th>`).join('');
@@ -663,11 +680,16 @@ function ampCostsSection(tourId,tourName,existing){
     const cur=charSig[c.id]?.sig_id===s.id?charSig[c.id]:null;
     const arr=cur?.sig_costs||[];
     const img=typeof sigImg==='function'?sigImg(s,28):'';
-    // R1–R5: из sig_costs; легаси-фолбэк — одиночный sig_cost в R1. Нули показываем как есть.
+    // R1–R5 (своя роль): из sig_costs; легаси-фолбэк — одиночный sig_cost в R1. Нули показываем как есть.
     const rCells=Array.from({length:RN},(_,i)=>{
       const val=arr.length?arr[i]:(i===0?cur?.sig_cost:undefined);
       return`<td style="padding:6px 4px;text-align:center"><input class="ac-in" data-sig="${s.id}" data-char="${c.id}" data-r="${i}" type="number" min="0" placeholder="—" value="${val??''}" style="width:48px;padding:4px 4px;font-size:13px;text-align:center"></td>`;
     }).join('');
+    // Оффроль (флэт base[5]) — единый кост для агента ДРУГОЙ роли, без наложения.
+    const offCell=`<td style="padding:6px 4px;text-align:center;border-left:1px solid var(--border)"><input class="ac-off" data-sig="${s.id}" data-char="${c.id}" type="number" min="0" placeholder="—" value="${cur?.offrole??''}" style="width:48px;padding:4px 4px;font-size:13px;text-align:center"></td>`;
+    // BIS-строки (другие персонажи / своя спец. для не-сиг той же роли) — отдельный ряд с контейнером.
+    const bis=cur?.bis||{};
+    const bisRowsHtml=Object.entries(bis).map(([cid,costs])=>bisRowHtml(s.id,c.id,cid,costs||[])).join('');
     return`<tr style="border-top:1px solid var(--border)">
       <td style="padding:8px 10px;white-space:nowrap">
         <div style="display:flex;align-items:center;gap:8px">${img}<span style="font-weight:500">${s.name}</span></div>
@@ -675,12 +697,19 @@ function ampCostsSection(tourId,tourName,existing){
       <td style="padding:8px 10px;white-space:nowrap">
         <div style="display:flex;align-items:center;gap:8px">${iconChar(c,28)}<span>${c.name}</span></div>
       </td>
-      ${rCells}
+      ${rCells}${offCell}
+    </tr>
+    <tr style="border-top:1px dashed var(--border)">
+      <td colspan="${RN+3}" style="padding:4px 10px 10px 24px">
+        <div style="font-size:11px;color:var(--sub);margin-bottom:4px">BIS — переопределения для конкретных не-владельцев (R1–R5)</div>
+        <div id="bis-rows-${s.id}">${bisRowsHtml}</div>
+        <button type="button" class="btn" style="font-size:12px;padding:3px 8px;margin-top:4px" onclick="addBisRow('${s.id}','${c.id}')">+ BIS</button>
+      </td>
     </tr>`;
   }).join('');
 
   return`<div class="card" style="margin-bottom:16px">
-    <div style="font-size:12px;color:var(--sub)">Кост сигнатурного амплификатора на его персонаже по наложениям R1–R5. Пустая ячейка — не котируется (прочерк); 0 — это реальный 0. Импорт из ссылки заполняет автоматически.</div>
+    <div style="font-size:12px;color:var(--sub)">Кост сигнатурного амплификатора. <b>R1–R5</b> — своя роль/специальность (владелец + любой агент той же роли). <b>Оффроль</b> — флэт для агента другой роли. <b>BIS</b> — переопределения для конкретных не-владельцев. Пустая ячейка — не котируется (прочерк); 0 — реальный 0. Импорт из ссылки заполняет автоматически.</div>
   </div>
   <div class="card" style="overflow-x:auto;padding:0">
     <table style="width:100%;border-collapse:collapse;font-size:13px">
@@ -688,44 +717,73 @@ function ampCostsSection(tourId,tourName,existing){
         <th style="padding:8px 10px;text-align:left;color:var(--sub)">Амплификатор</th>
         <th style="padding:8px 10px;text-align:left;color:var(--sub)">Персонаж</th>
         ${rHeads}
+        <th style="padding:8px 4px;color:var(--sub);text-align:center;min-width:50px;border-left:1px solid var(--border)">Офф</th>
       </tr></thead>
-      <tbody>${rows||'<tr><td colspan="7" style="padding:14px;color:var(--sub)">Сначала добавь амплификаторы в разделе «Амплификаторы»</td></tr>'}</tbody>
+      <tbody>${rows||`<tr><td colspan="${RN+3}" style="padding:14px;color:var(--sub)">Сначала добавь амплификаторы в разделе «Амплификаторы»</td></tr>`}</tbody>
     </table>
   </div>
   <button class="btn btn-y" style="margin-top:16px" onclick="saveAmpCosts('${tourId}')">Сохранить косты амплификаторов</button>`;
 }
 
+// Опции персонажей для BIS-селекта (кэш HTML).
+let _bisCharOptsCache=null;
+function bisCharOptions(selected){
+  if(_bisCharOptsCache==null)_bisCharOptsCache=[...D.chars].sort((a,b)=>(a.name||'').localeCompare(b.name||''))
+    .map(c=>`<option value="${c.id}">${c.name}</option>`).join('');
+  const html=`<option value="">— персонаж —</option>`+_bisCharOptsCache;
+  return selected?html.replace(`value="${selected}"`,`value="${selected}" selected`):html;
+}
+// Одна BIS-строка: персонаж + R1–R5.
+function bisRowHtml(sigId,ownerCharId,cid,costs){
+  costs=costs||[];
+  const rCells=Array.from({length:5},(_,i)=>`<input class="ac-bis" data-r="${i}" type="number" min="0" placeholder="—" value="${costs[i]??''}" style="width:44px;padding:3px;font-size:12px;text-align:center">`).join('');
+  return`<div class="bis-row" data-sig="${sigId}" data-char="${ownerCharId}" style="display:flex;align-items:center;gap:6px;margin:3px 0">
+    <select class="ac-bis-char" style="font-size:12px;padding:3px;min-width:150px">${bisCharOptions(cid)}</select>
+    ${rCells}
+    <button type="button" class="btn" style="font-size:12px;padding:2px 7px" onclick="this.closest('.bis-row').remove()">✕</button>
+  </div>`;
+}
+function addBisRow(sigId,ownerCharId){
+  const cont=document.getElementById('bis-rows-'+sigId);
+  if(cont)cont.insertAdjacentHTML('beforeend',bisRowHtml(sigId,ownerCharId,'',[]));
+}
+
 async function saveAmpCosts(tourId){
-  // группируем 5 ячеек P1–P5 по паре (амплификатор, персонаж)
+  // группируем все источники (R1–R5 своей роли, оффроль, bis) по паре (амплификатор, персонаж-владелец)
   const groups={};
-  document.querySelectorAll('.ac-in').forEach(el=>{
-    const key=el.dataset.sig+'|'+el.dataset.char;
-    (groups[key]=groups[key]||{sig:el.dataset.sig,char:el.dataset.char,p:[]});
-    groups[key].p[+el.dataset.r]=el.value!==''?+el.value:null;
+  const g=(sig,char)=>groups[sig+'|'+char]||(groups[sig+'|'+char]={sig,char,p:[],off:null,bis:{}});
+  document.querySelectorAll('.ac-in').forEach(el=>{g(el.dataset.sig,el.dataset.char).p[+el.dataset.r]=el.value!==''?+el.value:null;});
+  document.querySelectorAll('.ac-off').forEach(el=>{g(el.dataset.sig,el.dataset.char).off=el.value!==''?+el.value:null;});
+  document.querySelectorAll('.bis-row').forEach(row=>{
+    const cid=row.querySelector('.ac-bis-char')?.value;if(!cid)return;
+    const arr=[];row.querySelectorAll('.ac-bis').forEach(inp=>{arr[+inp.dataset.r]=inp.value!==''?+inp.value:null;});
+    while(arr.length&&arr[arr.length-1]==null)arr.pop();
+    if(arr.some(x=>x!=null))g(row.dataset.sig,row.dataset.char).bis[cid]=arr;
   });
   let set=0,cleared=0;
   for(const k in groups){
-    const g=groups[k];
+    const gr=groups[k];
     // массив R1–R5: нормализуем дыры в null, обрезаем хвостовые null (0 сохраняем как есть)
-    const arr=[];for(let i=0;i<5;i++)arr[i]=g.p[i]===undefined?null:g.p[i];
+    const arr=[];for(let i=0;i<5;i++)arr[i]=gr.p[i]===undefined?null:gr.p[i];
     while(arr.length&&arr[arr.length-1]==null)arr.pop();
-    const hasAny=arr.some(x=>x!=null);
-    const p1=arr.length?arr[0]:null; // зеркало для статистики (statistics.html читает sig_cost)
+    const hasAny=arr.some(x=>x!=null)||gr.off!=null||Object.keys(gr.bis).length>0;
+    const p1=arr.length?arr[0]:null; // зеркало для легаси-читателей sig_cost
+    const fields={sig_id:gr.sig,sig_cost:p1,sig_costs:arr,sig_offrole_cost:gr.off,sig_bis:gr.bis};
     if(hasAny){
-      // проставляем sig_id+sig_cost(P1)+sig_costs на строки персонажа; если строк нет — заводим заглушку M0
+      // проставляем на строки персонажа; если строк нет — заводим заглушку M0
       const{data:upd,error}=await sb.from('tournament_costs')
-        .update({sig_id:g.sig,sig_cost:p1,sig_costs:arr}).eq('tournament_id',tourId).eq('character_id',g.char).select('id');
+        .update(fields).eq('tournament_id',tourId).eq('character_id',gr.char).select('id');
       if(dbErr(error,'сохранение коста амплификатора'))return;
       if(!upd||!upd.length){
         const{error:insErr}=await sb.from('tournament_costs')
-          .insert({tournament_id:tourId,character_id:g.char,mindscape:0,cost:null,sig_id:g.sig,sig_cost:p1,sig_costs:arr,is_allowed:true});
+          .insert({tournament_id:tourId,character_id:gr.char,mindscape:0,cost:null,is_allowed:true,...fields});
         if(dbErr(insErr,'создание строки коста амплификатора'))return;
       }
       set++;
     }else{
       // снимаем кост только если этот амплификатор был привязан к персонажу
       const{data:upd,error}=await sb.from('tournament_costs')
-        .update({sig_id:null,sig_cost:null,sig_costs:[]}).eq('tournament_id',tourId).eq('character_id',g.char).eq('sig_id',g.sig).select('id');
+        .update({sig_id:null,sig_cost:null,sig_costs:[],sig_offrole_cost:null,sig_bis:{}}).eq('tournament_id',tourId).eq('character_id',gr.char).eq('sig_id',gr.sig).select('id');
       if(dbErr(error,'очистка коста амплификатора'))return;
       if(upd&&upd.length)cleared++;
     }

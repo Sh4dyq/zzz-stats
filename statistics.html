@@ -426,15 +426,51 @@ async function loadAll(){
   renderAll();
 }
 
+// Резолв реального коста сигны пика по наложению (refinement) + правилу 2/3.
+// ampMap: sig_id → {own:[R1..R5] (своя роль/спец), off (оффроль флэт base[5]), bis:{cid:[R1..R5]}}.
+// 1) пик в bis амплификатора → bis[cid][R-1]; 2) роль пика == роль владельца → own[R-1];
+// 3) иначе оффроль → off (флэт, без наложения). null = кост не котируется (прочерк).
+function buildAmpMap(){
+  const m={};
+  const rows=S.tour!==ALL
+    ? [].concat(...Object.values(S.costs).map(o=>Object.values(o)))
+    : (S.allCosts||[]);
+  rows.forEach(row=>{
+    if(row.sig_id==null||m[row.sig_id])return;
+    m[row.sig_id]={own:Array.isArray(row.sig_costs)?row.sig_costs:[],
+      off:row.sig_offrole_cost,
+      bis:(row.sig_bis&&typeof row.sig_bis==='object')?row.sig_bis:{}};
+  });
+  return m;
+}
+function sigCostOf(pk,ampMap){
+  if(!pk||!pk.has_signature||pk.sig_id==null)return null;
+  const a=ampMap[pk.sig_id];if(!a)return null;
+  const r=(pk.refinement||1)-1;
+  const bisArr=a.bis&&a.bis[pk.character_id];
+  if(Array.isArray(bisArr)&&bisArr[r]!=null)return bisArr[r];
+  const pchar=S.charMap[pk.character_id];
+  const sig=S.sigs.find(x=>x.id===pk.sig_id);
+  const owner=sig&&S.charMap[sig.character_id];
+  if(pchar&&owner&&pchar.role===owner.role)return a.own[r]!=null?a.own[r]:null;
+  return a.off!=null?a.off:null;
+}
+// Диапазон костов из набора реально сыгранных значений (как для cost): число / «a–b» / «—».
+function scRange(it){
+  const xs=[...new Set([...(it||[])])].filter(x=>typeof x==='number').sort((a,b)=>a-b);
+  return xs.length===0?'—':xs.length===1?xs[0]:`${xs[0]}–${xs[xs.length-1]}`;
+}
+
 function computeChars(){
   const T=S.matches.length;
   const statMap={};
   const banCount={};
+  const ampMap=buildAmpMap();
 
   S.picks.forEach(pk=>{
     const m=S.matchMap[pk.match_id];if(!m)return;
     const key=pk.character_id+'_'+pk.mindscape;
-    if(!statMap[key])statMap[key]={cid:pk.character_id,ms:pk.mindscape,pk:0,pw:0,pd:0,fp:0,fw:0,fd:0,dp:0,dw:0,dd:0,sp:0,sw:0,sd:0};
+    if(!statMap[key])statMap[key]={cid:pk.character_id,ms:pk.mindscape,pk:0,pw:0,pd:0,fp:0,fw:0,fd:0,dp:0,dw:0,dd:0,sp:0,sw:0,sd:0,scSet:new Set()};
     const s=statMap[key];
     s.pk++;
     const isW=m.winner_id===pk.player_id,isD=m.is_draw;
@@ -444,7 +480,8 @@ function computeChars(){
     // а не из устаревшего поля is_double («зеркальный пик», которого в данных нет).
     if(pk.is_fp){s.fp++;if(isW)s.fw++;else if(isD)s.fd++;}
     else{s.dp++;if(isW)s.dw++;else if(isD)s.dd++;}
-    if(pk.has_signature){s.sp++;if(isW)s.sw++;else if(isD)s.sd++;}
+    if(pk.has_signature){s.sp++;if(isW)s.sw++;else if(isD)s.sd++;
+      const sc=sigCostOf(pk,ampMap);if(sc!=null)s.scSet.add(sc);}
   });
   // banCount — сколько раз забанен (обе стороны не могут забанить одного перса в одном матче).
   // banMatch — множество матчей, где перс забанен (для «доли от матчей»: presence ≤ 100%).
@@ -480,11 +517,9 @@ function computeChars(){
   const groups={};
   S.characters.forEach(c=>groups[c.id]={char:c,variants:[]});
 
-  // TODO(amp-cost-refinement): колонка «Сигна» (sc) читает только tournament_costs.sig_cost (=R1).
-  // У не-бис персонажей sig_cost часто пуст/0 → показывает «—», хотя теоретический кост есть
-  // (правило 2/3: своя роль → base[0..4], чужая → флэт base[5]). Полный резолв НЕ реализован —
-  // это пробел в наполнении sig_cost на стороне web/tournaments.js/импорта, не баг отображения тут.
-  // Большая отдельная работа, отложена. Кост скрыт во «все турниры» (см. isAll в co).
+  // Колонка «Сигна» (sc) = диапазон реальных костов сигны по сыгранным наложениям (sigCostOf):
+  // bis → own(своя роль) → оффроль-флэт. Не «=R1»: индексируется фактическим refinement пика.
+  // Кост скрыт во «все турниры» (см. isAll в co).
   Object.values(statMap).forEach(s=>{
     if(!groups[s.cid])return;
     const bn=banCountMs[s.cid]?.[s.ms]||0,bd=banDistMs(s.cid,s.ms);
@@ -492,7 +527,7 @@ function computeChars(){
     const rs=rosterCount[s.cid+'_'+s.ms]||0;
     const pwr=wr(s.pw,s.pd,s.pk);
     groups[s.cid].variants.push({
-      ms:s.ms,cost:cost?.cost??'—',sc:cost?.sig_cost??'—',eta:eta(cost?.cost,pwr,s.pk),
+      ms:s.ms,cost:cost?.cost??'—',sc:scRange(s.scSet),_sc:[...s.scSet],eta:eta(cost?.cost,pwr,s.pk),
       pk:s.pk,pw:s.pw,pd:s.pd,pl:s.pk-s.pw-s.pd,pwr,ppt:pctT(s.pk,T),
       fp:s.fp,fw:s.fw,fd:s.fd,fl:s.fp-s.fw-s.fd,fwr:wr(s.fw,s.fd,s.fp),
       dp:s.dp,dw:s.dw,dd:s.dd,dl:s.dp-s.dw-s.dd,dwr:wr(s.dw,s.dd,s.dp),
@@ -507,7 +542,7 @@ function computeChars(){
     Object.keys(banCountMs[cidv]).forEach(msS=>{
       const ms=+msS;if(g.variants.some(v=>v.ms===ms))return;
       const bn=banCountMs[cidv][ms]||0,bd=banDistMs(cidv,ms),cost=S.costs[cidv]?.[ms],rs=rosterCount[cidv+'_'+ms]||0;
-      g.variants.push({ms,cost:cost?.cost??'—',sc:cost?.sig_cost??'—',eta:'—',
+      g.variants.push({ms,cost:cost?.cost??'—',sc:'—',_sc:[],eta:'—',
         pk:0,pw:0,pd:0,pl:0,pwr:0,ppt:0,fp:0,fw:0,fd:0,fl:0,fwr:0,dp:0,dw:0,dd:0,dl:0,dwr:0,
         bn,bpt:pctT(bd,T),pbn:bn,pbpt:pctT(bd,T),rs,rspt:pctT(rs,totalPlayers),
         sp:0,sw:0,sd:0,sl:0,swr:0,spt:0});
@@ -535,7 +570,7 @@ function computeChars(){
         bn,bpt:pctT(bd,T),pbn:bn,pbpt:pctT(bd,T),
         rs,rspt:pctT(rs,totalP0),
         sp:0,sw:0,sd:0,sl:0,swr:'—',spt:0,
-        cost:rng('cost'),sc:rng('sig_cost'),eta:'—'
+        cost:rng('cost'),sc:'—',eta:'—'
       }});
       return;
     }
@@ -553,9 +588,10 @@ function computeChars(){
       rspt:pctT(sum.rs,totalP),spt:pctT(sum.sp,T2)
     };
     const costs=[...new Set(g.variants.map(v=>v.cost).filter(c=>typeof c==='number'&&c!==0))].sort((a,b)=>a-b);
-    const scs=[...new Set(g.variants.map(v=>v.sc).filter(c=>typeof c==='number'&&c!==0))].sort((a,b)=>a-b);
     agg.cost=costs.length===0?'—':costs.length===1?costs[0]:`${costs[0]}–${costs[costs.length-1]}`;
-    agg.sc=scs.length===0?'—':scs.length===1?scs[0]:`${scs[0]}–${scs[scs.length-1]}`;
+    // sc агрегата — диапазон по объединению реальных костов сигны всех вариантов (не «=R1»).
+    const allSc=[];g.variants.forEach(v=>(v._sc||[]).forEach(x=>allSc.push(x)));
+    agg.sc=scRange(allSc);
     // η на персонажа: WR агрегата × средняя стоимость / кост.
     // Кост берём только по ПИКНУТЫМ вариантам (pk>0) — бан-онли майндскейпы со своим костом
     // не должны влиять. Если пикали на нескольких костах — показываем η как диапазон (мин–макс),
@@ -894,13 +930,9 @@ function computeAmps(){
   const charSig={};
   S.sigs.forEach(s=>{if(!charSig[s.character_id])charSig[s.character_id]=s.id;});
   costRows.forEach(c=>{if(c.sig_id)charSig[c.character_id]=c.sig_id;});
-  // косты сигны: sigId → charId → [значения]
+  // косты сигны: sigId → charId → [реальные значения по сыгранным наложениям] (sigCostOf, не «=R1»)
   const costMap={};
-  costRows.forEach(c=>{
-    if(c.sig_cost==null)return;
-    const sid=c.sig_id||charSig[c.character_id];if(!sid)return;
-    (costMap[sid]=costMap[sid]||{});(costMap[sid][c.character_id]=costMap[sid][c.character_id]||[]).push(c.sig_cost);
-  });
+  const ampMap=buildAmpMap();
   // всего пиков на персонажа (любой амплификатор или без) — знаменатель для %T амплификатора
   const charPickTotal={};
   S.picks.forEach(pk=>{const m=S.matchMap[pk.match_id];if(!m)return;charPickTotal[pk.character_id]=(charPickTotal[pk.character_id]||0)+1;});
@@ -917,6 +949,9 @@ function computeAmps(){
     if(isW)a.pw++;else if(isD)a.pd++;
     if(!a.perChar[pk.character_id])a.perChar[pk.character_id]={pk:0,pw:0,pd:0};
     const pc=a.perChar[pk.character_id];pc.pk++;if(isW)pc.pw++;else if(isD)pc.pd++;
+    // реальный кост сигны по наложению/роли (bis→своя роль→оффроль); копим для диапазона
+    const sc=sigCostOf(pk,ampMap);
+    if(sc!=null){(costMap[sid]=costMap[sid]||{});(costMap[sid][pk.character_id]=costMap[sid][pk.character_id]||[]).push(sc);}
   });
 
   return S.sigs.map(s=>{
