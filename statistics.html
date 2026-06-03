@@ -423,8 +423,11 @@ function computeChars(){
     s.pk++;
     const isW=m.winner_id===pk.player_id,isD=m.is_draw;
     if(isW)s.pw++;else if(isD)s.pd++;
+    // Фп / Дабл — разбиение пиков по стороне драфта: фп = пик игрока с первым
+    // пиком (is_fp), дабл = пик второго (дабл) игрока. Выводим дабл из !is_fp,
+    // а не из устаревшего поля is_double («зеркальный пик», которого в данных нет).
     if(pk.is_fp){s.fp++;if(isW)s.fw++;else if(isD)s.fd++;}
-    if(pk.is_double){s.dp++;if(isW)s.dw++;else if(isD)s.dd++;}
+    else{s.dp++;if(isW)s.dw++;else if(isD)s.dd++;}
     if(pk.has_signature){s.sp++;if(isW)s.sw++;else if(isD)s.sd++;}
   });
   // banCount — сколько раз забанен (сырые строки; обе стороны могут забанить одного перса в одном матче).
@@ -470,7 +473,9 @@ function computeChars(){
       // кост невыбранного персонажа берём из tournament_costs (по всем минскейпам → диапазон),
       // иначе колонка «Кост» у непикнутых всегда показывала «—», хотя кост в турнире задан.
       const costObj=S.costs[cidv]||{};
-      const rng=key=>{const xs=[...new Set(Object.values(costObj).map(c=>c[key]).filter(c=>c!=null))].sort((a,b)=>a-b);
+      // 0 = «кост не задан» в БД (дефолт) — исключаем, иначе у персонажа только с банами
+      // выходил мусорный диапазон вида «0–4».
+      const rng=key=>{const xs=[...new Set(Object.values(costObj).map(c=>c[key]).filter(c=>c!=null&&c!==0))].sort((a,b)=>a-b);
         return xs.length===0?'—':xs.length===1?xs[0]:`${xs[0]}–${xs[xs.length-1]}`;};
       result.push({char:g.char,variants:[],agg:{
         pk:0,pw:0,pd:0,pl:0,pwr:'—',ppt:0,
@@ -695,7 +700,10 @@ function renderRosters(isAll){
 function computeMisc(){
   const out={};
   S.players.forEach(p=>out[p.id]={fav:[],favN:0,matches:0,tours:new Set()});
-  S.encounters.forEach(enc=>{
+  // Σ игр = число матчей (matches), а не встреч (encounters) — чтобы не было
+  // расхождения с «любимым персонажем», который считается по пикам (на игру).
+  S.matches.forEach(m=>{
+    const enc=S.encMap[m.encounter_id];if(!enc)return;
     [enc.player1_id,enc.player2_id].forEach(pid=>{
       if(!out[pid])return;
       out[pid].matches++;
@@ -730,7 +738,7 @@ function placeCell(pl,cnt){
 }
 function renderMisc(){
   const data=computeMisc();
-  const head=`<thead><tr><th class="nc">Ник</th><th>Любимый персонаж</th><th onclick="sortP(2)">Σ матчей</th><th onclick="sortP(3)">Σ турниров</th><th onclick="sortP(4)">Наивысшее место</th><th onclick="sortP(5)">Призовые ₽</th><th onclick="sortP(6)">Возраст</th></tr></thead>`;
+  const head=`<thead><tr><th class="nc">Ник</th><th>Любимый персонаж</th><th onclick="sortP(2)">Σ игр</th><th onclick="sortP(3)">Σ турниров</th><th onclick="sortP(4)">Наивысшее место</th><th onclick="sortP(5)">Призовые ₽</th><th onclick="sortP(6)">Возраст</th></tr></thead>`;
   // показываем всех игроков, у кого есть встречи в текущем фильтре
   const activePl=S.players.filter(p=>data[p.id]&&data[p.id].matches);
   if(!activePl.length){document.getElementById('players-area').innerHTML=`<table>${head}<tbody><tr><td class="empty" colspan="7">Нет данных</td></tr></tbody></table>`;return;}
@@ -950,9 +958,11 @@ async function init(){
   const openMenu=()=>{menu.hidden=false;tabPick.classList.add('open');};
 
   // наполняем кастомное меню
+  // в «из прошедших» не показываем будущие (upcoming) турниры — у них ещё нет данных
+  const pastTours=TOURS.filter(t=>t.status!=='upcoming');
   menu.innerHTML=`<div class="tm-head">Прошедшие турниры</div>`+
-    (TOURS.length
-      ? TOURS.map(t=>`<div class="tm-item" data-id="${t.id}">${t.name}</div>`).join('')
+    (pastTours.length
+      ? pastTours.map(t=>`<div class="tm-item" data-id="${t.id}">${t.name}</div>`).join('')
       : `<div class="tm-empty">Нет сохранённых</div>`);
 
   menu.onclick=e=>{

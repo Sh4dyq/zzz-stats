@@ -146,6 +146,10 @@ async function loadTourRoster(pid){
   const{data}=await sb.from('player_rosters').select('*').eq('tournament_id',tourId).eq('player_id',pid);
   _RS=(data||[]).map(r=>({character_id:r.character_id,mindscape:r.mindscape}));
   renderSelected();
+  // Подсказка об источнике: 'auto' — собран из пиков (перетрётся новыми результатами),
+  // 'manual' — защищён от авто-сбора. Сохранение тут всегда делает ростер ручным.
+  const isAuto=(data||[]).length&&(data||[]).every(r=>r.source==='auto');
+  toast(data?.length?(isAuto?'Ростер собран авто из пиков (сохранение зафиксирует как ручной)':'Ростер ручной (защищён от авто-сбора)'):'Ростер для этого турнира пуст');
 }
 
 async function saveProfile(pid){
@@ -175,7 +179,8 @@ async function saveRoster(pid){
   const{error:dErr}=await sb.from('player_rosters').delete().match({tournament_id:tourId,player_id:pid});
   if(dbErr(dErr,'очистка ростера'))return;
   if(_RS.length){
-    const rows=_RS.map(r=>({tournament_id:tourId,player_id:pid,character_id:r.character_id,mindscape:r.mindscape}));
+    // source='manual' → авто-сбор из результатов больше не перетрёт этот ростер.
+    const rows=_RS.map(r=>({tournament_id:tourId,player_id:pid,character_id:r.character_id,mindscape:r.mindscape,source:'manual'}));
     const{error}=await sb.from('player_rosters').insert(rows);
     if(dbErr(error,'сохранение ростера'))return;
   }

@@ -193,11 +193,9 @@ async function importMatchFromLink(encId,num,p1Id,p2Id,link,pen){
       const ms=pl.mindscapeByEnka[ns.enka]??0;
       const sg=sigByEngineEnka(pl.engineEnkaByAgentEnka[ns.enka]);
       picks.push({match_id:mid,player_id:tp.pid,character_id:ch.id,mindscape:ms,team_slot:teamSlotFor(tp.pid,tp.n),
-        sig_id:sg?sg.id:null,has_signature:!!sg,pick_order:tp.n,is_fp:tp.pid===fpId,is_double:false});
+        sig_id:sg?sg.id:null,has_signature:!!sg,pick_order:tp.n,is_fp:tp.pid===fpId,is_double:tp.pid!==fpId});
     }
   });
-  const cc={};picks.forEach(p=>cc[p.character_id]=(cc[p.character_id]||0)+1);
-  picks.forEach(p=>p.is_double=cc[p.character_id]>1);
   await sb.from('match_bans').delete().eq('match_id',mid);
   if(bans.length){const{error}=await sb.from('match_bans').insert(bans);if(error)throw error;}
   await sb.from('match_picks').delete().eq('match_id',mid);
@@ -205,6 +203,51 @@ async function importMatchFromLink(encId,num,p1Id,p2Id,link,pen){
   const{data:allMs}=await sb.from('matches').select('*').eq('encounter_id',encId);
   if(allMs&&allMs.length>=2){let a=0,b=0;allMs.forEach(m=>{a+=m.player1_timer_sec||0;b+=m.player2_timer_sec||0;});
     await sb.from('encounters').update({winner_id:a<=b?p1Id:p2Id}).eq('id',encId);}
+  // Автозаполнение ростеров обоих игроков из их ПОЛНОГО ростера в драфте
+  // (p.roster.agents → norm mindscapeByEnka: 17+ персонажей, что игрок принёс),
+  // а не из 6 пикнутых. Резолвим enka→персонаж БД; нерезолвленных пропускаем.
+  const rosterAgents=[];
+  [[fpId,sFp],[dblId,sDbl]].forEach(([pid,side])=>{
+    Object.entries(side.mindscapeByEnka||{}).forEach(([enka,ms])=>{
+      const ch=charByEnka(enka);if(!ch)return;
+      rosterAgents.push({player_id:pid,character_id:ch.id,mindscape:ms||0});
+    });
+  });
+  const{data:encRow}=await sb.from('encounters').select('tournament_id').eq('id',encId).maybeSingle();
+  if(encRow?.tournament_id)await autofillRostersFromMatch(encRow.tournament_id,rosterAgents);
+}
+
+// ===== Автозаполнение ростеров из результатов =====
+// Заполняет ростеры ДВУХ игроков из их ПОЛНОГО ростера в драфте (источник —
+// ссылка shiyu.darte.gg): agents — массив {player_id, character_id, mindscape}
+// со ВСЕМИ персонажами, что игроки принесли в этот матч (17+), не только пикнутыми.
+// Пишет в player_rosters
+// с source='auto', сливая с уже имеющимся авто-ростером (новые персонажи
+// добавляются, по существующим берётся больший минскейп — чтобы матчи
+// накапливали ростер, а не затирали друг друга).
+// Ростеры, помеченные source='manual' (правились вручную), НЕ трогаются —
+// это «флаг защиты от перетира». Тихо выходит, если колонки source ещё нет
+// (до запуска sql/add_roster_source.sql).
+async function autofillRostersFromMatch(tournamentId,agents){
+  if(!tournamentId||!agents?.length)return;
+  // персонаж → макс. минскейп этого матча, по каждому игроку
+  const byPlayer={};
+  agents.forEach(p=>{
+    const m=byPlayer[p.player_id]||(byPlayer[p.player_id]={});
+    if(m[p.character_id]==null||(p.mindscape||0)>m[p.character_id])m[p.character_id]=p.mindscape||0;
+  });
+  for(const pid of Object.keys(byPlayer)){
+    const{data:ex,error:exErr}=await sb.from('player_rosters').select('character_id,mindscape,source').eq('tournament_id',tournamentId).eq('player_id',pid);
+    if(exErr)return; // колонки source ещё нет (миграция не применена) — выходим тихо
+    if((ex||[]).some(r=>r.source==='manual'))continue; // защита ручного ростера
+    // слияние: имеющиеся авто-строки + пики этого матча (макс минскейп)
+    const merged={};
+    (ex||[]).forEach(r=>merged[r.character_id]=r.mindscape||0);
+    Object.entries(byPlayer[pid]).forEach(([cid,msv])=>{if(merged[cid]==null||msv>merged[cid])merged[cid]=msv;});
+    await sb.from('player_rosters').delete().match({tournament_id:tournamentId,player_id:pid});
+    const rows=Object.entries(merged).map(([cid,msv])=>({tournament_id:tournamentId,player_id:pid,character_id:cid,mindscape:msv,source:'auto'}));
+    if(rows.length)await sb.from('player_rosters').insert(rows);
+  }
 }
 
 async function openMatch(encId,num,p1Id,p2Id){
@@ -579,13 +622,9 @@ async function saveMatch(encId,num,p1Id,p2Id,fpId,existingId){
       const team=teamSlotFor(pid,slot);
       picks.push({match_id:mid,player_id:pid,character_id:el.value,
         mindscape:ms,team_slot:team,sig_id:sigId,has_signature:!!sigId,pick_order:slot,
-        is_fp:pid===fpId,is_double:false});
+        is_fp:pid===fpId,is_double:pid!==fpId});
     }
   });
-  // Дабл-пик: один персонаж у обоих игроков
-  const charCount={};
-  picks.forEach(p=>charCount[p.character_id]=(charCount[p.character_id]||0)+1);
-  picks.forEach(p=>p.is_double=charCount[p.character_id]>1);
 
   {const{error}=await sb.from('match_bans').delete().eq('match_id',mid);if(dbErr(error,'очистка банов'))return;}
   if(bans.length){const{error}=await sb.from('match_bans').insert(bans);if(dbErr(error,'сохранение банов'))return;}
