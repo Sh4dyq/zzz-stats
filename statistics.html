@@ -37,15 +37,15 @@
   .tab-btn.active{color:#fff}
   .tab-btn.active::after{content:"";position:absolute;left:14px;right:14px;bottom:-1px;height:3px;border-radius:3px 3px 0 0;background:var(--grad)}
   .tbl-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:12px;background:var(--card)}
-  table{border-collapse:collapse;font-size:13.5px;white-space:nowrap;width:100%;font-family:'JetBrains Mono',monospace}
-  th,td{padding:8px 13px;border:1px solid var(--border);text-align:center}
-  th{background:#101013;font-size:12px;font-weight:500;color:var(--sub);cursor:pointer;user-select:none;font-family:'Rajdhani',sans-serif;font-weight:600;letter-spacing:.04em}
+  table{border-collapse:collapse;font-size:15px;white-space:nowrap;width:100%;font-family:'JetBrains Mono',monospace}
+  th,td{padding:9px 14px;border:1px solid var(--border);text-align:center}
+  th{background:#101013;font-size:12.5px;font-weight:500;color:var(--sub);cursor:pointer;user-select:none;font-family:'Rajdhani',sans-serif;font-weight:600;letter-spacing:.04em}
   th:hover{color:var(--text);background:#17171c}
   .th-g{text-align:center!important;background:#121214!important;color:#fff!important;font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;font-size:13px;letter-spacing:.03em;border-bottom:2px solid var(--red)!important}
-  td.nc{text-align:left;font-weight:600;color:var(--text);min-width:150px;font-family:'Rajdhani',sans-serif;font-size:15px}
+  td.nc{text-align:left;font-weight:600;color:var(--text);min-width:150px;font-family:'Rajdhani',sans-serif;font-size:16.5px}
   th.nc{text-align:left}
   .g{color:#46d369;font-weight:700}.r{color:#ff6b7d;font-weight:700}.m{color:var(--sub)}
-  .vrow{background:#101014}.vrow td.nc{color:var(--sub);font-weight:500;padding-left:22px;font-size:12px}
+  .vrow{background:#101014}.vrow td.nc{color:var(--sub);font-weight:500;padding-left:22px;font-size:13px}
   .seg-btn{border:none;background:none;padding:8px 18px;font-size:14px;font-family:'Saira Condensed',sans-serif;font-weight:800;text-transform:uppercase;letter-spacing:.02em;color:var(--sub);cursor:pointer;transition:.15s}
   .seg-btn.on{background:var(--grad);color:#fff}
   .chev{font-size:15px;color:var(--red);display:inline-block;margin-left:5px}
@@ -67,6 +67,10 @@
   .plc.g3{background-image:linear-gradient(90deg,#f0a06b,#c46a32)}
   .prize-rub{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;font-size:16px;background:linear-gradient(90deg,#f8d36a,#d99a16);-webkit-background-clip:text;background-clip:text;color:transparent;padding-right:.1em;white-space:nowrap}
   .empty{padding:48px 0;text-align:center;color:var(--sub);font-size:15px;font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;letter-spacing:.04em}
+  /* рейтинг */
+  .rk-num{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;font-size:17px;color:var(--sub)}
+  .rk-score{font-family:'JetBrains Mono',monospace;font-weight:600;font-size:14px}
+  .rk-badge{display:inline-block;min-width:34px;padding:2px 9px;border-radius:6px;font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;font-size:14px;letter-spacing:.02em;color:var(--rc);background:color-mix(in srgb,var(--rc) 16%,transparent);border:1px solid color-mix(in srgb,var(--rc) 45%,transparent)}
   .spinner{width:22px;height:22px;border:2px solid var(--border);border-top-color:var(--red);border-radius:50%;animation:spin .7s linear infinite;margin:0 auto}
   /* читаемость таблицы персонажей */
   tbody tr:hover td{background:#17171c}
@@ -235,6 +239,7 @@
   <button class="tab-btn active" data-tab="chars">Персонажи</button>
   <button class="tab-btn" data-tab="players">Игроки</button>
   <button class="tab-btn" data-tab="amps">Амплификаторы</button>
+  <button class="tab-btn" data-tab="rating">Рейтинг</button>
   <button class="tab-btn" data-tab="ext">Расширенная</button>
 </div>
 
@@ -275,6 +280,19 @@
     </div>
   </div>
 
+  <!-- RATING -->
+  <div id="tab-rating" class="tab-pane" style="display:none">
+    <div style="display:flex;gap:2px;border:1px solid var(--border);border-radius:6px;overflow:hidden;width:fit-content;margin-bottom:14px">
+      <button id="rseg-c" class="seg-btn on" onclick="setRating('c')">Персонажи</button>
+      <button id="rseg-a" class="seg-btn" onclick="setRating('a')">Амплификаторы</button>
+      <button id="rseg-p" class="seg-btn" onclick="setRating('p')">Игроки</button>
+    </div>
+    <div id="rating-area" class="tbl-wrap">
+      <table><tbody><tr><td class="empty" colspan="6">Нет данных</td></tr></tbody></table>
+    </div>
+    <div class="note" id="rating-note"></div>
+  </div>
+
   <!-- EXTENDED -->
   <div id="tab-ext" class="tab-pane" style="display:none">
     <div class="tbl-wrap">
@@ -311,7 +329,7 @@
       <a href="index.html">Главная</a>
       <a href="statistics.html#chars">Персонажи</a>
       <a href="statistics.html#players">Игроки</a>
-      <a href="statistics.html#ext">Расширенная</a>
+      <a href="bracket.html">Турнирная сетка</a>
       <a href="https://twitch.tv/Nexus_Shiyu" target="_blank">Twitch</a>
     </nav>
   </div>
@@ -320,7 +338,6 @@
     <a href="https://t.me/nexus_shiyu" target="_blank" rel="noopener noreferrer">Telegram</a> ·
     <a href="https://discord.gg/6nKP7kWR78" target="_blank" rel="noopener noreferrer">Discord</a>
   </div>
-  <div class="fcopy" style="margin-top:8px;opacity:.7">Statistics are tracked since June 2026</div>
 </footer>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -344,7 +361,7 @@ const sb=supabase.createClient(SB_URL,SB_KEY);
 
 const ROLES={atk:{bg:'#3b1010',fg:'#fca5a5'},stun:{bg:'#0f1f3b',fg:'#93c5fd'},rupt:{bg:'#2d1a00',fg:'#fcd34d'},sup:{bg:'#0a2218',fg:'#6ee7b7'},def:{bg:'#0a2218',fg:'#86efac'},ano:{bg:'#1a0d3b',fg:'#c4b5fd'}};
 
-let S={tournaments:[],characters:[],players:[],encounters:[],matches:[],picks:[],bans:[],costs:{},rosters:{},sigs:[],allCosts:[],tour:'__all__',view:'v',cSort:{k:'name',asc:true},aSort:{k:'name',asc:true}};
+let S={tournaments:[],characters:[],players:[],encounters:[],matches:[],picks:[],bans:[],costs:{},rosters:{},sigs:[],allCosts:[],tour:'__all__',view:'v',rview:'c',cSort:{k:'name',asc:true},aSort:{k:'name',asc:true}};
 
 const ALL='__all__';
 // КПД (η): средняя теоретическая стоимость персонажа = лимит ростера 1605 / минимум 17 персонажей ≈ 94.4.
@@ -592,15 +609,16 @@ function computeChars(){
     // sc агрегата — диапазон по объединению реальных костов сигны всех вариантов (не «=R1»).
     const allSc=[];g.variants.forEach(v=>(v._sc||[]).forEach(x=>allSc.push(x)));
     agg.sc=scRange(allSc);
-    // η на персонажа: WR агрегата × средняя стоимость / кост.
-    // Кост берём только по ПИКНУТЫМ вариантам (pk>0) — бан-онли майндскейпы со своим костом
-    // не должны влиять. Если пикали на нескольких костах — показываем η как диапазон (мин–макс),
-    // иначе у Эллен/Эвелин/Бёрнис и любого персонажа с пиками на разных майндскейпах η обнулялась.
-    const pCosts=[...new Set(g.variants.filter(v=>v.pk>0&&typeof v.cost==='number'&&v.cost!==0).map(v=>v.cost))].sort((a,b)=>a-b);
-    if(pCosts.length===0){agg.eta='—';}
-    else if(pCosts.length===1){agg.eta=eta(pCosts[0],agg.pwr,sum.pk);}
-    else{const lo=eta(pCosts[pCosts.length-1],agg.pwr,sum.pk),hi=eta(pCosts[0],agg.pwr,sum.pk);
-      agg.eta=(typeof lo==='number'&&typeof hi==='number')?`${lo.toFixed(1)}–${hi.toFixed(1)}`:'—';}
+    // η на персонажа = диапазон РЕАЛЬНЫХ η по пикнутым майндскейпам (каждый со своим WR и
+    // костом — то же значение, что в раскрытой строке варианта). Раньше η агрегата считалась
+    // от общего WR с мин/макс костом, из-за чего диапазон не совпадал с вариантами и выглядел
+    // странно (особенно у персонажей, пикнутых на разных констах). Теперь это min–max от
+    // фактических v.eta, поэтому агрегат всегда согласован со своими строками.
+    const vEtas=g.variants.filter(v=>v.pk>0&&typeof v.eta==='number').map(v=>v.eta).sort((a,b)=>a-b);
+    if(vEtas.length===0)agg.eta='—';
+    else if(vEtas.length===1)agg.eta=vEtas[0];
+    else{const lo=vEtas[0],hi=vEtas[vEtas.length-1];
+      agg.eta=(hi-lo<0.05)?lo:`${lo.toFixed(1)}–${hi.toFixed(1)}`;}
     result.push({char:g.char,agg,variants:g.variants});
   });
   return result;
@@ -1038,6 +1056,71 @@ function renderAmps(data){
 }
 function sortA(k){S.aSort.asc=S.aSort.k===k?!S.aSort.asc:(k==='name');S.aSort.k=k;renderAmps(computeAmps());}
 
+// --- РЕЙТИНГ ---
+// Винрейт с байесовской поправкой на объём: малое число игр стягивается к 50%,
+// чтобы 1–2 удачные игры не давали топ-рейтинг. PRIOR_N = «виртуальные» игры при 50%.
+const PRIOR_N=6;
+const bayesWR=(wEq,games)=>(wEq+PRIOR_N*0.5)/((games||0)+PRIOR_N); // 0..1
+// Тир по score (0..100) → [метка, цвет].
+function ratingTier(s){
+  if(s>=78)return['S+','#ff3860'];
+  if(s>=70)return['S','#f5c842'];
+  if(s>=62)return['A','#a970ff'];
+  if(s>=54)return['B','#3dd9d6'];
+  if(s>=46)return['C','#c4f500'];
+  return['D','#8a8a93'];
+}
+const ratingBadge=s=>{const[t,c]=ratingTier(s);return`<span class="rk-badge" style="--rc:${c}">${t}</span>`;};
+
+function computeRating(view){
+  if(view==='p'){
+    // Игрок: 0.7×винрейт(байес) + 0.3×скорость (нормированный средний таймер, быстрее = выше).
+    const{mStats}=computePlayers();
+    const rows=S.players.filter(p=>mStats[p.id]&&mStats[p.id].m).map(p=>{
+      const s=mStats[p.id];
+      const allT=[...s.wtimers,...s.ltimers];
+      const at=allT.length?allT.reduce((a,b)=>a+b,0)/allT.length:null;
+      return{ent:p,games:s.m,wr:wr(s.w,s.d,s.m),bwr:bayesWR(s.w+0.5*s.d,s.m),avgT:at,extra:fSec(avg(allT))};
+    });
+    const ts=rows.map(r=>r.avgT).filter(x=>x!=null);
+    const mn=ts.length?Math.min(...ts):0,mx=ts.length?Math.max(...ts):0;
+    rows.forEach(r=>{
+      const tn=(r.avgT==null||mx===mn)?0.5:(mx-r.avgT)/(mx-mn);
+      r.score=100*(0.7*r.bwr+0.3*tn);
+    });
+    return rows.sort((a,b)=>b.score-a.score);
+  }
+  // Персонаж / амплификатор: 0.7×винрейт(байес) + 0.3×пикрейт (относительно самого популярного).
+  const base=view==='c'
+    ? computeChars().filter(x=>x.agg.pk>0).map(x=>({ent:x.char,isChar:true,games:x.agg.pk,wEq:x.agg.pw+0.5*x.agg.pd,wr:x.agg.pwr,ppt:x.agg.ppt}))
+    : computeAmps().filter(x=>x.pk>0).map(x=>({ent:x.sig,isChar:false,games:x.pk,wEq:x.pw+0.5*x.pd,wr:x.pwr,ppt:x.ppt}));
+  const mxP=Math.max(1,...base.map(r=>r.ppt||0));
+  base.forEach(r=>{r.bwr=bayesWR(r.wEq,r.games);r.score=100*(0.7*r.bwr+0.3*((r.ppt||0)/mxP));});
+  return base.sort((a,b)=>b.score-a.score);
+}
+
+function renderRating(){
+  const view=S.rview,data=computeRating(view);
+  const area=document.getElementById('rating-area'),note=document.getElementById('rating-note');
+  if(!data.length){area.innerHTML=`<table><tbody><tr><td class="empty" colspan="6">Нет данных</td></tr></tbody></table>`;note.textContent='';return;}
+  let head,rows;
+  if(view==='p'){
+    head=`<thead><tr><th class="nc">#</th><th class="nc">Ник</th><th>Σ матчей</th><th>WR%</th><th>AVG таймер</th><th>Рейтинг</th></tr></thead>`;
+    rows=data.map((r,i)=>`<tr><td class="rk-num">${i+1}</td><td class="nc"><div style="display:flex;align-items:center;gap:6px">${picP(r.ent)}<span>${r.ent.nickname}</span></div></td><td>${r.games}</td><td class="${wc(r.wr)}">${f1(r.wr)}</td><td>${r.extra}</td><td><span class="rk-score">${r.score.toFixed(1)}</span> ${ratingBadge(r.score)}</td></tr>`).join('');
+    note.textContent='Рейтинг игрока = 0.7 × винрейт (с байесовской поправкой на число матчей) + 0.3 × скорость (нормированный средний таймер). Чем меньше матчей, тем сильнее винрейт стянут к 50%.';
+  }else{
+    const lbl=view==='c'?'Персонаж':'Амплификатор';
+    head=`<thead><tr><th class="nc">#</th><th class="nc">${lbl}</th><th>Σ игр</th><th>WR%</th><th>Пик %T</th><th>Рейтинг</th></tr></thead>`;
+    rows=data.map((r,i)=>{
+      const ic=r.isChar?iconChar(r.ent,24):ampImg(r.ent,24);
+      return`<tr><td class="rk-num">${i+1}</td><td class="nc"><div style="display:flex;align-items:center;gap:6px">${ic}<span>${r.ent.name}</span></div></td><td>${r.games}</td><td class="${wc(r.wr)}">${f1(r.wr)}</td><td>${f1(r.ppt)}</td><td><span class="rk-score">${r.score.toFixed(1)}</span> ${ratingBadge(r.score)}</td></tr>`;
+    }).join('');
+    note.textContent='Рейтинг = 0.7 × винрейт (с байесовской поправкой на число игр) + 0.3 × пикрейт (относительно самого популярного). Поправка стягивает редко взятых к 50%.';
+  }
+  area.innerHTML=`<table>${head}<tbody>${rows}</tbody></table>`;
+}
+function setRating(v){S.rview=v;['c','a','p'].forEach(k=>{const b=document.getElementById('rseg-'+k);if(b)b.className='seg-btn'+(k===v?' on':'');});renderRating();}
+
 function renderAll(){
   const isAll=S.tour===ALL;
   const cd=computeChars();renderChars(cd);
@@ -1045,6 +1128,7 @@ function renderAll(){
   if(S.view==='r'){renderRosters(isAll);}
   else{const{mStats,vStats}=computePlayers();if(S.view==='v')renderPV(vStats,isAll);else renderPM(mStats,isAll);}
   renderExt(computeExt());
+  renderRating();
   const active=document.querySelector('.tab-btn.active')?.dataset.tab||'chars';
   document.querySelectorAll('.tab-pane').forEach(t=>t.style.display='none');
   const el=document.getElementById('tab-'+active);if(el)el.style.display='block';

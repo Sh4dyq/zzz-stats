@@ -273,10 +273,17 @@
   /* footer */
   footer{border-top:1px solid var(--border);background:#08080a;margin-top:48px}
   .foot{max-width:1280px;margin:0 auto;padding:24px 40px 18px;display:flex;flex-direction:column;align-items:center;gap:16px;text-align:center}
+  .lockup{display:inline-flex;align-items:center;gap:22px;background:#121215;padding:14px 28px;
+    clip-path:polygon(16px 0,100% 0,100% calc(100% - 16px),calc(100% - 16px) 100%,0 100%,0 16px)}
+  .lockup .mk{height:42px;width:auto;display:block}
+  .lockup .hbmk{height:26px;width:auto;display:block;mix-blend-mode:lighten}
+  .lockup .spark{width:20px;height:20px;fill:#fff;flex-shrink:0;opacity:.9}
   .fnav{display:flex;gap:6px;flex-wrap:wrap;justify-content:center}
-  .fnav a{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;font-size:15px;letter-spacing:.03em;color:var(--sub);padding:6px 12px;transition:.15s}
+  .fnav a{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;font-size:15px;letter-spacing:.03em;color:var(--sub);padding:6px 12px;transition:.15s;text-decoration:none}
   .fnav a:hover{color:#fff}
   .fcopy{max-width:1280px;margin:0 auto;padding:14px 40px 20px;border-top:1px solid var(--border);font-family:'JetBrains Mono',monospace;font-size:11px;color:#5e5e66;text-align:center}
+  .fcopy a{color:#5e5e66;text-decoration:none;transition:.15s}
+  .fcopy a:hover{color:var(--sub)}
 </style>
 </head>
 <body>
@@ -338,14 +345,26 @@
 <!-- Footer -->
 <footer>
   <div class="foot">
+    <div class="lockup">
+      <img class="mk" src="nexus-logo.png" alt="NEXUS">
+      <svg class="spark" viewBox="0 0 24 24"><path d="M12 0c.6 6 5.4 10.8 12 12-6.6 1.2-11.4 6-12 12-.6-6-5.4-10.8-12-12C6.6 10.8 11.4 6 12 0z"></path></svg>
+      <a href="https://hornybox.ru/?r=Nexus_Shiyu" target="_blank" rel="noopener noreferrer">
+        <img class="hbmk" src="hornybox-logo.png" alt="HornyBox">
+      </a>
+    </div>
     <nav class="fnav">
       <a href="index.html">Главная</a>
       <a href="statistics.html#chars">Персонажи</a>
       <a href="statistics.html#players">Игроки</a>
+      <a href="bracket.html">Турнирная сетка</a>
       <a href="https://twitch.tv/Nexus_Shiyu" target="_blank">Twitch</a>
     </nav>
   </div>
-  <div class="fcopy">NEXUS SHIYU © 2026 · Турнирный организатор по Zenless Zone Zero</div>
+  <div class="fcopy">NEXUS SHIYU © 2026 · Турнирный организатор по Zenless Zone Zero<br>
+    <a href="https://twitch.tv/Nexus_Shiyu" target="_blank" rel="noopener noreferrer">Twitch</a> ·
+    <a href="https://t.me/nexus_shiyu" target="_blank" rel="noopener noreferrer">Telegram</a> ·
+    <a href="https://discord.gg/6nKP7kWR78" target="_blank" rel="noopener noreferrer">Discord</a>
+  </div>
 </footer>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
