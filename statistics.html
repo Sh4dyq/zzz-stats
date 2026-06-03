@@ -749,30 +749,43 @@ function setView(v){
 // Ростеры: для конкретного турнира — счётчики ролей; для «Все турниры» —
 // среднее число персонажей каждой роли по турнирам, где игрок присутствовал.
 const RBUCK={atk:'atk',stun:'stun',rupt:'rupt',sup:'sd',def:'sd',ano:'ano'};
+const RKEYS=['atk','stun','rupt','sd','ano'];
 function computeRosters(isAll){
   const raw=S.rostersRaw||[];
-  const map={}; // map[pid][tid] = {atk,stun,rupt,sd,ano}
+  const map={}; // map[pid][tid][bucket] = {cid:count}
   raw.forEach(r=>{
     if(!isAll && r.tournament_id!==S.tour)return;
     const c=S.charMap[r.character_id];if(!c)return;
     const b=RBUCK[c.role];if(!b)return;
-    (map[r.player_id]=map[r.player_id]||{});
-    (map[r.player_id][r.tournament_id]=map[r.player_id][r.tournament_id]||{atk:0,stun:0,rupt:0,sd:0,ano:0});
-    map[r.player_id][r.tournament_id][b]++;
+    const pm=map[r.player_id]=map[r.player_id]||{};
+    const tm=pm[r.tournament_id]=pm[r.tournament_id]||{atk:{},stun:{},rupt:{},sd:{},ano:{}};
+    tm[b][r.character_id]=(tm[b][r.character_id]||0)+1;
   });
   const out={};
   Object.entries(map).forEach(([pid,tours])=>{
     const tids=Object.keys(tours);
-    const agg={atk:0,stun:0,rupt:0,sd:0,ano:0};
-    tids.forEach(tid=>['atk','stun','rupt','sd','ano'].forEach(k=>agg[k]+=tours[tid][k]));
-    if(isAll){const n=tids.length||1;['atk','stun','rupt','sd','ano'].forEach(k=>agg[k]=agg[k]/n);}
-    out[pid]={agg,n:tids.length};
+    const buckets={};
+    RKEYS.forEach(k=>{
+      const chars={};let total=0;
+      tids.forEach(tid=>Object.entries(tours[tid][k]).forEach(([cid,cnt])=>{chars[cid]=(chars[cid]||0)+cnt;total+=cnt;}));
+      // (N): для одного турнира — счётчик пиков роли; для «Все» — среднее по турнирам.
+      buckets[k]={chars,n:isAll?total/(tids.length||1):total};
+    });
+    out[pid]={buckets,n:tids.length};
   });
   return out;
 }
 function renderRosters(isAll){
   const data=computeRosters(isAll);
-  const fmt=v=>isAll?v.toFixed(1):String(v);
+  const fmtN=v=>isAll?v.toFixed(1):String(v);
+  const cell=b=>{
+    const cids=Object.keys(b.chars);
+    if(!cids.length)return`<td class="ic">—</td>`;
+    // «Все турниры» — только числовое (среднее); по турниру — иконки + (N)
+    if(isAll)return`<td class="ic">${fmtN(b.n)}</td>`;
+    const icons=cids.map(cid=>iconChar(S.charMap[cid],22)).join('');
+    return`<td class="ic"><span style="display:inline-flex;align-items:center;gap:2px;flex-wrap:wrap;justify-content:center">${icons}<span class="cnt">(${fmtN(b.n)})</span></span></td>`;
+  };
   const head=`<thead><tr><th class="nc">Ник</th>`+
     `<th class="ic" title="Атака" onclick="sortP(1)">${iconRole('atk',18)}</th>`+
     `<th class="ic" title="Стан" onclick="sortP(2)">${iconRole('stun',18)}</th>`+
@@ -783,9 +796,9 @@ function renderRosters(isAll){
   const activePl=S.players.filter(p=>data[p.id]);
   if(!activePl.length){document.getElementById('players-area').innerHTML=`<table>${head}<tbody><tr><td class="empty" colspan="7">Нет данных по ростерам</td></tr></tbody></table>`;return;}
   const rows=activePl.map(p=>{
-    const a=data[p.id].agg;
+    const b=data[p.id].buckets;
     return`<tr><td class="nc"><div style="display:flex;align-items:center;gap:6px">${picP(p)}<span>${p.nickname}</span></div></td>`+
-      `<td class="ic">${fmt(a.atk)}</td><td class="ic">${fmt(a.stun)}</td><td class="ic">${fmt(a.rupt)}</td><td class="ic">${fmt(a.sd)}</td><td class="ic">${fmt(a.ano)}</td>`+
+      `${cell(b.atk)}${cell(b.stun)}${cell(b.rupt)}${cell(b.sd)}${cell(b.ano)}`+
       `${isAll?`<td class="ic">${data[p.id].n}</td>`:''}</tr>`;
   });
   document.getElementById('players-area').innerHTML=`<table>${head}<tbody>${rows.join('')}</tbody></table>`;
@@ -795,7 +808,9 @@ function renderRosters(isAll){
 // возраст, Σ турниров, наивысшее место, призовые ₽. Уважает фильтр турнира.
 function computeMisc(){
   const out={};
-  S.players.forEach(p=>out[p.id]={fav:[],favN:0,matches:0,tours:new Set()});
+  // avatar — фиксируем выбор аватарки один раз (favCharOf использует random),
+  // чтобы picP в renderMisc и исключение при ничьей совпадали.
+  S.players.forEach(p=>out[p.id]={fav:null,favN:0,avatar:favCharOf(p.id),matches:0,tours:new Set()});
   // Σ игр = число матчей (matches), а не встреч (encounters) — чтобы не было
   // расхождения с «любимым персонажем», который считается по пикам (на игру).
   S.matches.forEach(m=>{
@@ -816,12 +831,21 @@ function computeMisc(){
     if(!out[pid])return;
     const max=Math.max(...Object.values(m));
     let tied=Object.keys(m).filter(cid=>m[cid]===max);
-    // A-ранги прячем только при ничьей; если в ничьей одни A — показываем одного случайного
+    // A-ранги прячем только при ничьей
     if(tied.length>1){
       const sOnly=tied.filter(cid=>S.charMap[cid].rarity!=='A');
-      tied=sOnly.length?sOnly:[tied[Math.floor(Math.random()*tied.length)]];
+      if(sOnly.length)tied=sOnly;
     }
-    out[pid].fav=tied;
+    // всегда ровно 1 персонаж: при ничьей берём случайного, исключая аватарку,
+    // если после исключения остаётся хотя бы один кандидат
+    let one;
+    if(tied.length>1){
+      const av=out[pid].avatar;
+      const noAv=av?tied.filter(cid=>cid!==av):tied;
+      const pool=noAv.length?noAv:tied;
+      one=pool[Math.floor(Math.random()*pool.length)];
+    }else one=tied[0];
+    out[pid].fav=one;
     out[pid].favN=max;
   });
   return out;
@@ -840,12 +864,14 @@ function renderMisc(){
   if(!activePl.length){document.getElementById('players-area').innerHTML=`<table>${head}<tbody><tr><td class="empty" colspan="7">Нет данных</td></tr></tbody></table>`;return;}
   const rows=activePl.map(p=>{
     const d=data[p.id];
-    const fav=d.fav.length
-      ? `<span class="fav">${d.fav.map(cid=>pic(S.charMap[cid].name,'')).join('')}${d.favN>1?`<span class="cnt">(${d.favN})</span>`:''}</span>`
+    const fav=d.fav
+      ? `<span class="fav">${iconChar(S.charMap[d.fav],28)}${d.favN>1?`<span class="cnt">(${d.favN})</span>`:''}</span>`
       : '—';
+    // используем зафиксированную аватарку (а не picP, который рерандомит)
+    const avatar=d.avatar?iconChar(S.charMap[d.avatar],28):picP(p);
     const pr=S.playerMap[p.id]?.prize;
     const prize=pr!=null?`<span class="prize-rub">${String(pr).replace(/\B(?=(\d{3})+(?!\d))/g,' ')} ₽</span>`:'—';
-    return`<tr><td class="nc"><div style="display:flex;align-items:center;gap:6px">${picP(p)}<span>${p.nickname}</span></div></td>`+
+    return`<tr><td class="nc"><div style="display:flex;align-items:center;gap:6px">${avatar}<span>${p.nickname}</span></div></td>`+
       `<td>${fav}</td><td>${d.matches}</td><td>${d.tours.size}</td><td>${placeCell(p.highest_place,p.highest_place_count)}</td><td>${prize}</td><td>${p.age??'—'}</td></tr>`;
   });
   document.getElementById('players-area').innerHTML=`<table>${head}<tbody>${rows.join('')}</tbody></table>`;
