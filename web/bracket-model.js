@@ -6,6 +6,12 @@
   const NAMES={1:'Финал',2:'Полуфинал',4:'1/4 финала',8:'1/8 финала',16:'1/16 финала',32:'1/32 финала',64:'1/64 финала'};
   const nextPow2=n=>{let p=1;while(p<n)p*=2;return Math.max(2,p);};
   const roundName=m=>NAMES[m]||(m+' матчей');
+  // именование раундов как на Challonge: Раунд 1, Раунд 2, … , Полуфиналы, Финал
+  function nameRounds(rounds){
+    const R=rounds.length;
+    rounds.forEach((r,i)=>{r.name=i===R-1?'Финал':i===R-2&&R>1?'Полуфиналы':'Раунд '+(i+1);});
+    return rounds;
+  }
 
   // стандартный порядок сеяния для сетки размера size (степень двойки): [1,size,...]
   function seedSlots(size){
@@ -35,12 +41,13 @@
     for(let i=0;i<size;i+=2){
       r1.push({a:mkSeed(order[i],n,seeds),b:mkSeed(order[i+1],n,seeds),played:false});
     }
-    rounds.push({name:roundName(size/2),matches:r1});
+    rounds.push({name:'',matches:r1});
     // последующие раунды — пустые матчи (TBD vs TBD)
     for(let m=size/4;m>=1;m/=2){
       const arr=[];for(let i=0;i<m;i++)arr.push({a:{name:null},b:{name:null},played:false});
-      rounds.push({name:roundName(m),matches:arr});
+      rounds.push({name:'',matches:arr});
     }
+    nameRounds(rounds);
     return {rounds};
   }
 
