@@ -123,18 +123,53 @@ async function delTour(id){if(!confirm('Удалить турнир?'))return;co
 // Победителя встречи можно выставить вручную (для сеток-результатов), а драфт/таймеры — через «Матч 1/2».
 // Компактный каркас сетки для админки — визуально как реальная сетка, влезает на страницу.
 // seeds = массив ников по посеву (из участников). Модель из общего BracketModel.
+// Автопродвижение победителей по результатам встреч (только Single Elimination — цепочка
+// раундов, где матч i раунда R кормит матч ⌊i/2⌋ раунда R+1). DE с дропом в нижнюю сетку не трогаем.
+// Мутирует model: проставляет .name в слотах поздних раундов и .win у победителей.
+function applyBracketResults(model,parts,encs,plMap){
+  const seedToPid={};(parts||[]).forEach(p=>{if(p.seed!=null)seedToPid[p.seed]=p.player_id;});
+  const encByPair={};
+  (encs||[]).forEach(e=>{if(e.player1_id&&e.player2_id)encByPair[[e.player1_id,e.player2_id].sort().join('|')]=e;});
+  let prevWin=null; // pid победителя по каждому матчу предыдущего раунда (или null)
+  model.rounds.forEach((r,ri)=>{
+    r.matches.forEach((m,mi)=>{
+      let aPid=null,bPid=null;
+      if(ri===0){
+        aPid=m.a&&m.a.seed?seedToPid[m.a.seed]:null;
+        bPid=m.b&&m.b.seed?seedToPid[m.b.seed]:null;
+      }else{
+        aPid=prevWin?prevWin[mi*2]:null;
+        bPid=prevWin?prevWin[mi*2+1]:null;
+        m.a={name:aPid?plMap[aPid]?.nickname:null};
+        m.b={name:bPid?plMap[bPid]?.nickname:null};
+      }
+      let win=null;
+      const aBye=m.a&&m.a.bye,bBye=m.b&&m.b.bye;
+      if(aPid&&bPid){const e=encByPair[[aPid,bPid].sort().join('|')];if(e&&e.winner_id)win=e.winner_id;}
+      else if(aPid&&bBye)win=aPid;    // проход (соперник BYE)
+      else if(bPid&&aBye)win=bPid;
+      if(win){if(win===aPid&&m.a)m.a.win=true;if(win===bPid&&m.b)m.b.win=true;}
+      m._winPid=win;
+    });
+    prevWin=r.matches.map(m=>m._winPid||null);
+  });
+  return model;
+}
 // draggable=true → слоты 1-го раунда можно перетаскивать для смены посева (не-Challonge).
-function compactSkeletonHTML(t,seeds,draggable){
+// res={parts,encs,plMap} → подставляет продвинувшихся победителей в поздние раунды (SE).
+function compactSkeletonHTML(t,seeds,draggable,res){
   if(typeof BracketModel==='undefined')return'';
+  const bt=t.bracket_type||'SE';
   const n=Math.max((seeds&&seeds.length)||0,t.expected_players||0);
-  const model=BracketModel.skeletonModel(t.bracket_type||'SE',n,seeds);
+  const model=BracketModel.skeletonModel(bt,n,seeds);
   if(!model)return'<p style="color:var(--sub);font-size:13px">Укажи формат и число участников в «⚙ Настройки», либо добавь участников — и тут появится каркас.</p>';
+  if(res&&bt!=='DE')applyBracketResults(model,res.parts,res.encs,res.plMap);
   const seed=(s,r1)=>{
     if(!s||s.bye)return`<div class="sk-s sk-bye"><span>BYE</span></div>`;
     const nm=s.name||'TBD';
     // в 1-м раунде реальные посевы делаем перетаскиваемыми (только не-Challonge)
     const drag=draggable&&r1&&s.seed?` draggable="true" data-seed="${s.seed}"`:'';
-    return`<div class="sk-s${s.name?'':' sk-tbd'}${drag?' sk-drag':''}"${drag}><span class="sk-sd">${s.seed||''}</span><span class="sk-nm">${escapeHtml(nm)}</span></div>`;
+    return`<div class="sk-s${s.name?'':' sk-tbd'}${s.win?' sk-win':''}${drag?' sk-drag':''}"${drag}><span class="sk-sd">${s.seed||''}</span><span class="sk-nm">${escapeHtml(nm)}</span></div>`;
   };
   let id=0; // сквозная нумерация встреч (как в Challonge)
   const cols=model.rounds.map((r,ri)=>`<div class="sk-r"><div class="sk-rh">${escapeHtml(r.name)}</div>
@@ -151,6 +186,9 @@ function compactSkeletonHTML(t,seeds,draggable){
     .sk-sd{font-family:monospace;font-size:10px;color:#7a7a85;width:22px;text-align:center;flex-shrink:0;align-self:stretch;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.03);border-right:1px solid var(--border);margin-right:4px}
     .sk-nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
     .sk-tbd .sk-nm{color:#55555e;font-style:italic}
+    .sk-win{background:rgba(255,59,107,.10)}
+    .sk-win .sk-nm{color:#fff;font-weight:600}
+    .sk-win .sk-sd{color:var(--accent)}
     .sk-bye{justify-content:center;color:#44444c;font-size:11px;font-style:italic}
     .sk-drag{cursor:grab}
     .sk-drag:active{cursor:grabbing}
@@ -185,7 +223,7 @@ async function openBracketEditor(tourId,tourName){
     </div>
     ${isCh?`<div style="font-size:11px;color:var(--sub);margin-bottom:8px">Синк тянет сетку и МЕСТА из Challonge (авто). Призовые и строки результата, помеченные «вручную», синк не трогает.</div>`
         :`<div style="font-size:11px;color:var(--sub);margin-bottom:8px">Перетащи участников 1-го раунда, чтобы поменять посев.</div>`}
-    ${compactSkeletonHTML(t,seeds,!isCh)}
+    ${compactSkeletonHTML(t,seeds,!isCh,{parts,encs,plMap})}
   </div>`;
   // дропдаун стадии из раундов модели + текущее значение (если кастомное/из Challonge)
   const stageSel=e=>{
