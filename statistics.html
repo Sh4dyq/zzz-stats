@@ -556,11 +556,15 @@ function computeChars(){
     const scs=[...new Set(g.variants.map(v=>v.sc).filter(c=>typeof c==='number'&&c!==0))].sort((a,b)=>a-b);
     agg.cost=costs.length===0?'—':costs.length===1?costs[0]:`${costs[0]}–${costs[costs.length-1]}`;
     agg.sc=scs.length===0?'—':scs.length===1?scs[0]:`${scs[0]}–${scs[scs.length-1]}`;
-    // η на персонажа: WR агрегата × средняя стоимость / кост. Только при едином численном косте.
-    // Кост для η берём лишь по ПИКНУТЫМ вариантам (pk>0): бан-онли майндскейпы со своим костом
-    // иначе раздували диапазон (напр. пик M0 + бан M6) и обнуляли η у Астры/Баньюэ.
-    const pCosts=[...new Set(g.variants.filter(v=>v.pk>0).map(v=>v.cost).filter(c=>typeof c==='number'&&c!==0))];
-    agg.eta=eta(pCosts.length===1?pCosts[0]:null,agg.pwr,sum.pk);
+    // η на персонажа: WR агрегата × средняя стоимость / кост.
+    // Кост берём только по ПИКНУТЫМ вариантам (pk>0) — бан-онли майндскейпы со своим костом
+    // не должны влиять. Если пикали на нескольких костах — показываем η как диапазон (мин–макс),
+    // иначе у Эллен/Эвелин/Бёрнис и любого персонажа с пиками на разных майндскейпах η обнулялась.
+    const pCosts=[...new Set(g.variants.filter(v=>v.pk>0&&typeof v.cost==='number'&&v.cost!==0).map(v=>v.cost))].sort((a,b)=>a-b);
+    if(pCosts.length===0){agg.eta='—';}
+    else if(pCosts.length===1){agg.eta=eta(pCosts[0],agg.pwr,sum.pk);}
+    else{const lo=eta(pCosts[pCosts.length-1],agg.pwr,sum.pk),hi=eta(pCosts[0],agg.pwr,sum.pk);
+      agg.eta=(typeof lo==='number'&&typeof hi==='number')?`${lo.toFixed(1)}–${hi.toFixed(1)}`:'—';}
     result.push({char:g.char,agg,variants:g.variants});
   });
   return result;
@@ -569,7 +573,7 @@ function computeChars(){
 function cellsHTML(d,isAll){
   // WR: прочерк, если в сегменте 0 игр (как на Liquipedia)
   const wrc=(v,tot)=>tot?`<td class="${wc(v)}">${f1(v)}</td>`:`<td class="m">—</td>`;
-  const co=isAll?'':`<td class="gb">${d.cost}</td><td>${typeof d.eta==='number'?d.eta.toFixed(1):'—'}</td>`;
+  const co=isAll?'':`<td class="gb">${d.cost}</td><td>${typeof d.eta==='number'?d.eta.toFixed(1):(d.eta||'—')}</td>`;
   return `${co}<td class="gb">${d.pk}</td><td>${d.pw}</td><td class="m">${d.pd}</td><td>${d.pl}</td>${wrc(d.pwr,d.pk)}<td>${f1(d.ppt)}</td>`+
     `<td class="gb">${d.fp}</td><td>${d.fw}</td><td class="m">${d.fd}</td><td>${d.fl}</td>${wrc(d.fwr,d.fp)}`+
     `<td class="gb">${d.dp}</td><td>${d.dw}</td><td class="m">${d.dd}</td><td>${d.dl}</td>${wrc(d.dwr,d.dp)}`+
