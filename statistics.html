@@ -347,6 +347,10 @@ const ROLES={atk:{bg:'#3b1010',fg:'#fca5a5'},stun:{bg:'#0f1f3b',fg:'#93c5fd'},ru
 let S={tournaments:[],characters:[],players:[],encounters:[],matches:[],picks:[],bans:[],costs:{},rosters:{},sigs:[],allCosts:[],tour:'__all__',view:'v',cSort:{k:'name',asc:true},aSort:{k:'name',asc:true}};
 
 const ALL='__all__';
+// КПД (η): средняя теоретическая стоимость персонажа = лимит ростера 1605 / минимум 17 персонажей ≈ 94.4.
+// η = WR% × ETA_AVG / кост → у дешёвого выигрывающего перса η выше среднего WR, у дорогого ниже.
+const ETA_AVG=1605/17;
+const eta=(cost,wrv,pk)=>(pk&&typeof cost==='number'&&cost>0&&typeof wrv==='number')?wrv*ETA_AVG/cost:'—';
 const f1=v=>typeof v==='number'?v.toFixed(2)+'%':v;
 const wr=(w,d,t)=>t?(w+0.5*d)/t*100:0;
 const wc=v=>v>55?'g':v<45?'r':'m';
@@ -430,14 +434,31 @@ function computeChars(){
     else{s.dp++;if(isW)s.dw++;else if(isD)s.dd++;}
     if(pk.has_signature){s.sp++;if(isW)s.sw++;else if(isD)s.sd++;}
   });
-  // banCount — сколько раз забанен (сырые строки; обе стороны могут забанить одного перса в одном матче).
+  // banCount — сколько раз забанен (обе стороны не могут забанить одного перса в одном матче).
   // banMatch — множество матчей, где перс забанен (для «доли от матчей»: presence ≤ 100%).
   const banMatch={};
+  // Разбивка банов по констам: бан резолвится в минскейп персонажа из РОСТЕРА оппонента
+  // (того, против кого забанили). Игрок не может забанить перса, которого нет у оппонента,
+  // поэтому запись в ростере всегда есть. banCountMs[cid][ms] / banMatchMs[cid][ms].
+  const banCountMs={},banMatchMs={};
+  const banMs=b=>{
+    const m=S.matchMap[b.match_id];if(!m)return null;
+    const enc=S.encMap[m.encounter_id];if(!enc)return null;
+    const opp=enc.player1_id===b.player_id?enc.player2_id:enc.player1_id;
+    const r=(S.rosters[opp]||[]).find(x=>x.character_id===b.character_id);
+    return r?r.mindscape:null;
+  };
   S.bans.forEach(b=>{
     banCount[b.character_id]=(banCount[b.character_id]||0)+1;
     (banMatch[b.character_id]=banMatch[b.character_id]||new Set()).add(b.match_id);
+    const ms=banMs(b);
+    if(ms==null)return;
+    (banCountMs[b.character_id]=banCountMs[b.character_id]||{})[ms]=(banCountMs[b.character_id][ms]||0)+1;
+    const mm=banMatchMs[b.character_id]=banMatchMs[b.character_id]||{};
+    (mm[ms]=mm[ms]||new Set()).add(b.match_id);
   });
   const banDist=cid=>banMatch[cid]?banMatch[cid].size:0;
+  const banDistMs=(cid,ms)=>banMatchMs[cid]?.[ms]?.size||0;
 
   const rosterCount={};
   Object.values(S.rosters).forEach(arr=>arr.forEach(r=>{const k=r.character_id+'_'+r.mindscape;rosterCount[k]=(rosterCount[k]||0)+1;}));
@@ -447,19 +468,37 @@ function computeChars(){
   const groups={};
   S.characters.forEach(c=>groups[c.id]={char:c,variants:[]});
 
+  // TODO(amp-cost-refinement): колонка «Сигна» (sc) читает только tournament_costs.sig_cost (=R1).
+  // У не-бис персонажей sig_cost часто пуст/0 → показывает «—», хотя теоретический кост есть
+  // (правило 2/3: своя роль → base[0..4], чужая → флэт base[5]). Полный резолв НЕ реализован —
+  // это пробел в наполнении sig_cost на стороне web/tournaments.js/импорта, не баг отображения тут.
+  // Большая отдельная работа, отложена. Кост скрыт во «все турниры» (см. isAll в co).
   Object.values(statMap).forEach(s=>{
     if(!groups[s.cid])return;
-    const bn=banCount[s.cid]||0;
+    const bn=banCountMs[s.cid]?.[s.ms]||0,bd=banDistMs(s.cid,s.ms);
     const cost=S.costs[s.cid]?.[s.ms];
     const rs=rosterCount[s.cid+'_'+s.ms]||0;
+    const pwr=wr(s.pw,s.pd,s.pk);
     groups[s.cid].variants.push({
-      ms:s.ms,cost:cost?.cost??'—',sc:cost?.sig_cost??'—',
-      pk:s.pk,pw:s.pw,pd:s.pd,pl:s.pk-s.pw-s.pd,pwr:wr(s.pw,s.pd,s.pk),ppt:pctT(s.pk,T),
+      ms:s.ms,cost:cost?.cost??'—',sc:cost?.sig_cost??'—',eta:eta(cost?.cost,pwr,s.pk),
+      pk:s.pk,pw:s.pw,pd:s.pd,pl:s.pk-s.pw-s.pd,pwr,ppt:pctT(s.pk,T),
       fp:s.fp,fw:s.fw,fd:s.fd,fl:s.fp-s.fw-s.fd,fwr:wr(s.fw,s.fd,s.fp),
       dp:s.dp,dw:s.dw,dd:s.dd,dl:s.dp-s.dw-s.dd,dwr:wr(s.dw,s.dd,s.dp),
-      bn,bpt:pctT(banDist(s.cid),T),pbn:s.pk+bn,pbpt:pctT(s.pk+banDist(s.cid),T),
+      bn,bpt:pctT(bd,T),pbn:s.pk+bn,pbpt:pctT(s.pk+bd,T),
       rs,rspt:pctT(rs,totalPlayers),
       sp:s.sp,sw:s.sw,sd:s.sd,sl:s.sp-s.sw-s.sd,swr:wr(s.sw,s.sd,s.sp),spt:pctT(s.sp,T)
+    });
+  });
+  // Майндскейпы, которые только банили (не пикали) — добавляем вариант, чтобы разбивка по констам была полной.
+  Object.keys(banCountMs).forEach(cidv=>{
+    const g=groups[cidv];if(!g)return;
+    Object.keys(banCountMs[cidv]).forEach(msS=>{
+      const ms=+msS;if(g.variants.some(v=>v.ms===ms))return;
+      const bn=banCountMs[cidv][ms]||0,bd=banDistMs(cidv,ms),cost=S.costs[cidv]?.[ms],rs=rosterCount[cidv+'_'+ms]||0;
+      g.variants.push({ms,cost:cost?.cost??'—',sc:cost?.sig_cost??'—',eta:'—',
+        pk:0,pw:0,pd:0,pl:0,pwr:0,ppt:0,fp:0,fw:0,fd:0,fl:0,fwr:0,dp:0,dw:0,dd:0,dl:0,dwr:0,
+        bn,bpt:pctT(bd,T),pbn:bn,pbpt:pctT(bd,T),rs,rspt:pctT(rs,totalPlayers),
+        sp:0,sw:0,sd:0,sl:0,swr:0,spt:0});
     });
   });
 
@@ -470,7 +509,7 @@ function computeChars(){
       const cidv=g.char.id, bn=banCount[cidv]||0, bd=banDist(cidv);
       let rs=0;Object.keys(rosterCount).forEach(k=>{if(k.slice(0,cidv.length+1)===cidv+'_')rs+=rosterCount[k];});
       const totalP0=Object.keys(S.rosters).length||1;
-      // кост невыбранного персонажа берём из tournament_costs (по всем минскейпам → диапазон),
+      // кост невыбранного персонажа берём из tournament_costs (по всем майндскейпам → диапазон),
       // иначе колонка «Кост» у непикнутых всегда показывала «—», хотя кост в турнире задан.
       const costObj=S.costs[cidv]||{};
       // 0 = «кост не задан» в БД (дефолт) — исключаем, иначе у персонажа только с банами
@@ -484,7 +523,7 @@ function computeChars(){
         bn,bpt:pctT(bd,T),pbn:bn,pbpt:pctT(bd,T),
         rs,rspt:pctT(rs,totalP0),
         sp:0,sw:0,sd:0,sl:0,swr:'—',spt:0,
-        cost:rng('cost'),sc:rng('sig_cost')
+        cost:rng('cost'),sc:rng('sig_cost'),eta:'—'
       }});
       return;
     }
@@ -492,8 +531,8 @@ function computeChars(){
     const sum={pk:0,pw:0,pd:0,fp:0,fw:0,fd:0,dp:0,dw:0,dd:0,bn:0,rs:0,sp:0,sw:0,sd:0};
     g.variants.forEach(v=>Object.keys(sum).forEach(k=>sum[k]+=typeof v[k]==='number'?v[k]:0));
     const T2=S.matches.length,totalP=Object.keys(S.rosters).length||1;
-    // Баны не зависят от минскейпа: берём счётчик по персонажу ОДИН раз, а не sum по вариантам
-    // (иначе у S-ранга с несколькими минскейпами баны множились ×кол-во вариантов → presence >100%).
+    // Баны не зависят от майндскейпа: берём счётчик по персонажу ОДИН раз, а не sum по вариантам
+    // (иначе у S-ранга с несколькими майндскейпами баны множились ×кол-во вариантов → presence >100%).
     const aBn=banCount[g.char.id]||0,aBd=banDist(g.char.id);
     const agg={...sum,bn:aBn,
       pl:sum.pk-sum.pw-sum.pd,fl:sum.fp-sum.fw-sum.fd,dl:sum.dp-sum.dw-sum.dd,sl:sum.sp-sum.sw-sum.sd,
@@ -505,6 +544,8 @@ function computeChars(){
     const scs=[...new Set(g.variants.map(v=>v.sc).filter(c=>c!=='—'))].sort((a,b)=>a-b);
     agg.cost=costs.length===0?'—':costs.length===1?costs[0]:`${costs[0]}–${costs[costs.length-1]}`;
     agg.sc=scs.length===0?'—':scs.length===1?scs[0]:`${scs[0]}–${scs[scs.length-1]}`;
+    // η на персонажа: WR агрегата × средняя стоимость / кост. Только при едином численном косте.
+    agg.eta=eta(costs.length===1?costs[0]:null,agg.pwr,sum.pk);
     result.push({char:g.char,agg,variants:g.variants});
   });
   return result;
@@ -513,7 +554,7 @@ function computeChars(){
 function cellsHTML(d,isAll){
   // WR: прочерк, если в сегменте 0 игр (как на Liquipedia)
   const wrc=(v,tot)=>tot?`<td class="${wc(v)}">${f1(v)}</td>`:`<td class="m">—</td>`;
-  const co=isAll?'':`<td class="gb">${d.cost}</td>`;
+  const co=isAll?'':`<td class="gb">${d.cost}</td><td>${typeof d.eta==='number'?d.eta.toFixed(1):'—'}</td>`;
   return `${co}<td class="gb">${d.pk}</td><td>${d.pw}</td><td class="m">${d.pd}</td><td>${d.pl}</td>${wrc(d.pwr,d.pk)}<td>${f1(d.ppt)}</td>`+
     `<td class="gb">${d.fp}</td><td>${d.fw}</td><td class="m">${d.fd}</td><td>${d.fl}</td>${wrc(d.fwr,d.fp)}`+
     `<td class="gb">${d.dp}</td><td>${d.dw}</td><td class="m">${d.dd}</td><td>${d.dl}</td>${wrc(d.dwr,d.dp)}`+
@@ -522,7 +563,7 @@ function cellsHTML(d,isAll){
 
 function renderChars(data){
   const isAll=S.tour===ALL;
-  const co=isAll?'':'<th rowspan="2" class="nc gb th-g" onclick="sortC(\'cost\')" title="Стоимость персонажа">Кост</th>';
+  const co=isAll?'':'<th rowspan="2" class="nc gb th-g" onclick="sortC(\'cost\')" title="Стоимость персонажа">Кост</th><th rowspan="2" class="nc th-g" onclick="sortC(\'eta\')" title="КПД: WR% × средняя стоимость (1605/17 ≈ 94.4) ÷ кост. Выше = эффективнее за свой кост.">Кост <span style="text-transform:none;font-family:\'Cambria Math\',Cambria,\'Times New Roman\',serif;font-style:italic;font-weight:600">&eta;</span></th>';
   const TS='Всего',TW='Победы',TD='Ничьи',TL='Поражения',TWR='Винрейт (ничья = ½)',TPT='Доля от всех матчей';
   document.getElementById('chars-head').innerHTML=`<tr>
     <th rowspan="2" class="nc th-g" onclick="sortC('name')">Имя</th>
@@ -880,9 +921,10 @@ function ampCells(d){
 }
 
 function renderAmps(data){
+  const isAll=S.tour===ALL;
+  const coH=isAll?'':`<th rowspan="2" class="gb th-g" onclick="sortA('cost')" title="Стоимость амплификатора">Кост</th>`;
   document.getElementById('amps-head').innerHTML=`<tr>
-    <th rowspan="2" class="nc th-g" onclick="sortA('name')">Амплификатор</th>
-    <th rowspan="2" class="gb th-g" onclick="sortA('cost')" title="Стоимость амплификатора">Кост</th>
+    <th rowspan="2" class="nc th-g" onclick="sortA('name')">Амплификатор</th>${coH}
     <th colspan="6" class="th-g gb">Пики</th>
   </tr><tr>
     <th class="gb" onclick="sortA('pk')" title="Всего">Σ</th><th onclick="sortA('pw')" title="Победы">W</th><th title="Ничьи">D</th><th onclick="sortA('pl')" title="Поражения">L</th><th onclick="sortA('pwr')" title="Винрейт (ничья = ½)">WR%</th><th onclick="sortA('ppt')" title="Доля от всех матчей">%T</th>
@@ -905,11 +947,11 @@ function renderAmps(data){
     const nm=hasCh
       ?`<div style="display:flex;align-items:center;gap:6px;cursor:pointer" onclick="toggleV('${id}')">${photo}<span>${s.name}</span><span class="chev" id="chev-${id}">▾</span></div>`
       :`<div style="display:flex;align-items:center;gap:6px">${photo}<span>${s.name}</span></div>`;
-    h+=`<tr><td class="nc">${nm}</td><td class="gb">${item.cost}</td>${ampCells(item)}</tr>`;
+    h+=`<tr><td class="nc">${nm}</td>${isAll?'':`<td class="gb">${item.cost}</td>`}${ampCells(item)}</tr>`;
     if(hasCh)item.chars.forEach(ch=>{
       const c=ch.char;
       const cn=c?`<div style="display:flex;align-items:center;gap:6px">${iconChar(c,20)}<span>${c.name}</span></div>`:'—';
-      h+=`<tr class="vrow" data-parent="${id}" style="display:none"><td class="nc">${cn}</td><td class="gb">${ch.cost}</td>${ampCells(ch)}</tr>`;
+      h+=`<tr class="vrow" data-parent="${id}" style="display:none"><td class="nc">${cn}</td>${isAll?'':`<td class="gb">${ch.cost}</td>`}${ampCells(ch)}</tr>`;
     });
   });
   document.getElementById('amps-body').innerHTML=h;

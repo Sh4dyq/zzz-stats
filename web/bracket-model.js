@@ -56,6 +56,7 @@
     n=Math.max(2,n|0);
     const size=nextPow2(n);
     const up=seModel(n,seeds).rounds.map((r,i)=>({name:'Верхняя · '+r.name,matches:r.matches}));
+    up[up.length-1].name='Верхняя · Финал верхней сетки';
     // нижняя сетка: пары раундов с числом матчей size/4,size/4, size/8,size/8, ... ,1,1
     const lower=[];let li=1;
     for(let c=size/4;c>=1;c/=2){
@@ -64,6 +65,7 @@
         lower.push({name:'Нижняя R'+(li++),matches:arr});
       }
     }
+    lower[lower.length-1].name='Финал нижней сетки';
     const gf=[{name:'Гранд-финал',matches:[{a:{name:null},b:{name:null},played:false}]}];
     return {rounds:up.concat(lower,gf)};
   }

@@ -150,7 +150,13 @@
   .tmeta .ch-link:hover{border-color:var(--red)}
 
   /* ===== bracket canvas ===== */
-  .bracket-wrap{overflow:auto;padding:26px 28px 50px;-webkit-overflow-scrolling:touch}
+  .bracket-wrap{position:relative;overflow:auto;padding:26px 28px 50px;-webkit-overflow-scrolling:touch}
+  svg.gflink{inset:0 auto auto 0;width:auto;height:auto}
+  /* DE: верхняя+нижняя сетки слева (стопкой), грандфинал — отдельной колонкой справа,
+     по вертикали между финалами обеих сеток */
+  .de-grid{display:flex;align-items:center;gap:90px;min-width:min-content}
+  .de-left{display:flex;flex-direction:column;min-width:min-content}
+  .de-gf{min-width:min-content;flex-shrink:0}
   .bsec-title{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;font-size:15px;letter-spacing:.05em;color:var(--sub);margin:6px 0 14px;display:flex;align-items:center;gap:10px}
   .bsec-title::after{content:"";flex:1;height:1px;background:var(--border)}
   .bsec-title.upper{color:#ff7587}.bsec-title.lower{color:var(--purple)}.bsec-title.gf{color:var(--gold)}
@@ -548,12 +554,19 @@ function renderBracketBody(rounds, bracketType=''){
   const hasDE=rounds.some(r=>isLower(r.name)||isGf(r.name));
   if(!hasDE) return renderRounds(rounds);
   const strip=arr=>arr.map(r=>({...r,name:(r.name||'').replace(/^(верхняя|нижняя)\s*·?\s*/i,'').trim()||r.name}));
-  const upper=strip(rounds.filter(r=>!isLower(r.name)));
   const lower=strip(rounds.filter(r=>isLower(r.name)));
-  let out='';
-  if(upper.length)out+=`<div class="bsec-title upper">Верхняя сетка</div>${renderRounds(upper)}`;
-  if(lower.length)out+=`<div class="bsec-title lower">Нижняя сетка</div>${renderRounds(lower)}`;
-  return out;
+  // Нет нижней сетки → это SE (даже если есть раунд «Гранд-финал»): одна лента без заголовка «Верхняя сетка».
+  if(!lower.length) return renderRounds(strip(rounds));
+  // Гранд-финал выносим в отдельную колонку справа: к нему сходятся линии от финала
+  // верхней и финала нижней сетки (связи рисует linkGrandFinal на оверлее .bracket-wrap).
+  const gf=strip(rounds.filter(r=>isGf(r.name)));
+  const upper=strip(rounds.filter(r=>!isLower(r.name)&&!isGf(r.name)));
+  let left='';
+  if(upper.length)left+=`<div class="bsec-title upper">Верхняя сетка</div>${renderRounds(upper)}`;
+  if(lower.length)left+=`<div class="bsec-title lower">Нижняя сетка</div>${renderRounds(lower)}`;
+  if(!gf.length) return left;
+  const gfHtml=`<div class="bsec-title gf">Гранд-финал</div>${renderRounds(gf)}`;
+  return `<div class="de-grid"><div class="de-left">${left}</div><div class="de-gf">${gfHtml}</div></div>`;
 }
 
 // геометрия раскладки: высота карточки + вертикальный зазор (шаг сетки)
@@ -714,8 +727,37 @@ fetch('https://decapi.me/twitch/uptime/Nexus_Shiyu').then(r=>r.text()).then(txt=
       wrap.appendChild(lg);
     }
   }
+  // DE: грандфинал — отдельная колонка справа (.de-gf). Тянем связи от финала верхней
+  // и финала нижней сетки: оба выхода сводятся на общую вертикаль (шину) слева от
+  // грандфинала, откуда одна линия входит в него.
+  function bracketAfter(title){let el=title&&title.nextElementSibling;while(el&&!(el.classList&&el.classList.contains('bracket')))el=el.nextElementSibling;return el;}
+  function lastMatch(br){const rs=br?[...br.querySelectorAll('.bround')]:[];return rs.length?[...rs[rs.length-1].querySelectorAll('.match')].pop():null;}
+  function linkGrandFinal(wrap){
+    wrap.querySelectorAll(':scope > svg.gflink').forEach(s=>s.remove());
+    const gfM=wrap.querySelector('.de-gf .match');
+    const upF=lastMatch(bracketAfter(wrap.querySelector('.bsec-title.upper')));
+    const loF=lastMatch(bracketAfter(wrap.querySelector('.bsec-title.lower')));
+    if(!gfM||!upF||!loF)return;
+    const base=wrap.getBoundingClientRect();
+    const off=el=>{const r=el.getBoundingClientRect();return{l:r.left-base.left+wrap.scrollLeft,r:r.right-base.left+wrap.scrollLeft,cy:(r.top+r.bottom)/2-base.top+wrap.scrollTop};};
+    const u=off(upF),l=off(loF),g=off(gfM);
+    const busX=g.l-30;
+    const svg=document.createElementNS(NS,'svg');
+    svg.setAttribute('class','bconn gflink');
+    svg.style.width=wrap.scrollWidth+'px';svg.style.height=wrap.scrollHeight+'px';
+    const path=(d,dim)=>{const p=document.createElementNS(NS,'path');p.setAttribute('d',d);p.setAttribute('class','link'+(dim?' dim':''));svg.appendChild(p);};
+    path(`M${u.r} ${u.cy}H${busX}`,mstate(upF)==='future');
+    path(`M${l.r} ${l.cy}H${busX}`,mstate(loF)==='future');
+    path(`M${busX} ${u.cy}V${l.cy}`,mstate(upF)==='future'&&mstate(loF)==='future');
+    path(`M${busX} ${g.cy}H${g.l}`,mstate(gfM)==='future');
+    svg.appendChild(diamond(u.r,u.cy,mstate(upF)));
+    svg.appendChild(diamond(l.r,l.cy,mstate(loF)));
+    svg.appendChild(diamond(g.l,g.cy,mstate(gfM)));
+    wrap.appendChild(svg);
+  }
   let busy=false;
-  function paint(){busy=true;document.querySelectorAll('.bracket').forEach(paintOne);busy=false;}
+  function paint(){busy=true;document.querySelectorAll('.bracket').forEach(paintOne);
+    document.querySelectorAll('.bracket-wrap').forEach(linkGrandFinal);busy=false;}
   let t;const schedule=()=>{clearTimeout(t);t=setTimeout(paint,60);};
   const c=document.getElementById('content');
   if(c)new MutationObserver(()=>{if(!busy)schedule();}).observe(c,{childList:true});
