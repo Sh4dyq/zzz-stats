@@ -201,11 +201,11 @@ async function openBracketEditor(tourId,tourName){
     <button class="btn btn-y" onclick="addEncTo('${tourId}','${tourName.replace(/'/g,"\\'")}')">Создать встречу</button>
   </div>
   <style>
-    .enc-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px;align-items:start}
-    .enc-card{background:var(--card,#11131a);border:1px solid var(--border);border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:7px}
+    .enc-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:14px;align-items:start}
+    .enc-card{background:var(--card,#11131a);border:1px solid var(--border);border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:10px}
     .enc-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
-    .enc-vs{font-weight:600;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-    .enc-acts{display:flex;gap:6px}
+    .enc-vs{font-weight:600;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .enc-acts{display:flex;gap:8px}
   </style>
   <div class="enc-grid">${rows||'<p style="color:var(--sub);font-size:14px">Встреч ещё нет</p>'}</div>`);
 }
