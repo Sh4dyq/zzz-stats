@@ -91,3 +91,44 @@ bracket_nodes(bracket_id, round, slot, match_id?, player_id?,
 4. Кнопка синка в админке → запись `tournament_results`; переключить подиум
    главной и «Игроки → Разное» на эти точные данные.
 5. (Потом) Фаза 2 — свой движок.
+
+---
+
+## Фаза 2 — СОБСТВЕННЫЙ ДВИЖОК СЕТОК (детальный план, начато 2026-06-03)
+
+Цель: создавать и вести полностью рабочую сетку независимо от Challonge.
+Challonge остаётся как основной/референс; наш движок дублирует его функции.
+
+### Шаг 1 — Схема БД (`sql/add_bracket_engine.sql`)
+- `brackets(id uuid pk, tournament_id uuid fk, type text SE|DE, size int,
+  settings jsonb, created_at)`. settings: {third_place, gf_reset,...}.
+- `bracket_nodes(id uuid pk, bracket_id uuid fk, part text W|L|GF, round int,
+  slot int, identifier int, player1_id uuid?, player2_id uuid?, seed1 int?,
+  seed2 int?, is_bye bool, encounter_id uuid?, winner_id uuid?,
+  next_win_node uuid?, next_win_slot int, next_lose_node uuid?,
+  next_lose_slot int, created_at)`.
+- RLS read-all/write-auth + ОБЯЗАТЕЛЬНО GRANT'ы (иначе 42501).
+
+### Шаг 2 — Движок `web/bracket-engine.js` (window.BracketEngine, чистые функции)
+- `generate(type, size)` → массив node-объектов с рёбрами (next_win/lose +
+  slot). SE: round1 = size/2 матчей, далее /2. DE: верхняя (как SE) +
+  нижняя (2(k-1) раундов: c,c,c/2,c/2,…,1,1) + гранд-финал.
+- `seedPlayers(nodes, participants)` — расставляет seed1/2 по seedSlots,
+  BYE если seed>N → авто-победа (winner предзаполнен, is_bye).
+- `advance(nodes, nodeId, winnerId)` — ставит winner, толкает победителя в
+  next_win_node[slot], проигравшего (DE) в next_lose_node[slot]; каскад по BYE.
+- Экспорт и для браузера, и для node (юнит-тест генератора).
+
+### Шаг 3 — Админка (web/tournaments.js, openBracketEditor)
+- Кнопка «⚙ Сгенерировать сетку» (из участников турнира) → generate+seed →
+  bulk-insert bracket_nodes. Предупреждение о перезаписи.
+- Рендер нод-сетки (переиспользовать .sk-* стили) с выбором победителя в ноде →
+  advance() → обновить изменённые ноды в БД. Привязка ноды к encounter
+  (опц.) для деталей матча.
+
+### Шаг 4 — Публичная bracket.html
+- Грузить bracket_nodes; приоритет источника: свой движок (если есть bracket) →
+  Challonge-кэш → encounters-фолбэк → каркас. Бейдж источника «Своя сетка».
+- nodesToModel(nodes) → та же {rounds:[{name,matches}]} → renderRounds без правок.
+
+### Порядок: Шаг1+2 (фундамент, тестируемо) → Шаг3 → Шаг4.
