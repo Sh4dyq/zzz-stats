@@ -123,19 +123,22 @@ async function delTour(id){if(!confirm('Удалить турнир?'))return;co
 // Победителя встречи можно выставить вручную (для сеток-результатов), а драфт/таймеры — через «Матч 1/2».
 // Компактный каркас сетки для админки — визуально как реальная сетка, влезает на страницу.
 // seeds = массив ников по посеву (из участников). Модель из общего BracketModel.
-function compactSkeletonHTML(t,seeds){
+// draggable=true → слоты 1-го раунда можно перетаскивать для смены посева (не-Challonge).
+function compactSkeletonHTML(t,seeds,draggable){
   if(typeof BracketModel==='undefined')return'';
   const n=Math.max((seeds&&seeds.length)||0,t.expected_players||0);
   const model=BracketModel.skeletonModel(t.bracket_type||'SE',n,seeds);
   if(!model)return'<p style="color:var(--sub);font-size:13px">Укажи формат и число участников в «⚙ Настройки», либо добавь участников — и тут появится каркас.</p>';
-  const seed=s=>{
+  const seed=(s,r1)=>{
     if(!s||s.bye)return`<div class="sk-s sk-bye"><span>BYE</span></div>`;
     const nm=s.name||'TBD';
-    return`<div class="sk-s${s.name?'':' sk-tbd'}"><span class="sk-sd">${s.seed||''}</span><span class="sk-nm">${escapeHtml(nm)}</span></div>`;
+    // в 1-м раунде реальные посевы делаем перетаскиваемыми (только не-Challonge)
+    const drag=draggable&&r1&&s.seed?` draggable="true" data-seed="${s.seed}"`:'';
+    return`<div class="sk-s${s.name?'':' sk-tbd'}${drag?' sk-drag':''}"${drag}><span class="sk-sd">${s.seed||''}</span><span class="sk-nm">${escapeHtml(nm)}</span></div>`;
   };
   let id=0; // сквозная нумерация встреч (как в Challonge)
-  const cols=model.rounds.map(r=>`<div class="sk-r"><div class="sk-rh">${escapeHtml(r.name)}</div>
-    ${r.matches.map(m=>`<div class="sk-m"><span class="sk-id">${++id}</span>${seed(m.a)}${seed(m.b)}</div>`).join('')}</div>`).join('');
+  const cols=model.rounds.map((r,ri)=>`<div class="sk-r"><div class="sk-rh">${escapeHtml(r.name)}</div>
+    ${r.matches.map(m=>`<div class="sk-m"><span class="sk-id">${++id}</span>${seed(m.a,ri===0)}${seed(m.b,ri===0)}</div>`).join('')}</div>`).join('');
   return`<style>
     .sk-wrap{overflow-x:auto;padding:6px 2px 10px}
     .sk-b{display:flex;gap:34px;align-items:flex-start;min-width:min-content}
@@ -149,8 +152,18 @@ function compactSkeletonHTML(t,seeds){
     .sk-nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
     .sk-tbd .sk-nm{color:#55555e;font-style:italic}
     .sk-bye{justify-content:center;color:#44444c;font-size:11px;font-style:italic}
+    .sk-drag{cursor:grab}
+    .sk-drag:active{cursor:grabbing}
+    .sk-drag.sk-over{outline:2px solid var(--accent);outline-offset:-2px}
   </style>
   <div class="sk-wrap"><div class="sk-b">${cols}</div></div>`;
+}
+// названия раундов из BracketModel — для дропдауна стадии встречи
+function bracketRoundNames(t,seeds){
+  if(typeof BracketModel==='undefined')return[];
+  const n=Math.max((seeds&&seeds.length)||0,t.expected_players||0);
+  const m=BracketModel.skeletonModel(t.bracket_type||'SE',n,seeds);
+  return m?m.rounds.map(r=>r.name):[];
 }
 async function openBracketEditor(tourId,tourName){
   document.getElementById('page-title').textContent=`Сетка — ${tourName}`;
@@ -160,6 +173,8 @@ async function openBracketEditor(tourId,tourName){
   const plMap={};D.players.forEach(p=>plMap[p.id]=p);
   const seeds=(parts||[]).map(pt=>plMap[pt.player_id]?.nickname).filter(Boolean);
   const t=D.tours.find(x=>x.id===tourId)||{};
+  const isCh=!!t.challonge_url; // у Challonge посев/продвижение тянет синк — drag отключаем
+  const roundNames=bracketRoundNames(t,seeds);
   const skeleton=`<div class="card" style="margin-bottom:16px">
     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:6px">
       <h3 style="margin:0">Каркас сетки <span style="color:var(--sub);font-weight:400;font-size:13px">${t.bracket_type||'SE'} · ${seeds.length?seeds.length+' уч.':((t.expected_players||0)+' уч. (предпол.)')}</span></h3>
@@ -168,16 +183,25 @@ async function openBracketEditor(tourId,tourName){
         <a class="btn btn-g" style="font-size:12px;padding:5px 12px" onclick="openParticipants('${tourId}','${tourName.replace(/'/g,"\\'")}')">Править участников</a>
       </div>
     </div>
-    ${t.challonge_url?`<div style="font-size:11px;color:var(--sub);margin-bottom:8px">Синк тянет сетку и МЕСТА из Challonge (авто). Призовые и строки результата, помеченные «вручную», синк не трогает.</div>`:''}
-    ${compactSkeletonHTML(t,seeds)}
-  </div>
-  ${await resultsEditorHTML(tourId)}`;
+    ${isCh?`<div style="font-size:11px;color:var(--sub);margin-bottom:8px">Синк тянет сетку и МЕСТА из Challonge (авто). Призовые и строки результата, помеченные «вручную», синк не трогает.</div>`
+        :`<div style="font-size:11px;color:var(--sub);margin-bottom:8px">Перетащи участников 1-го раунда, чтобы поменять посев.</div>`}
+    ${compactSkeletonHTML(t,seeds,!isCh)}
+  </div>`;
+  // дропдаун стадии из раундов модели + текущее значение (если кастомное/из Challonge)
+  const stageSel=e=>{
+    const cur=e.stage||'';
+    const opts=roundNames.map(rn=>`<option ${cur===rn?'selected':''}>${escapeHtml(rn)}</option>`).join('');
+    const extra=cur&&!roundNames.includes(cur)?`<option selected>${escapeHtml(cur)}</option>`:'';
+    return`<select onchange="updateEncMeta('${e.id}',{stage:this.value||null})" style="font-size:12px;padding:5px 8px;width:100%" title="Стадия / раунд">
+      <option value="">— раунд —</option>${opts}${extra}
+    </select>`;
+  };
   const rows=encs.map(e=>{
     const p1=plMap[e.player1_id],p2=plMap[e.player2_id];
     const opts=[['','— не задан —'],[e.player1_id,p1?.nickname||'Игрок 1'],[e.player2_id,p2?.nickname||'Игрок 2']];
     return`<div class="enc-card">
       <div class="enc-head"><span class="enc-vs">${escapeHtml(p1?.nickname||'?')} <span style="color:var(--sub)">vs</span> ${escapeHtml(p2?.nickname||'?')}</span><button class="btn-r" onclick="delEnc('${e.id}')" title="Удалить встречу">✕</button></div>
-      <input type="text" value="${escapeHtml(e.stage||'')}" placeholder="стадия (Гранд-финал и т.п.)" onchange="updateEncMeta('${e.id}',{stage:this.value.trim()||null})" style="font-size:12px;padding:5px 8px;width:100%">
+      ${stageSel(e)}
       <select onchange="setEncWinner('${e.id}',this.value)" style="font-size:12px;padding:5px 8px;width:100%" title="Победитель">
         ${opts.map(([val,l])=>`<option value="${val}" ${String(e.winner_id||'')===String(val)?'selected':''}>${escapeHtml(l)}</option>`).join('')}
       </select>
@@ -188,9 +212,8 @@ async function openBracketEditor(tourId,tourName){
     </div>`;
   }).join('');
   const plDatalist=`<datalist id="be-pl-list">${D.players.map(p=>`<option value="${escapeHtml(p.nickname)}"></option>`).join('')}</datalist>`;
-  html(`<button class="btn btn-g" style="margin-bottom:16px" onclick="go('tournaments')">← Назад</button>
-  ${plDatalist}
-  ${skeleton}
+  // под-экран «Обзор встреч» (каркас + добавление + сетка встреч)
+  const overview=`${skeleton}
   <div class="card" style="margin-bottom:16px">
     <h3>Добавить встречу в сетку</h3>
     <div class="grid2" style="margin-bottom:8px">
@@ -200,6 +223,13 @@ async function openBracketEditor(tourId,tourName){
     <div style="font-size:11px;color:var(--sub);margin-bottom:8px">Драфт и таймеры — через «Матч 1/2». Победителя можно выставить и вручную справа.</div>
     <button class="btn btn-y" onclick="addEncTo('${tourId}','${tourName.replace(/'/g,"\\'")}')">Создать встречу</button>
   </div>
+  <div class="enc-grid">${rows||'<p style="color:var(--sub);font-size:14px">Встреч ещё нет</p>'}</div>`;
+  html(`<button class="btn btn-g" style="margin-bottom:16px" onclick="go('tournaments')">← Назад</button>
+  ${plDatalist}
+  <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap">
+    <button id="be-tg-overview" class="btn btn-y" onclick="toggleBracketTab('overview')">Обзор встреч</button>
+    <button id="be-tg-results" class="btn btn-g" onclick="toggleBracketTab('results')">Результаты</button>
+  </div>
   <style>
     .enc-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:14px;align-items:start}
     .enc-card{background:var(--card,#11131a);border:1px solid var(--border);border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:10px}
@@ -207,7 +237,45 @@ async function openBracketEditor(tourId,tourName){
     .enc-vs{font-weight:600;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
     .enc-acts{display:flex;gap:8px}
   </style>
-  <div class="enc-grid">${rows||'<p style="color:var(--sub);font-size:14px">Встреч ещё нет</p>'}</div>`);
+  <div id="be-tab-overview">${overview}</div>
+  <div id="be-tab-results" hidden>${await resultsEditorHTML(tourId)}</div>`);
+  if(!isCh)enableSeedDrag(tourId,tourName,parts||[]);
+}
+// переключение под-экранов редактора сетки: «Обзор встреч» | «Результаты»
+function toggleBracketTab(which){
+  const tabs=['overview','results'];
+  tabs.forEach(name=>{
+    const sec=document.getElementById('be-tab-'+name);
+    const btn=document.getElementById('be-tg-'+name);
+    if(sec)sec.hidden=name!==which;
+    if(btn){btn.classList.toggle('btn-y',name===which);btn.classList.toggle('btn-g',name!==which);}
+  });
+}
+// Перетаскивание слотов 1-го раунда → меняет посев (participants.seed) местами. Только не-Challonge.
+function enableSeedDrag(tourId,tourName,parts){
+  const seedToPid={};parts.forEach(p=>{if(p.seed!=null)seedToPid[p.seed]=p.player_id;});
+  let dragSeed=null;
+  document.querySelectorAll('#be-tab-overview .sk-drag').forEach(el=>{
+    el.addEventListener('dragstart',e=>{dragSeed=el.dataset.seed;e.dataTransfer.effectAllowed='move';el.style.opacity='.4';});
+    el.addEventListener('dragend',()=>{el.style.opacity='';el.classList.remove('sk-over');});
+    el.addEventListener('dragover',e=>{e.preventDefault();if(el.dataset.seed!==dragSeed)el.classList.add('sk-over');});
+    el.addEventListener('dragleave',()=>el.classList.remove('sk-over'));
+    el.addEventListener('drop',async e=>{
+      e.preventDefault();el.classList.remove('sk-over');
+      const targetSeed=el.dataset.seed;
+      if(!dragSeed||dragSeed===targetSeed)return;
+      const a=seedToPid[dragSeed],b=seedToPid[targetSeed];
+      if(!a&&!b)return;
+      // меняем местами значения seed у двух участников (b может отсутствовать → просто переносим)
+      const ops=[];
+      if(a)ops.push(sb.from('tournament_participants').update({seed:+targetSeed}).eq('tournament_id',tourId).eq('player_id',a));
+      if(b)ops.push(sb.from('tournament_participants').update({seed:+dragSeed}).eq('tournament_id',tourId).eq('player_id',b));
+      const res=await Promise.all(ops);
+      const bad=res.find(r=>r.error);
+      if(bad){dbErr(bad.error,'смена посева');return;}
+      toast('Посев обновлён');openBracketEditor(tourId,tourName);
+    });
+  });
 }
 // ===== ГИБРИД: синк с Challonge (авто) + ручной редактор результатов =====
 function challongeSlug(url){if(!url)return null;const m=String(url).match(/challonge\.com\/(?:[a-z]{2}\/)?([A-Za-z0-9_]+)/);return m?m[1]:String(url).replace(/^.*\//,'');}
