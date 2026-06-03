@@ -119,7 +119,7 @@
   .cur-btn:hover .cb-tx{color:#fff}
 
   /* match review cards (вкладка Результаты, 4 в ряд) */
-  .rev-wrap{max-width:1080px;margin:30px auto 10px;padding:0 28px}
+  .rev-wrap{max-width:1680px;margin:30px auto 10px;padding:0 28px}
   .rev-h{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;text-transform:uppercase;font-size:20px;margin-bottom:14px;color:var(--text)}
   .rev-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
   @media(max-width:900px){.rev-grid{grid-template-columns:repeat(2,1fr)}}
@@ -132,6 +132,24 @@
   .rev-row .rev-nm{flex:1;font-weight:600;font-size:14px;color:#9a9aa3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .rev-row.win .rev-nm{color:#fff;font-weight:700}
   .rev-row .rev-w{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;background:rgba(70,211,105,.16);color:var(--win);font-size:12px;font-weight:700}
+  /* stat block (сыгранные матчи встречи) */
+  .rev-top{display:flex;align-items:center;gap:8px;margin-bottom:7px}
+  .rev-top .rt-nm{flex:1;min-width:0;font-weight:700;font-size:14px;color:#9a9aa3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .rev-top .rt-nm.r{text-align:right}
+  .rev-top .rt-nm.w{color:#ff3b6b}
+  .rev-sum{display:flex;align-items:center;justify-content:center;gap:10px;font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--sub);margin-bottom:8px}
+  .rev-arr{color:#ff3b6b;font-weight:900;font-family:'Saira Condensed',sans-serif;font-style:italic}
+  /* матч = 2 строки (по игроку); каждая в своей половине, иконки рядами по 3 */
+  .rev-m{padding:6px 0}
+  .rev-m+.rev-m{border-top:1px solid var(--line)}
+  .rev-pl{display:flex;align-items:center;gap:7px;padding:3px 0}
+  .rev-pl.r{flex-direction:row-reverse}
+  .rev-ics{display:grid;grid-template-columns:repeat(3,28px);gap:3px}
+  .rev-pl.r .rev-ics{justify-items:end}
+  .rev-tmr{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--sub)}
+  .rbs{display:inline-flex;gap:2px;flex-shrink:0}
+  .rb{width:3px;height:12px;background:#3a3a42;transform:skewX(-18deg);border-radius:1px}
+  .rb.on{background:#f0902a}
 
   /* format sub-tabs (Сетка / Результаты) */
   .fmtrow{display:flex;gap:0;padding:0 24px;border-bottom:1px solid var(--border);background:rgba(11,11,13,.4)}
@@ -323,12 +341,13 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="web/bracket-model.js"></script>
+<script>document.write('<script src="web/icons.js?v='+Date.now()+'"><\/script>');</script>
 <script>
 const SB_URL='https://zoavnckfbfiejxfjakue.supabase.co';
 const SB_KEY='sb_publishable_37RZBsmdp3O1i795EuEfeg_vFpdPTFZ';
 const sb=supabase.createClient(SB_URL,SB_KEY);
 
-const S={tours:[],players:{},encounters:[],results:{},parts:{},cache:{},cur:null,fmt:'bracket',view:'all'};
+const S={tours:[],players:{},encounters:[],results:{},parts:{},cache:{},charMap:{},matchesByEnc:{},cur:null,fmt:'bracket',view:'all'};
 const GAME='Zenless Zone Zero';
 const fmtDate=d=>d?new Date(d).toLocaleDateString('ru',{day:'2-digit',month:'short',year:'numeric'}):'—';
 // дата в формате 02.06 (день.месяц)
@@ -368,13 +387,15 @@ function challongeSlug(url){
 }
 
 async function boot(){
-  const [ts,ps,es,rs,pa,bc]=await Promise.all([
+  const [ts,ps,es,rs,pa,bc,ch,mt]=await Promise.all([
     sb.from('tournaments').select('*').order('created_at',{ascending:false}),
     sb.from('players').select('id,nickname'),
     sb.from('encounters').select('*'),
     sb.from('tournament_results').select('*').then(r=>r,()=>({data:[]})),
     sb.from('tournament_participants').select('*').then(r=>r,()=>({data:[]})),
-    sb.from('bracket_cache').select('*').then(r=>r,()=>({data:[]}))
+    sb.from('bracket_cache').select('*').then(r=>r,()=>({data:[]})),
+    sb.from('characters').select('id,name,role,element,rarity,icon_url,portrait_url').then(r=>r,()=>({data:[]})),
+    sb.from('matches').select('*,picks:match_picks(*)').then(r=>r,()=>({data:[]}))
   ]);
   S.tours=ts.data||[];
   (ps.data||[]).forEach(p=>S.players[p.id]=p.nickname);
@@ -382,6 +403,8 @@ async function boot(){
   (rs.data||[]).forEach(r=>{(S.results[r.tournament_id]=S.results[r.tournament_id]||[]).push(r)});
   (pa.data||[]).forEach(p=>{(S.parts[p.tournament_id]=S.parts[p.tournament_id]||[]).push(p)});
   (bc.data||[]).forEach(c=>{S.cache[c.tournament_id]=c.json});
+  S.charMap={};(ch.data||[]).forEach(c=>S.charMap[c.id]=c);
+  S.matchesByEnc={};(mt.data||[]).forEach(m=>{(S.matchesByEnc[m.encounter_id]=S.matchesByEnc[m.encounter_id]||[]).push(m);});
   // default landing = «Все сетки» index
   S.view='all';S.cur=null;
   renderTourbar();
@@ -632,20 +655,47 @@ function seedHTML(s,played){
     <span class="sc">${s.win?'✓':''}</span></div>`;
 }
 
-// плашки-обзор сыгранных встреч (только добавленные в статистику = с победителем), 4 в ряд
+// плашки-обзор сыгранных встреч (только добавленные в статистику = с победителем), 4 в ряд.
+// Если по встрече есть сыгранные матчи (matches+picks) — показываем стату: суммарные таймеры
+// игроков + разница, иконки персонажей, таймер и полоски рестартов по каждому матчу.
 function encReviewCards(t){
   const encs=S.encounters.filter(e=>e.tournament_id==t.id&&e.winner_id)
     .sort((a,b)=>(a.sort_order??1e9)-(b.sort_order??1e9));
   if(!encs.length)return'';
-  const row=(name,win)=>`<div class="rev-row ${win?'win':''}"><span class="rev-nm">${esc(name||'—')}</span>${win?'<span class="rev-w">✓</span>':''}</div>`;
+  const fmt=s=>`${Math.floor((s||0)/60)}:${String((s||0)%60).padStart(2,'0')}`;
+  const tmr=s=>s?fmt(s):'—';
+  const bars=n=>{let h='';for(let i=0;i<4;i++)h+=`<span class="rb${i<(n||0)?' on':''}"></span>`;return`<span class="rbs">${h}</span>`;};
+  const ics=(m,pid)=>(m.picks||[]).filter(p=>String(p.player_id)===String(pid))
+    .map(p=>iconChar(S.charMap[p.character_id]||null,26)).join('');
+  const simple=(name,win)=>`<div class="rev-row ${win?'win':''}"><span class="rev-nm">${esc(name||'—')}</span>${win?'<span class="rev-w">✓</span>':''}</div>`;
+  // стрелка-указатель на победителя: «<» на левого (p1), «>» на правого (p2)
+  const arrL=winId=>winId===e0.player1_id?'<span class="rev-arr">&lt;</span>':'';
+  const arrR=winId=>winId===e0.player2_id?'<span class="rev-arr">&gt;</span>':'';
+  let e0;
+  const card=e=>{
+    e0=e;
+    const w1=e.winner_id===e.player1_id,w2=e.winner_id===e.player2_id;
+    const p1n=S.players[e.player1_id],p2n=S.players[e.player2_id];
+    const ms=(S.matchesByEnc[e.id]||[]).slice().sort((a,b)=>(a.match_number||0)-(b.match_number||0));
+    let body;
+    if(ms.length){
+      let s1=0,s2=0;ms.forEach(m=>{s1+=m.player1_timer_sec||0;s2+=m.player2_timer_sec||0;});
+      // каждый матч = 2 строки (p1 слева, p2 справа), иконки рядами по 3
+      const rows=ms.map(m=>`<div class="rev-m">
+        <div class="rev-pl"><span class="rev-ics">${ics(m,e.player1_id)}</span>${arrL(m.winner_id)}<span class="rev-tmr">${tmr(m.player1_timer_sec)}</span>${bars(m.player1_restarts)}</div>
+        <div class="rev-pl r"><span class="rev-ics">${ics(m,e.player2_id)}</span>${arrR(m.winner_id)}<span class="rev-tmr">${tmr(m.player2_timer_sec)}</span>${bars(m.player2_restarts)}</div>
+      </div>`).join('');
+      body=`<div class="rev-top"><span class="rt-nm${w1?' w':''}">${esc(p1n||'—')}</span><span class="rt-nm r${w2?' w':''}">${esc(p2n||'—')}</span></div>
+        <div class="rev-sum"><span>${fmt(s1)}</span>${arrL(e.winner_id)||arrR(e.winner_id)}<span>${fmt(s2)}</span></div>
+        ${rows}`;
+    }else{
+      body=simple(p1n,w1)+simple(p2n,w2);
+    }
+    return`<div class="rev-card">${e.stage?`<div class="rev-stage">${esc(e.stage)}</div>`:''}${body}</div>`;
+  };
   return`<div class="rev-wrap">
     <div class="rev-h">Обзор встреч</div>
-    <div class="rev-grid">${encs.map(e=>`
-      <div class="rev-card">
-        ${e.stage?`<div class="rev-stage">${esc(e.stage)}</div>`:''}
-        ${row(S.players[e.player1_id],e.winner_id===e.player1_id)}
-        ${row(S.players[e.player2_id],e.winner_id===e.player2_id)}
-      </div>`).join('')}</div>
+    <div class="rev-grid">${encs.map(card).join('')}</div>
   </div>`;
 }
 function renderResults(t){
