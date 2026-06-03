@@ -203,11 +203,38 @@ function bracketRoundNames(t,seeds){
   const m=BracketModel.skeletonModel(t.bracket_type||'SE',n,seeds);
   return m?m.rounds.map(r=>r.name):[];
 }
+// Стата по сыгранным матчам встречи в enc-card (ТОЛЬКО отображение).
+// ник1 слева/ник2 справа, суммы таймеров + разница, победитель малиновым,
+// иконки персонажей (как в openMatch), матчи строками с таймерами и полосками рестартов.
+function encStatHtml(e,matches,plMap){
+  if(!matches||!matches.length)return'';
+  const p1=plMap[e.player1_id],p2=plMap[e.player2_id];
+  const fmt=s=>`${Math.floor((s||0)/60)}:${String((s||0)%60).padStart(2,'0')}`;
+  const tmr=s=>s?fmt(s):'—';
+  const bars=n=>{let h='';for(let i=0;i<4;i++)h+=`<span class="rb${i<(n||0)?' on':''}"></span>`;return`<span class="rbs">${h}</span>`;};
+  const ics=(m,pid)=>(m.picks||[]).filter(p=>String(p.player_id)===String(pid))
+    .map(p=>iconChar(D.chars.find(c=>c.id===p.character_id)||null,28)).join('');
+  let s1=0,s2=0;matches.forEach(m=>{s1+=m.player1_timer_sec||0;s2+=m.player2_timer_sec||0;});
+  const w1=String(e.winner_id||'')===String(e.player1_id),w2=String(e.winner_id||'')===String(e.player2_id);
+  const ms=matches.slice().sort((a,b)=>(a.match_number||0)-(b.match_number||0));
+  const rows=ms.map(m=>`<div class="es-m">
+    <span class="es-side"><span class="es-ics">${ics(m,e.player1_id)}</span><span class="es-tmr">${tmr(m.player1_timer_sec)}</span>${bars(m.player1_restarts)}</span>
+    <span class="es-side r">${bars(m.player2_restarts)}<span class="es-tmr">${tmr(m.player2_timer_sec)}</span><span class="es-ics">${ics(m,e.player2_id)}</span></span>
+  </div>`).join('');
+  return`<div class="enc-stat">
+    <div class="es-top"><span class="es-nm${w1?' es-win':''}">${escapeHtml(p1?.nickname||'?')}</span><span class="es-nm r${w2?' es-win':''}">${escapeHtml(p2?.nickname||'?')}</span></div>
+    <div class="es-sum"><span>${fmt(s1)}</span><span class="es-diff">Δ ${fmt(Math.abs(s1-s2))}</span><span>${fmt(s2)}</span></div>
+    ${rows}
+  </div>`;
+}
 async function openBracketEditor(tourId,tourName){
   document.getElementById('page-title').textContent=`Сетка — ${tourName}`;
   const{data:encsRaw}=await sb.from('encounters').select('*').eq('tournament_id',tourId).order('created_at',{ascending:false});
   const{data:parts}=await sb.from('tournament_participants').select('*').eq('tournament_id',tourId).order('seed',{ascending:true});
   const encs=(encsRaw||[]).slice().sort((a,b)=>(a.sort_order??1e9)-(b.sort_order??1e9));
+  // сыгранные матчи встреч (только для отображения статы в enc-card)
+  const{data:matchesRaw}=encs.length?await sb.from('matches').select('*,picks:match_picks(*)').in('encounter_id',encs.map(e=>e.id)):{data:[]};
+  const mByEnc={};(matchesRaw||[]).forEach(m=>{(mByEnc[m.encounter_id]=mByEnc[m.encounter_id]||[]).push(m);});
   const plMap={};D.players.forEach(p=>plMap[p.id]=p);
   const seeds=(parts||[]).map(pt=>plMap[pt.player_id]?.nickname).filter(Boolean);
   const t=D.tours.find(x=>x.id===tourId)||{};
@@ -247,6 +274,7 @@ async function openBracketEditor(tourId,tourName){
         <button class="btn btn-g" style="font-size:12px;padding:5px 10px;flex:1" onclick="openMatch('${e.id}',1,'${e.player1_id}','${e.player2_id}')">Матч 1</button>
         <button class="btn btn-g" style="font-size:12px;padding:5px 10px;flex:1" onclick="openMatch('${e.id}',2,'${e.player1_id}','${e.player2_id}')">Матч 2</button>
       </div>
+      ${encStatHtml(e,mByEnc[e.id],plMap)}
     </div>`;
   }).join('');
   const plDatalist=`<datalist id="be-pl-list">${D.players.map(p=>`<option value="${escapeHtml(p.nickname)}"></option>`).join('')}</datalist>`;
@@ -274,6 +302,21 @@ async function openBracketEditor(tourId,tourName){
     .enc-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
     .enc-vs{font-weight:600;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
     .enc-acts{display:flex;gap:8px}
+    .enc-stat{border-top:1px solid var(--border);padding-top:10px;margin-top:2px;display:flex;flex-direction:column;gap:7px}
+    .es-top{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600}
+    .es-top .es-nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .es-top .es-nm.r{text-align:right}
+    .es-win{color:#ff3b6b}
+    .es-sum{display:flex;align-items:center;justify-content:center;gap:12px;font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--sub)}
+    .es-diff{color:var(--accent)}
+    .es-m{display:flex;align-items:center;gap:8px;font-size:11px}
+    .es-side{display:flex;align-items:center;gap:5px;flex:1;min-width:0}
+    .es-side.r{justify-content:flex-end}
+    .es-ics{display:inline-flex;gap:2px;flex-wrap:wrap}
+    .es-tmr{font-family:'JetBrains Mono',monospace;color:var(--sub)}
+    .rbs{display:inline-flex;gap:2px;flex-shrink:0}
+    .rb{width:3px;height:11px;background:#444;transform:skewX(-18deg);border-radius:1px}
+    .rb.on{background:#e8902a}
   </style>
   <div id="be-tab-overview">${overview}</div>
   <div id="be-tab-results" hidden>${await resultsEditorHTML(tourId)}</div>`);
