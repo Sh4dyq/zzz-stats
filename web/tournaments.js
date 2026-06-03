@@ -651,12 +651,15 @@ async function importTourRuleset(tourId){
       // оффроль (флэт base[5])
       const offEl=document.querySelector(`.ac-off[data-sig="${s.id}"]`);
       if(offEl&&bs[5]!=null){offEl.value=bs[5];ampFilled++;}
-      // bis: строка на каждого не-владельца с переопределением
+      // bis: строка на каждого переопределённого агента, ВКЛЮЧАЯ владельца.
+      // В рулсете shiyu base[] = кост для обычного агента своей роли (не-владельца),
+      // а bis[ownerEnka] = реальный (BIS) кост самого владельца — он ВЫШЕ base и должен
+      // резолвиться для пика владельца. Поэтому владельца тоже пишем bis-строкой
+      // (statistics.sigCostOf: bis[cid] → own → off), не теряя его настоящий кост.
       const cont=document.getElementById('bis-rows-'+s.id);
       if(cont&&e.bis){
         cont.innerHTML='';
         Object.entries(e.bis).forEach(([agentEnka,costs])=>{
-          if(agentEnka===ownerEnka)return;          // владелец котируется через own-role base
           const bc=byEnka[agentEnka];if(!bc)return;  // агента нет в БД
           cont.insertAdjacentHTML('beforeend',bisRowHtml(s.id,s.character_id,bc.id,costs||[]));
           ampFilled++;
