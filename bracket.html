@@ -121,7 +121,7 @@
   /* match review cards (вкладка Результаты, 4 в ряд) */
   .rev-wrap{max-width:1680px;margin:30px auto 10px;padding:0 28px}
   .rev-h{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;text-transform:uppercase;font-size:20px;margin-bottom:14px;color:var(--text)}
-  .rev-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+  .rev-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:14px}
   @media(max-width:900px){.rev-grid{grid-template-columns:repeat(2,1fr)}}
   @media(max-width:520px){.rev-grid{grid-template-columns:1fr}}
   .rev-card{background:linear-gradient(180deg,#1d1d22,#161618 70%);border:1px solid var(--border);border-radius:11px;padding:11px 13px;transition:border-color .15s}
@@ -133,20 +133,29 @@
   .rev-row.win .rev-nm{color:#fff;font-weight:700}
   .rev-row .rev-w{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;background:rgba(70,211,105,.16);color:var(--win);font-size:12px;font-weight:700}
   /* stat block (сыгранные матчи встречи) */
-  .rev-top{display:flex;align-items:center;gap:8px;margin-bottom:7px}
-  .rev-top .rt-nm{flex:1;min-width:0;font-weight:700;font-size:14px;color:#9a9aa3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .rev-top .rt-nm.r{text-align:right}
-  .rev-top .rt-nm.w{color:#ff3b6b}
-  .rev-sum{display:flex;align-items:center;justify-content:center;gap:10px;font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--sub);margin-bottom:8px}
-  .rev-arr{color:#ff3b6b;font-weight:900;font-family:'Saira Condensed',sans-serif;font-style:italic}
-  /* матч = 2 строки (по игроку); каждая в своей половине, иконки рядами по 3 */
-  .rev-m{padding:6px 0}
+  /* шапка: ники крупно, по бокам от итоговых таймеров встречи (всё по центру, не в углах) */
+  .rev-hd{display:flex;align-items:center;justify-content:center;gap:12px;margin-bottom:12px}
+  .rev-hd .rt-nm{font-size:17px;font-weight:700;color:#9a9aa3;max-width:34%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:center}
+  .rev-hd .rt-nm.w{color:#ff3b6b}
+  .rev-sum{display:flex;align-items:center;gap:8px;font-family:'JetBrains Mono',monospace;font-size:15px;font-weight:600;color:var(--sub);flex-shrink:0}
+  .rev-tot.win{color:#ff3b6b}
+  .rev-arr{color:#ff3b6b;font-weight:900;font-family:'Saira Condensed',sans-serif;font-style:italic;padding:0 1px}
+  .rev-diff{display:inline-flex;align-items:center;gap:3px;color:#c9c9d0;font-weight:600}
+  /* матч: ряд иконок (оба игрока на одном уровне), под ним ряд таймеров+рестартов, разница по центру */
+  .rev-m{padding:9px 0}
   .rev-m+.rev-m{border-top:1px solid var(--line)}
-  .rev-pl{display:flex;align-items:center;gap:7px;padding:3px 0}
-  .rev-pl.r{flex-direction:row-reverse}
-  .rev-ics{display:grid;grid-template-columns:repeat(3,28px);gap:3px}
-  .rev-pl.r .rev-ics{justify-items:end}
-  .rev-tmr{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--sub)}
+  .rev-irow,.rev-srow{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:6px}
+  .rev-srow{margin-top:7px}
+  .rev-side{display:flex;align-items:center;gap:6px;min-width:0}
+  .rev-irow .rev-side{justify-content:flex-end}
+  .rev-irow .rev-side.r{justify-content:flex-start}
+  .rev-srow .rev-side{justify-content:flex-end}
+  .rev-srow .rev-side.r{justify-content:flex-start}
+  .rev-ics{display:grid;grid-template-columns:repeat(3,36px);gap:4px}
+  .rev-side.r .rev-ics{justify-items:end}
+  .rev-mid{display:flex;align-items:center;justify-content:center;min-width:56px;flex-shrink:0}
+  .rev-tmr{font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--sub)}
+  .rev-tmr.win{color:#ff3b6b}
   .rbs{display:inline-flex;gap:2px;flex-shrink:0}
   .rb{width:3px;height:12px;background:#3a3a42;transform:skewX(-18deg);border-radius:1px}
   .rb.on{background:#f0902a}
@@ -666,12 +675,15 @@ function encReviewCards(t){
   const tmr=s=>s?fmt(s):'—';
   const bars=n=>{let h='';for(let i=0;i<4;i++)h+=`<span class="rb${i<(n||0)?' on':''}"></span>`;return`<span class="rbs">${h}</span>`;};
   const ics=(m,pid)=>(m.picks||[]).filter(p=>String(p.player_id)===String(pid))
-    .map(p=>iconChar(S.charMap[p.character_id]||null,26)).join('');
+    .map(p=>iconChar(S.charMap[p.character_id]||null,36)).join('');
   const simple=(name,win)=>`<div class="rev-row ${win?'win':''}"><span class="rev-nm">${esc(name||'—')}</span>${win?'<span class="rev-w">✓</span>':''}</div>`;
-  // стрелка-указатель на победителя: «<» на левого (p1), «>» на правого (p2)
-  const arrL=winId=>winId===e0.player1_id?'<span class="rev-arr">&lt;</span>':'';
-  const arrR=winId=>winId===e0.player2_id?'<span class="rev-arr">&gt;</span>':'';
   let e0;
+  // разница таймеров со стрелкой на победителя: «<» — левый (p1), «>» — правый (p2)
+  const diff=(t1,t2,winId)=>{
+    const aL=winId===e0.player1_id?'<span class="rev-arr">&lt;</span>':'';
+    const aR=winId===e0.player2_id?'<span class="rev-arr">&gt;</span>':'';
+    return`<span class="rev-diff">${aL}Δ ${fmt(Math.abs((t1||0)-(t2||0)))}${aR}</span>`;
+  };
   const card=e=>{
     e0=e;
     const w1=e.winner_id===e.player1_id,w2=e.winner_id===e.player2_id;
@@ -680,13 +692,26 @@ function encReviewCards(t){
     let body;
     if(ms.length){
       let s1=0,s2=0;ms.forEach(m=>{s1+=m.player1_timer_sec||0;s2+=m.player2_timer_sec||0;});
-      // каждый матч = 2 строки (p1 слева, p2 справа), иконки рядами по 3
-      const rows=ms.map(m=>`<div class="rev-m">
-        <div class="rev-pl"><span class="rev-ics">${ics(m,e.player1_id)}</span>${arrL(m.winner_id)}<span class="rev-tmr">${tmr(m.player1_timer_sec)}</span>${bars(m.player1_restarts)}</div>
-        <div class="rev-pl r"><span class="rev-ics">${ics(m,e.player2_id)}</span>${arrR(m.winner_id)}<span class="rev-tmr">${tmr(m.player2_timer_sec)}</span>${bars(m.player2_restarts)}</div>
-      </div>`).join('');
-      body=`<div class="rev-top"><span class="rt-nm${w1?' w':''}">${esc(p1n||'—')}</span><span class="rt-nm r${w2?' w':''}">${esc(p2n||'—')}</span></div>
-        <div class="rev-sum"><span>${fmt(s1)}</span>${arrL(e.winner_id)||arrR(e.winner_id)}<span>${fmt(s2)}</span></div>
+      // матч: верхний ряд — иконки обоих игроков на одном уровне; нижний — таймеры+рестарты, разница по центру
+      const rows=ms.map(m=>{
+        const tw1=m.winner_id===e.player1_id,tw2=m.winner_id===e.player2_id;
+        return`<div class="rev-m">
+        <div class="rev-irow">
+          <div class="rev-side"><span class="rev-ics">${ics(m,e.player1_id)}</span></div>
+          <div class="rev-mid"></div>
+          <div class="rev-side r"><span class="rev-ics">${ics(m,e.player2_id)}</span></div>
+        </div>
+        <div class="rev-srow">
+          <div class="rev-side"><span class="rev-tmr${tw1?' win':''}">${tmr(m.player1_timer_sec)}</span>${bars(m.player1_restarts)}</div>
+          <div class="rev-mid">${diff(m.player1_timer_sec,m.player2_timer_sec,m.winner_id)}</div>
+          <div class="rev-side r">${bars(m.player2_restarts)}<span class="rev-tmr${tw2?' win':''}">${tmr(m.player2_timer_sec)}</span></div>
+        </div>
+      </div>`;}).join('');
+      body=`<div class="rev-hd">
+          <span class="rt-nm${w1?' w':''}">${esc(p1n||'—')}</span>
+          <span class="rev-sum"><span class="rev-tot${w1?' win':''}">${fmt(s1)}</span>${diff(s1,s2,e.winner_id)}<span class="rev-tot${w2?' win':''}">${fmt(s2)}</span></span>
+          <span class="rt-nm r${w2?' w':''}">${esc(p2n||'—')}</span>
+        </div>
         ${rows}`;
     }else{
       body=simple(p1n,w1)+simple(p2n,w2);
