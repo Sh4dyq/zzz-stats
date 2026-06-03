@@ -360,6 +360,18 @@ const avg=a=>a.length?Math.round(a.reduce((x,y)=>x+y,0)/a.length):null;
 const cid=s=>s.replace(/[^A-Za-z0-9]/g,'_');
 
 function pic(name,role){const c=(S.characters||[]).find(x=>x.name===name)||{name,role};return iconChar(c,28);}
+// Любимый персонаж игрока по пикам (все ранги; при ничьей прячем A, иначе случайный).
+function favCharOf(pid){
+  const m={};
+  (S.picks||[]).forEach(pk=>{if(pk.player_id!==pid)return;if(!S.charMap[pk.character_id])return;m[pk.character_id]=(m[pk.character_id]||0)+1;});
+  const ids=Object.keys(m);if(!ids.length)return null;
+  const max=Math.max(...ids.map(id=>m[id]));
+  let tied=ids.filter(id=>m[id]===max);
+  if(tied.length>1){const sOnly=tied.filter(id=>S.charMap[id].rarity!=='A');if(sOnly.length)tied=sOnly;}
+  return tied[Math.floor(Math.random()*tied.length)];
+}
+// Плейсхолдер фото игрока = иконка любимого персонажа (если несколько — случайный); иначе пустой слот.
+function picP(p){const cid=favCharOf(p.id);return cid?iconChar(S.charMap[cid],28):pic(p.nickname,'');}
 
 async function loadAll(){
   document.getElementById('loading').style.display='block';
@@ -660,20 +672,20 @@ function renderPV(vStats,isAll){
     const s=vStats[p.id]||{v:0,w:0,l:0,timers:[]};
     const wrPct=wr(s.w,0,s.v);
     const avgT=fSec(avg(s.timers));
-    return`<tr><td class="nc"><div style="display:flex;align-items:center;gap:6px">${pic(p.nickname,'')}<span>${p.nickname}</span></div></td><td>${s.v}</td><td>${s.w}</td><td>${s.l}</td><td class="${wc(wrPct)}">${f1(wrPct)}</td><td>${avgT}</td></tr>`;
+    return`<tr><td class="nc"><div style="display:flex;align-items:center;gap:6px">${picP(p)}<span>${p.nickname}</span></div></td><td>${s.v}</td><td>${s.w}</td><td>${s.l}</td><td class="${wc(wrPct)}">${f1(wrPct)}</td><td>${avgT}</td></tr>`;
   });
   document.getElementById('players-area').innerHTML=`<table>${head}<tbody>${rows.join('')}</tbody></table>`;
 }
 
 function renderPM(mStats,isAll){
-  const head=`<thead><tr><th class="nc">Ник</th><th onclick="sortP(1)">Σ матч</th><th onclick="sortP(2)">W</th><th>D</th><th onclick="sortP(4)">L</th><th onclick="sortP(5)">WR%</th><th onclick="sortP(6)">WR фп%</th><th onclick="sortP(7)">WR дабл%</th><th onclick="sortP(8)">Σ рест</th><th onclick="sortP(9)">AVG рест</th><th onclick="sortP(10)">AVG таймер</th></tr></thead>`;
+  const head=`<thead><tr><th class="nc">Ник</th><th onclick="sortP(1)">Σ матч</th><th onclick="sortP(2)">W</th><th>D</th><th onclick="sortP(4)">L</th><th onclick="sortP(5)">WR%</th><th onclick="sortP(6)">WR фп%</th><th onclick="sortP(7)">WR дабл%</th><th onclick="sortP(8)">Σ рест</th><th onclick="sortP(9)">AVG рест</th><th onclick="sortP(10)">AVG таймер</th><th onclick="sortP(11)">AVG таймер W</th><th onclick="sortP(12)">AVG таймер L</th></tr></thead>`;
   const activePl=S.players.filter(p=>mStats[p.id]);
-  if(!activePl.length){document.getElementById('players-area').innerHTML=`<table><tbody><tr><td class="empty" colspan="11">Нет данных</td></tr></tbody></table>`;return;}
+  if(!activePl.length){document.getElementById('players-area').innerHTML=`<table><tbody><tr><td class="empty" colspan="13">Нет данных</td></tr></tbody></table>`;return;}
   const rows=activePl.map(p=>{
     const s=mStats[p.id]||{m:0,w:0,d:0,l:0,fpm:0,fpw:0,fpd:0,dm:0,dw2:0,dd:0,rests:0,wtimers:[],ltimers:[]};
     const wrPct=wr(s.w,s.d,s.m),wrfp=wr(s.fpw,s.fpd,s.fpm),wrdbl=wr(s.dw2,s.dd,s.dm);
     const allT=[...s.wtimers,...s.ltimers];
-    return`<tr><td class="nc"><div style="display:flex;align-items:center;gap:6px">${pic(p.nickname,'')}<span>${p.nickname}</span></div></td><td>${s.m}</td><td>${s.w}</td><td class="m">${s.d}</td><td>${s.l}</td><td class="${wc(wrPct)}">${f1(wrPct)}</td><td class="${wc(wrfp)}">${f1(wrfp)}</td><td class="${wc(wrdbl)}">${f1(wrdbl)}</td><td>${s.rests}</td><td>${s.m?(s.rests/s.m).toFixed(2):'—'}</td><td>${fSec(avg(allT))}</td></tr>`;
+    return`<tr><td class="nc"><div style="display:flex;align-items:center;gap:6px">${picP(p)}<span>${p.nickname}</span></div></td><td>${s.m}</td><td>${s.w}</td><td class="m">${s.d}</td><td>${s.l}</td><td class="${wc(wrPct)}">${f1(wrPct)}</td><td class="${wc(wrfp)}">${f1(wrfp)}</td><td class="${wc(wrdbl)}">${f1(wrdbl)}</td><td>${s.rests}</td><td>${s.m?(s.rests/s.m).toFixed(2):'—'}</td><td>${fSec(avg(allT))}</td><td>${fSec(avg(s.wtimers))}</td><td>${fSec(avg(s.ltimers))}</td></tr>`;
   });
   document.getElementById('players-area').innerHTML=`<table>${head}<tbody>${rows.join('')}</tbody></table>`;
 }
@@ -729,7 +741,7 @@ function renderRosters(isAll){
   if(!activePl.length){document.getElementById('players-area').innerHTML=`<table>${head}<tbody><tr><td class="empty" colspan="7">Нет данных по ростерам</td></tr></tbody></table>`;return;}
   const rows=activePl.map(p=>{
     const a=data[p.id].agg;
-    return`<tr><td class="nc"><div style="display:flex;align-items:center;gap:6px">${pic(p.nickname,'')}<span>${p.nickname}</span></div></td>`+
+    return`<tr><td class="nc"><div style="display:flex;align-items:center;gap:6px">${picP(p)}<span>${p.nickname}</span></div></td>`+
       `<td class="ic">${fmt(a.atk)}</td><td class="ic">${fmt(a.stun)}</td><td class="ic">${fmt(a.rupt)}</td><td class="ic">${fmt(a.sd)}</td><td class="ic">${fmt(a.ano)}</td>`+
       `${isAll?`<td class="ic">${data[p.id].n}</td>`:''}</tr>`;
   });
@@ -790,7 +802,7 @@ function renderMisc(){
       : '—';
     const pr=S.playerMap[p.id]?.prize;
     const prize=pr!=null?`<span class="prize-rub">${String(pr).replace(/\B(?=(\d{3})+(?!\d))/g,' ')} ₽</span>`:'—';
-    return`<tr><td class="nc"><div style="display:flex;align-items:center;gap:6px">${pic(p.nickname,'')}<span>${p.nickname}</span></div></td>`+
+    return`<tr><td class="nc"><div style="display:flex;align-items:center;gap:6px">${picP(p)}<span>${p.nickname}</span></div></td>`+
       `<td>${fav}</td><td>${d.matches}</td><td>${d.tours.size}</td><td>${placeCell(p.highest_place,p.highest_place_count)}</td><td>${prize}</td><td>${p.age??'—'}</td></tr>`;
   });
   document.getElementById('players-area').innerHTML=`<table>${head}<tbody>${rows.join('')}</tbody></table>`;
