@@ -540,8 +540,8 @@ function computeChars(){
       ppt:pctT(sum.pk,T2),bpt:pctT(aBd,T2),pbn:sum.pk+aBn,pbpt:pctT(sum.pk+aBd,T2),
       rspt:pctT(sum.rs,totalP),spt:pctT(sum.sp,T2)
     };
-    const costs=[...new Set(g.variants.map(v=>v.cost).filter(c=>c!=='—'))].sort((a,b)=>a-b);
-    const scs=[...new Set(g.variants.map(v=>v.sc).filter(c=>c!=='—'))].sort((a,b)=>a-b);
+    const costs=[...new Set(g.variants.map(v=>v.cost).filter(c=>typeof c==='number'))].sort((a,b)=>a-b);
+    const scs=[...new Set(g.variants.map(v=>v.sc).filter(c=>typeof c==='number'))].sort((a,b)=>a-b);
     agg.cost=costs.length===0?'—':costs.length===1?costs[0]:`${costs[0]}–${costs[costs.length-1]}`;
     agg.sc=scs.length===0?'—':scs.length===1?scs[0]:`${scs[0]}–${scs[scs.length-1]}`;
     // η на персонажа: WR агрегата × средняя стоимость / кост. Только при едином численном косте.
