@@ -85,6 +85,8 @@ function applyDraftToForm(norm,pen){
   if(!fp||!dbl||fp===dbl){fp=norm.players.player0;dbl=norm.players.player1;oriented='по порядку (ник не совпал!)';}
   // actor player0 = первый ходящий = фп формы; player1 = дабл.
   const sideForActor={player0:fp,player1:dbl};
+  // Полный ростер сторон (17+ персонажей) для автозаполнения при сохранении матча.
+  window._draftRoster={fp:fp.mindscapeByEnka||{},dbl:dbl.mindscapeByEnka||{}};
   // Штраф за рестарты (накопительная сумма первых N инкрементов).
   const penSum=r=>{let s=0;for(let i=0;i<(r||0)&&i<pen.length;i++)s+=(+pen[i]||0);return s;};
   const eff=p=>p.clearTime==null?null:p.clearTime+penSum(p.restarts);

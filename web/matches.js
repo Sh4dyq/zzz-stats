@@ -72,10 +72,18 @@ async function pgMatches(){
       <button class="btn btn-g" onclick="addEncWithResults()" title="Создаёт встречу и сразу импортирует матчи из вставленных ссылок">⚡ Создать с результатами</button>
     </div>
   </div>
+  <div class="card" style="margin-bottom:16px">
+    <h3>⚡ Массовый импорт по ссылкам</h3>
+    <div style="font-size:11px;color:var(--sub);margin-bottom:8px">Вставь ВСЕ ссылки shiyu.darte.gg (по одной на строку, любой порядок). Парами по игрокам соберутся встречи (матч 1 и 2), импортируются результаты И полные ростеры обоих игроков. Существующие встречи переиспользуются (не дублируются).</div>
+    <div style="margin-bottom:8px;max-width:340px"><label>Турнир</label>${sel('bulk-tour',D.tours,x=>x.id,x=>x.name)}</div>
+    <textarea id="bulk-links" rows="8" placeholder="https://shiyu.darte.gg/draft?draft_id=...&session_key=...&#10;https://shiyu.darte.gg/draft?draft_id=...&session_key=..." style="width:100%;padding:8px 10px;font-size:12px;font-family:'JetBrains Mono',monospace;resize:vertical"></textarea>
+    <div id="bulk-status" style="font-size:11px;color:var(--sub);min-height:13px;margin:8px 0"></div>
+    <button class="btn btn-g" onclick="bulkImportDrafts()">Импортировать всё</button>
+  </div>
   <div class="space-y" id="enc-list">${list||'<p style="color:var(--sub);font-size:14px">Встреч ещё нет</p>'}</div>`);
   // авто-подстановка актуального (live) турнира в селект новой встречи
   const liveT=D.tours.find(t=>t.status==='live');
-  if(liveT){const es=document.getElementById('e-tour');if(es)es.value=liveT.id;}
+  if(liveT){['e-tour','bulk-tour'].forEach(id=>{const es=document.getElementById(id);if(es)es.value=liveT.id;});}
   // drag-and-drop ручная сортировка встреч (порядок отражается и на главной)
   enableReorder(document.getElementById('enc-list'),'encounters',pgMatches);
 }
@@ -142,6 +150,67 @@ async function addEncWithResults(){
   set(`Готово: импортировано ${ok} матч(ей)`+(errs.length?` · ⚠ ${errs.join('; ')}`:''));
   toast(errs.length?'Создано с предупреждениями':'Встреча с результатами создана',errs.length?'err':'ok');
   pgMatches();
+}
+
+// Встреча по паре игроков в турнире: переиспользует существующую (в любом
+// порядке игроков) или создаёт новую. Возвращает строку encounters.
+async function findOrCreateEncounter(tourId,p1,p2){
+  const{data:exist}=await sb.from('encounters').select('*').eq('tournament_id',tourId);
+  const e=(exist||[]).find(x=>(x.player1_id===p1&&x.player2_id===p2)||(x.player1_id===p2&&x.player2_id===p1));
+  if(e)return e;
+  const{data,error}=await sb.from('encounters').insert({tournament_id:tourId,player1_id:p1,player2_id:p2}).select().single();
+  if(error)throw error;
+  return data;
+}
+
+// Массовый импорт: textarea со ВСЕМИ ссылками → встречи (пары игроков) + матчи
+// + полные ростеры. Каждую ссылку читаем для имён игроков, группируем по паре,
+// затем importMatchFromLink (он же пишет матч/пики/ростеры). Номер матча по тому,
+// чей фп: фп==player1 встречи → матч 1, иначе матч 2.
+async function bulkImportDrafts(){
+  const t=v('bulk-tour');
+  if(!t)return toast('Выбери турнир','err');
+  const raw=document.getElementById('bulk-links')?.value||'';
+  const links=raw.split(/\s+/).map(s=>s.trim()).filter(s=>/(?:draft_id|session_id)=/.test(s));
+  if(!links.length)return toast('Вставь ссылки (по одной на строку)','err');
+  const set=m=>{const el=document.getElementById('bulk-status');if(el)el.textContent=m;};
+  const{data:tRow}=await sb.from('tournaments').select('restart_penalties').eq('id',t).maybeSingle();
+  const pen=tRow?.restart_penalties||[];
+  const ids=await loadShiyuIds();
+  // 1) читаем драфты → имена игроков (player0=фп, player1=дабл)
+  const metas=[],errs=[];
+  for(let i=0;i<links.length;i++){
+    set(`Читаю драфты… ${i+1}/${links.length}`);
+    try{
+      const parsed=parseDraftLink(links[i]);if(!parsed)throw new Error('не разобрал ссылку');
+      const state=await fetchDraftState(parsed.id,parsed.key);
+      if(!state?.players)throw new Error('пустой драфт');
+      const norm=normalizeDraft(state,ids);
+      metas.push({url:links[i],fp:norm.players.player0.name,dbl:norm.players.player1.name});
+    }catch(e){errs.push(`ссылка #${i+1}: ${e.message}`);}
+  }
+  // 2) группируем по неупорядоченной паре ников
+  const groups={};
+  metas.forEach(m=>{const k=[m.fp,m.dbl].map(x=>(x||'').toLowerCase()).sort().join('|');(groups[k]||(groups[k]=[])).push(m);});
+  const keys=Object.keys(groups);let ok=0;
+  for(let g=0;g<keys.length;g++){
+    const grp=groups[keys[g]];
+    set(`Импорт встреч… ${g+1}/${keys.length}`);
+    try{
+      const p1=await resolvePlayerNick(grp[0].fp),p2=await resolvePlayerNick(grp[0].dbl);
+      if(!p1||!p2||p1===p2)throw new Error('не сопоставил игроков');
+      const e=await findOrCreateEncounter(t,p1,p2);
+      for(const m of grp){
+        const fpId=await resolvePlayerNick(m.fp);
+        const num=fpId===e.player1_id?1:2;
+        await importMatchFromLink(e.id,num,e.player1_id,e.player2_id,m.url,pen);
+        ok++;
+      }
+    }catch(e){errs.push(`пара ${grp[0].fp}/${grp[0].dbl}: ${e.message}`);}
+  }
+  set(`Готово: ${ok} матч(ей) в ${keys.length} встреч(ах)`+(errs.length?` · ⚠ ${errs.length}: ${errs.join('; ')}`:''));
+  toast(errs.length?'Импорт с предупреждениями':'Импорт завершён',errs.length?'err':'ok');
+  await refreshData();pgMatches();
 }
 
 // Headless-импорт: ссылка драфта → матч + пики/баны в БД, без DOM-борда.
@@ -268,6 +337,7 @@ async function openMatch(encId,num,p1Id,p2Id){
   const dblR=dblId===p1Id?(match?.player1_restarts||0):(match?.player2_restarts||0);
 
   document.getElementById('page-title').textContent=`Матч ${num} — ${fp?.nickname} (фп) vs ${dbl?.nickname}`;
+  window._draftRoster=null; // сбрасываем ростер прошлого матча
 
   // Контекст для импортёра: ники (для ориентации сторон по имени) + штрафы за рестарты турнира.
   let penalties=[];
@@ -640,6 +710,16 @@ async function saveMatch(encId,num,p1Id,p2Id,fpId,existingId){
     const encWin=p1T<=p2T?p1Id:p2Id;
     const{error}=await sb.from('encounters').update({winner_id:encWin}).eq('id',encId);
     if(dbErr(error,'обновление победителя встречи'))return;
+  }
+
+  // Автозаполнение ростеров из полного ростера драфта (если матч импортировали по ссылке).
+  const dr=window._draftRoster;
+  if(dr){
+    const agents=[];
+    Object.entries(dr.fp||{}).forEach(([enka,ms])=>{const ch=charByEnka(enka);if(ch)agents.push({player_id:fpId,character_id:ch.id,mindscape:ms||0});});
+    Object.entries(dr.dbl||{}).forEach(([enka,ms])=>{const ch=charByEnka(enka);if(ch)agents.push({player_id:dblId,character_id:ch.id,mindscape:ms||0});});
+    const{data:encRow}=await sb.from('encounters').select('tournament_id').eq('id',encId).maybeSingle();
+    if(encRow?.tournament_id)await autofillRostersFromMatch(encRow.tournament_id,agents);
   }
 
   toast('Матч сохранён!');
