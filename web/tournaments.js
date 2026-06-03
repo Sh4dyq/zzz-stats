@@ -212,6 +212,17 @@ async function openBracketEditor(tourId,tourName){
   const seeds=(parts||[]).map(pt=>plMap[pt.player_id]?.nickname).filter(Boolean);
   const t=D.tours.find(x=>x.id===tourId)||{};
   const isCh=!!t.challonge_url; // у Challonge посев/продвижение тянет синк — drag отключаем
+  // своя сетка (Фаза 2) — независимый движок
+  const{data:brk}=await sb.from('brackets').select('*').eq('tournament_id',tourId).maybeSingle();
+  let ownNodes=[];
+  if(brk){const{data:nd}=await sb.from('bracket_nodes').select('*').eq('bracket_id',brk.id);ownNodes=nd||[];}
+  const tnEsc=tourName.replace(/'/g,"\\'");
+  const ownSection=brk
+    ? ownBracketHTML(brk,ownNodes,plMap,tourId,tourName,encs)
+    : `<div class="card" style="margin-bottom:16px"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+        <div><h3 style="margin:0 0 4px">Своя сетка (движок)</h3><div style="font-size:11px;color:var(--sub)">Полностью своя сетка с авто-продвижением, независимо от Challonge. Берёт участников и формат турнира.</div></div>
+        <button class="btn btn-y" style="font-size:12px;padding:6px 14px" onclick="genOwnBracket('${tourId}','${tnEsc}')">⚙ Сгенерировать сетку</button>
+      </div></div>`;
   const roundNames=bracketRoundNames(t,seeds);
   const skeleton=`<div class="card" style="margin-bottom:16px">
     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:6px">
@@ -252,7 +263,8 @@ async function openBracketEditor(tourId,tourName){
   const plDatalist=`<datalist id="be-pl-list">${D.players.map(p=>`<option value="${escapeHtml(p.nickname)}"></option>`).join('')}</datalist>`;
   html(`<button class="btn btn-g" style="margin-bottom:16px" onclick="go('tournaments')">← Назад</button>
   ${plDatalist}
-  ${skeleton}
+  ${ownSection}
+  ${brk?'':skeleton}
   <div class="card" style="margin-bottom:16px">
     <h3>Добавить встречу в сетку</h3>
     <div class="grid2" style="margin-bottom:8px">
@@ -272,6 +284,7 @@ async function openBracketEditor(tourId,tourName){
   <div class="enc-grid">${rows||'<p style="color:var(--sub);font-size:14px">Встреч ещё нет</p>'}</div>
   ${await resultsEditorHTML(tourId)}`);
   if(!isCh)enableSeedDrag(tourId,tourName,parts||[]);
+  if(brk)setupOwnBracket(brk,tourId,tourName,encs,ownNodes,plMap);
 }
 // Перетаскивание слотов 1-го раунда → меняет посев (participants.seed) местами. Только не-Challonge.
 function enableSeedDrag(tourId,tourName,parts){
@@ -298,6 +311,170 @@ function enableSeedDrag(tourId,tourName,parts){
       toast('Посев обновлён');openBracketEditor(tourId,tourName);
     });
   });
+}
+// ===== СОБСТВЕННЫЙ ДВИЖОК СЕТОК (Фаза 2, независимо от Challonge) =====
+// Генерирует сетку из участников турнира, продвигает игроков по рёбрам при выборе
+// победителя. Полностью своя — не зависит от challonge_url, drag/правки доступны всегда.
+async function genOwnBracket(tourId,tourName){
+  if(typeof BracketEngine==='undefined')return toast('Движок не загружен','err');
+  const t=D.tours.find(x=>x.id===tourId)||{};
+  const type=t.bracket_type==='DE'?'DE':'SE';
+  const{data:parts}=await sb.from('tournament_participants').select('*').eq('tournament_id',tourId).order('seed',{ascending:true});
+  if(!parts||parts.length<2)return toast('Нужно минимум 2 участника (добавь/импортируй)','err');
+  if(!confirm(`Сгенерировать ${type}-сетку на ${parts.length} участ.? Текущая своя сетка (если есть) будет перезаписана.`))return;
+  // перенумеровываем посев в 1..N по текущему порядку (challonge-посев/фолбэк-значения → плотный 1..N)
+  const ranked=parts.map((p,i)=>({player_id:p.player_id,seed:i+1}));
+  const size=BracketEngine.nextPow2(ranked.length);
+  const nodes=BracketEngine.generate(type,size);
+  BracketEngine.seed(nodes,ranked,size);
+  // ключи генератора → uuid
+  const idMap={};nodes.forEach(n=>idMap[n.id]=(crypto.randomUUID?crypto.randomUUID():'x'+Math.random().toString(36).slice(2)+Date.now()));
+  const{data:br,error:be}=await sb.from('brackets').upsert({tournament_id:tourId,type,size,settings:{}},{onConflict:'tournament_id'}).select().single();
+  if(dbErr(be,'создание сетки'))return;
+  await sb.from('bracket_nodes').delete().eq('bracket_id',br.id);
+  const rows=nodes.map(n=>({
+    id:idMap[n.id],bracket_id:br.id,part:n.part,round:n.round,slot:n.slot,identifier:n.identifier,
+    player1_id:n.player1_id,player2_id:n.player2_id,seed1:n.seed1,seed2:n.seed2,is_bye:n.is_bye,winner_id:n.winner_id,
+    next_win_node:n.next_win_node?idMap[n.next_win_node]:null,next_win_slot:n.next_win_slot,
+    next_lose_node:n.next_lose_node?idMap[n.next_lose_node]:null,next_lose_slot:n.next_lose_slot}));
+  const{error:ne}=await sb.from('bracket_nodes').insert(rows);
+  if(dbErr(ne,'создание узлов сетки'))return;
+  toast(`Сетка ${type} создана (${nodes.length} узлов)`);
+  openBracketEditor(tourId,tourName);
+}
+// Выбор победителя узла → applyWinner толкает игроков по рёбрам → апдейт изменённых узлов.
+async function setNodeWinner(bracketId,nodeId,winnerId,tourId,tourName){
+  const{data:nd}=await sb.from('bracket_nodes').select('*').eq('bracket_id',bracketId);
+  const by={};(nd||[]).forEach(n=>by[n.id]=n);
+  const node=by[nodeId];if(!node)return;
+  const changed=BracketEngine.applyWinner(by,node,winnerId||null);
+  for(const c of changed){
+    const{error}=await sb.from('bracket_nodes').update({
+      player1_id:c.player1_id,player2_id:c.player2_id,winner_id:c.winner_id}).eq('id',c.id);
+    if(dbErr(error,'продвижение по сетке'))return;
+  }
+  toast('Победитель учтён, игроки продвинуты');
+  openBracketEditor(tourId,tourName);
+}
+async function clearOwnBracket(tourId,tourName){
+  if(!confirm('Удалить свою сетку этого турнира?'))return;
+  const{error}=await sb.from('brackets').delete().eq('tournament_id',tourId);
+  if(dbErr(error,'удаление сетки'))return;
+  toast('Своя сетка удалена');openBracketEditor(tourId,tourName);
+}
+// Привязка узла сетки к встрече (encounter) → из узла открываются драфт/таймеры матча.
+async function linkNodeEncounter(nodeId,encId,tourId,tourName){
+  const{error}=await sb.from('bracket_nodes').update({encounter_id:encId||null}).eq('id',nodeId);
+  if(dbErr(error,'привязка встречи к узлу'))return;
+  toast(encId?'Встреча привязана к узлу':'Встреча отвязана');
+  openBracketEditor(tourId,tourName);
+}
+// Создаёт встречу из игроков узла и сразу привязывает её к узлу.
+async function createEncFromNode(nodeId,p1,p2,tourId,tourName){
+  if(!p1||!p2)return toast('В узле должны быть оба игрока','err');
+  const{data:e,error}=await sb.from('encounters').insert({tournament_id:tourId,player1_id:p1,player2_id:p2}).select().single();
+  if(dbErr(error,'создание встречи из узла'))return;
+  await sb.from('bracket_nodes').update({encounter_id:e.id}).eq('id',nodeId);
+  toast('Встреча создана и привязана');
+  openBracketEditor(tourId,tourName);
+}
+// Рендер узлов своей сетки: колонки по (part,round), карточка матча с выбором победителя.
+// ПОМЕТКА НА БУДУЩЕЕ (НЕ здесь, в админке): результат матча будет открываться в
+// ПУБЛИЧНЫХ сетках — окном внутри bracket.html по клику на узел, либо по отдельной
+// ссылке (deep-link), если сайт разобьём на много мелких URL. Привязка encounter_id
+// к узлу (ниже) — её источник данных.
+function ownBracketHTML(brk,nodes,plMap,tourId,tourName,encs){
+  const tn=tourName.replace(/'/g,"\\'");
+  const model=BracketView.nodesToModel(nodes,pid=>plMap[pid]?.nickname);
+  const body=model?BracketView.renderBracketBody(model.rounds,brk.type):'<p style="color:var(--sub)">Узлов нет</p>';
+  return`<div class="card" style="margin-bottom:16px">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px">
+      <h3 style="margin:0">Своя сетка <span style="color:var(--sub);font-weight:400;font-size:13px">${brk.type} · ${brk.size} слотов</span></h3>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-y" style="font-size:12px;padding:5px 12px" onclick="genOwnBracket('${tourId}','${tn}')">⟳ Перегенерировать</button>
+        <button class="btn-r" style="font-size:12px;padding:5px 12px" onclick="clearOwnBracket('${tourId}','${tn}')">Удалить</button>
+      </div>
+    </div>
+    <div style="font-size:11px;color:var(--sub);margin-bottom:6px">Клик по игроку в матче = победитель (продвигается автоматически). Клик по карточке матча — привязать встречу/открыть матчи. В 1-м раунде участников можно перетаскивать. Независимо от Challonge.</div>
+    <div id="bv-bar" style="min-height:0;margin-bottom:6px"></div>
+    <div class="bracket-wrap bv-edit">${body}</div>
+  </div>`;
+}
+// Интерактив своей сетки: клик-победитель, выбор матча (тулбар встречи), drag посева 1-го
+// раунда с быстрым ЛОКАЛЬНЫМ ре-рендером (без перезагрузки всего редактора — фикс тормозов).
+function setupOwnBracket(brk,tourId,tourName,encs,nodes,plMap){
+  if(typeof BracketView==='undefined')return;
+  BracketView.injectCSS();
+  const wrap=document.querySelector('.bracket-wrap.bv-edit');if(!wrap)return;
+  const ctx=window.__ownbk={brk,tourId,tourName,encs,nodes:nodes.slice(),plMap,sel:null};
+  const repaint=()=>BracketView.paint(document);
+  requestAnimationFrame(repaint);
+  // локальный ре-рендер только области сетки
+  const rerender=()=>{
+    const m=BracketView.nodesToModel(ctx.nodes,pid=>plMap[pid]?.nickname);
+    wrap.innerHTML=m?BracketView.renderBracketBody(m.rounds,brk.type):'';
+    ctx.sel=null;renderBvBar();requestAnimationFrame(repaint);
+  };
+  ctx._rerender=rerender;
+  // клики: победитель (по игроку) либо выбор матча (по карточке)
+  wrap.addEventListener('click',e=>{
+    const seed=e.target.closest('.seed');
+    const match=e.target.closest('.match');if(!match)return;
+    const node=match.dataset.node;if(!node)return;
+    if(seed&&!seed.classList.contains('tbd')&&seed.dataset.pid){
+      setNodeWinner(brk.id,node,seed.dataset.pid,tourId,tourName);return;
+    }
+    wrap.querySelectorAll('.match.bv-sel').forEach(x=>x.classList.remove('bv-sel'));
+    match.classList.add('bv-sel');ctx.sel=node;renderBvBar();
+  });
+  // drag посева 1-го раунда (свап игроков двух слотов) — локально + апдейт 2 узлов
+  let drag=null;
+  wrap.querySelectorAll('.seed.bv-drag').forEach(el=>{
+    el.addEventListener('dragstart',e=>{const m=el.closest('.match');drag={node:m.dataset.node,slot:+el.dataset.slot,pid:el.dataset.pid};e.dataTransfer.effectAllowed='move';el.style.opacity='.4';});
+    el.addEventListener('dragend',()=>{el.style.opacity='';wrap.querySelectorAll('.bv-over').forEach(x=>x.classList.remove('bv-over'));});
+    el.addEventListener('dragover',e=>{e.preventDefault();el.classList.add('bv-over');});
+    el.addEventListener('dragleave',()=>el.classList.remove('bv-over'));
+    el.addEventListener('drop',async e=>{
+      e.preventDefault();el.classList.remove('bv-over');
+      const m=el.closest('.match'),tgt={node:m.dataset.node,slot:+el.dataset.slot,pid:el.dataset.pid};
+      if(!drag||(drag.node===tgt.node&&drag.slot===tgt.slot))return;
+      await swapSeed(ctx,drag,tgt);
+    });
+  });
+  renderBvBar();
+}
+// тулбар выбранного матча: привязка/открытие встречи
+function renderBvBar(){
+  const ctx=window.__ownbk;const bar=document.getElementById('bv-bar');if(!bar)return;
+  if(!ctx||!ctx.sel){bar.innerHTML='';return;}
+  const n=ctx.nodes.find(x=>x.id===ctx.sel);if(!n){bar.innerHTML='';return;}
+  const{plMap,encs,tourId,tourName}=ctx,tn=tourName.replace(/'/g,"\\'");
+  const p1=plMap[n.player1_id]?.nickname,p2=plMap[n.player2_id]?.nickname;
+  if(n.is_bye||!n.player1_id||!n.player2_id){bar.innerHTML=`<div style="font-size:12px;color:var(--sub);padding:6px 10px;background:var(--card);border:1px solid var(--border);border-radius:8px">Матч ${n.identifier}: участники ещё не определены</div>`;return;}
+  const e=(encs||[]).find(x=>x.id===n.encounter_id);
+  let acts;
+  if(e){
+    acts=`<button class="btn btn-g" style="font-size:12px;padding:5px 12px" onclick="openMatch('${e.id}',1,'${e.player1_id}','${e.player2_id}')">Матч 1</button>
+      <button class="btn btn-g" style="font-size:12px;padding:5px 12px" onclick="openMatch('${e.id}',2,'${e.player1_id}','${e.player2_id}')">Матч 2</button>
+      <button class="btn-r" style="font-size:12px;padding:5px 10px" onclick="linkNodeEncounter('${n.id}','','${tourId}','${tn}')">Отвязать встречу</button>`;
+  }else{
+    const opts=(encs||[]).map(x=>`<option value="${x.id}">${escapeHtml(plMap[x.player1_id]?.nickname||'?')} vs ${escapeHtml(plMap[x.player2_id]?.nickname||'?')}</option>`).join('');
+    acts=`<select onchange="if(this.value)linkNodeEncounter('${n.id}',this.value,'${tourId}','${tn}')" style="font-size:12px;padding:5px 8px"><option value="">привязать встречу…</option>${opts}</select>
+      <button class="btn btn-y" style="font-size:12px;padding:5px 12px" onclick="createEncFromNode('${n.id}','${n.player1_id}','${n.player2_id}','${tourId}','${tn}')">＋ Создать встречу из матча</button>`;
+  }
+  bar.innerHTML=`<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:8px 10px;background:var(--card);border:1px solid var(--accent);border-radius:8px">
+    <b style="font-size:13px">Матч ${n.identifier}: ${escapeHtml(p1||'?')} vs ${escapeHtml(p2||'?')}</b>${acts}</div>`;
+}
+// свап двух слотов посева: пишем в БД оба узла и обновляем локально (без полной перезагрузки)
+async function swapSeed(ctx,a,b){
+  const na=ctx.nodes.find(x=>x.id===a.node),nb=ctx.nodes.find(x=>x.id===b.node);if(!na||!nb)return;
+  const fa='player'+a.slot+'_id',sa='seed'+a.slot,fb='player'+b.slot+'_id',sb2='seed'+b.slot;
+  [na[fa],nb[fb]]=[nb[fb],na[fa]];[na[sa],nb[sb2]]=[nb[sb2],na[sa]];
+  const ops=[sb.from('bracket_nodes').update({[fa]:na[fa],[sa]:na[sa]}).eq('id',na.id)];
+  if(nb!==na||fb!==fa)ops.push(sb.from('bracket_nodes').update({[fb]:nb[fb],[sb2]:nb[sb2]}).eq('id',nb.id));
+  const res=await Promise.all(ops);const bad=res.find(r=>r.error);
+  if(bad){dbErr(bad.error,'смена посева');return;}
+  toast('Посев обновлён');ctx._rerender();
 }
 // ===== ГИБРИД: синк с Challonge (авто) + ручной редактор результатов =====
 function challongeSlug(url){if(!url)return null;const m=String(url).match(/challonge\.com\/(?:[a-z]{2}\/)?([A-Za-z0-9_]+)/);return m?m[1]:String(url).replace(/^.*\//,'');}
@@ -403,7 +580,10 @@ async function openParticipants(tourId,tourName){
     <h3>Добавить участников</h3>
     <div style="font-size:12px;color:var(--sub);margin-bottom:8px">Вставь ники списком — по одному в строке (или через запятую). Несуществующие игроки заведутся автоматически. Порядок строк = посев.</div>
     <textarea id="pa-bulk" rows="8" placeholder="Player1&#10;Player2&#10;Player3" style="width:100%;padding:10px;font-size:14px;font-family:monospace;resize:vertical"></textarea>
-    <button class="btn btn-y" style="margin-top:12px" onclick="bulkAddParticipants('${tourId}','${tourName.replace(/'/g,"\\'")}')">Добавить в турнир</button>
+    <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+      <button class="btn btn-y" onclick="bulkAddParticipants('${tourId}','${tourName.replace(/'/g,"\\'")}')">Добавить в турнир</button>
+      <button class="btn btn-g" onclick="importChallongeParticipants('${tourId}','${tourName.replace(/'/g,"\\'")}')">📥 Импорт с Challonge</button>
+    </div>
   </div>
   <div class="card" style="margin-bottom:16px"><div style="font-size:13px">Участников: <b>${(parts||[]).length}</b>${(parts||[]).length?` <button class="btn-r" style="margin-left:10px;font-size:11px;padding:3px 10px" onclick="clearParticipants('${tourId}','${tourName.replace(/'/g,"\\'")}')">Очистить всех</button>`:''}</div></div>
   <div class="space-y">${list||'<p style="color:var(--sub);font-size:14px">Участников ещё нет</p>'}</div>`);
@@ -423,6 +603,74 @@ async function bulkAddParticipants(tourId,tourName){
   }
   if(lastErr&&!added)return dbErr(lastErr,'добавление участников');
   toast(`Добавлено ${added}${fail?`, пропущено ${fail}`:''}`);
+  await refreshData();openParticipants(tourId,tourName);
+}
+// ===== Импорт участников с Challonge + маппинг ников на существующих игроков =====
+// Игроки не всегда регистрируются под своим ником → даём сопоставить каждого
+// challonge-участника существующему игроку (или создать нового / пропустить).
+async function importChallongeParticipants(tourId,tourName){
+  const t=D.tours.find(x=>x.id===tourId)||{};
+  let slug=challongeSlug(t.challonge_url);
+  if(!slug){
+    const inp=prompt('У турнира нет ссылки Challonge. Впиши ссылку или slug (напр. NSPR6):');
+    slug=challongeSlug(inp);
+    if(!slug)return toast('Импорт отменён','err');
+    await sb.from('tournaments').update({challonge_url:inp.includes('challonge.com')?inp:('https://challonge.com/'+slug)}).eq('id',tourId);
+    await refreshData();
+  }
+  toast('Тяну участников с Challonge…');
+  const{data,error}=await sb.functions.invoke('challonge-proxy',{body:{challonge:slug,db_id:tourId}});
+  if(error||data?.error)return toast('Не удалось: '+(data?.error||error.message||error),'err');
+  const ppl=(data.model&&data.model.participants)||[];
+  if(!ppl.length)return toast('Challonge не вернул участников','err');
+  window.__chImp={tourId,tourName,list:ppl};
+  // опции существующих игроков (по нику)
+  const optsFor=selId=>D.players.slice().sort((a,b)=>a.nickname.localeCompare(b.nickname))
+    .map(p=>`<option value="${p.id}" ${p.id===selId?'selected':''}>${escapeHtml(p.nickname)}</option>`).join('');
+  const byNick={};D.players.forEach(p=>byNick[p.nickname.toLowerCase()]=p);
+  const rows=ppl.map((p,i)=>{
+    const m=byNick[(p.name||'').toLowerCase()];
+    const def=m?m.id:'NEW';
+    const badge=m?`<span style="font-size:10px;padding:1px 7px;border-radius:99px;background:linear-gradient(90deg,#3ddc84,#1fb15e);color:#04210f;font-weight:700">сматчен</span>`
+      :`<span style="font-size:10px;padding:1px 7px;border-radius:99px;background:#1a1d27;border:1px solid var(--border);color:var(--sub)">новый ник</span>`;
+    return`<div class="enc-card">
+      <div class="enc-head"><span class="enc-vs">${p.seed?`<span style="color:var(--sub);font-family:monospace">#${p.seed}</span> `:''}${escapeHtml(p.name||'—')}</span>${badge}</div>
+      <select id="imp-${i}" style="font-size:12px;padding:5px 8px;width:100%">
+        <option value="NEW" ${def==='NEW'?'selected':''}>➕ Создать игрока «${escapeHtml(p.name||'')}»</option>
+        <option value="SKIP">⏭ Пропустить</option>
+        <optgroup label="Сопоставить существующему">${optsFor(def==='NEW'?null:def)}</optgroup>
+      </select>
+    </div>`;
+  }).join('');
+  html(`<button class="btn btn-g" style="margin-bottom:16px" onclick="openParticipants('${tourId}','${tourName.replace(/'/g,"\\'")}')">← К участникам</button>
+  <div class="card" style="margin-bottom:16px">
+    <h3>Импорт с Challonge — ${ppl.length} участ.</h3>
+    <div style="font-size:12px;color:var(--sub);margin-bottom:10px">Сматченные по нику игроки выбраны автоматически. Для остальных выбери существующего игрока (если регистрировался под другим ником), оставь «Создать» или «Пропустить». Посев берётся из Challonge.</div>
+    <button class="btn btn-y" onclick="applyChallongeImport()">Импортировать выбранных</button>
+  </div>
+  <div class="enc-grid">${rows}</div>
+  <style>.enc-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px;align-items:start}
+    .enc-card{background:var(--card,#11131a);border:1px solid var(--border);border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:7px}
+    .enc-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+    .enc-vs{font-weight:600;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}</style>`);
+}
+async function applyChallongeImport(){
+  const ctx=window.__chImp;if(!ctx)return;
+  const{tourId,tourName,list}=ctx;
+  let added=0,skip=0,fail=0,lastErr=null,fallbackSeed=0;
+  for(let i=0;i<list.length;i++){
+    const sel=document.getElementById('imp-'+i);if(!sel)continue;
+    const val=sel.value;
+    if(val==='SKIP'){skip++;continue;}
+    const pid=val==='NEW'?await resolvePlayerNick(list[i].name):val;
+    if(!pid){fail++;continue;}
+    const seed=list[i].seed||(++fallbackSeed,1e4+fallbackSeed); // нет посева → в конец
+    const{error}=await sb.from('tournament_participants').upsert(
+      {tournament_id:tourId,player_id:pid,seed},{onConflict:'tournament_id,player_id'});
+    if(error){fail++;lastErr=error;}else added++;
+  }
+  if(lastErr&&!added)return dbErr(lastErr,'импорт участников');
+  toast(`Импортировано ${added}${skip?`, пропущено ${skip}`:''}${fail?`, ошибок ${fail}`:''}`);
   await refreshData();openParticipants(tourId,tourName);
 }
 async function delParticipant(id,tourId,tourName){

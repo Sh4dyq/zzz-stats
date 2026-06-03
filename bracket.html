@@ -396,7 +396,7 @@ function challongeSlug(url){
 }
 
 async function boot(){
-  const [ts,ps,es,rs,pa,bc,ch,mt]=await Promise.all([
+  const [ts,ps,es,rs,pa,bc,ch,mt,br,bn]=await Promise.all([
     sb.from('tournaments').select('*').order('created_at',{ascending:false}),
     sb.from('players').select('id,nickname'),
     sb.from('encounters').select('*'),
@@ -404,7 +404,9 @@ async function boot(){
     sb.from('tournament_participants').select('*').then(r=>r,()=>({data:[]})),
     sb.from('bracket_cache').select('*').then(r=>r,()=>({data:[]})),
     sb.from('characters').select('id,name,role,element,rarity,icon_url,portrait_url').then(r=>r,()=>({data:[]})),
-    sb.from('matches').select('*,picks:match_picks(*)').then(r=>r,()=>({data:[]}))
+    sb.from('matches').select('*,picks:match_picks(*)').then(r=>r,()=>({data:[]})),
+    sb.from('brackets').select('*').then(r=>r,()=>({data:[]})),
+    sb.from('bracket_nodes').select('*').then(r=>r,()=>({data:[]}))
   ]);
   S.tours=ts.data||[];
   (ps.data||[]).forEach(p=>S.players[p.id]=p.nickname);
@@ -412,6 +414,9 @@ async function boot(){
   (rs.data||[]).forEach(r=>{(S.results[r.tournament_id]=S.results[r.tournament_id]||[]).push(r)});
   (pa.data||[]).forEach(p=>{(S.parts[p.tournament_id]=S.parts[p.tournament_id]||[]).push(p)});
   (bc.data||[]).forEach(c=>{S.cache[c.tournament_id]=c.json});
+  // своя сетка (Фаза 2): bracket_nodes по турниру через brackets(id→tournament_id)
+  S.nodes={};const brTour={};(br.data||[]).forEach(b=>brTour[b.id]=b.tournament_id);
+  (bn.data||[]).forEach(n=>{const tid=brTour[n.bracket_id];if(!tid)return;(S.nodes[tid]=S.nodes[tid]||[]).push(n);});
   S.charMap={};(ch.data||[]).forEach(c=>S.charMap[c.id]=c);
   S.matchesByEnc={};(mt.data||[]).forEach(m=>{(S.matchesByEnc[m.encounter_id]=S.matchesByEnc[m.encounter_id]||[]).push(m);});
   // default landing = «Все сетки» index
@@ -551,8 +556,33 @@ function encMatch(e){
   };
 }
 
+// своя сетка (движок) → та же модель {rounds:[{name,matches}]}; имена раундов
+// совместимы с renderBracketBody (Верхняя/Нижняя/Гранд-финал).
+function nodesToModel(t){
+  const ns=S.nodes&&S.nodes[t.id];if(!ns||!ns.length)return null;
+  const feeders={};ns.forEach(n=>{[n.next_win_node,n.next_lose_node].forEach(tid=>{if(tid)(feeders[tid]=feeders[tid]||[]).push(n.identifier);});});
+  const groups={};ns.forEach(n=>{const k=n.part+'|'+n.round;(groups[k]=groups[k]||[]).push(n);});
+  const ord={W:0,L:1,GF:2};
+  const keys=Object.keys(groups).sort((a,b)=>{const[pa,ra]=a.split('|'),[pb,rb]=b.split('|');return ord[pa]-ord[pb]||(+ra-+rb);});
+  const seat=(n,w)=>{const pid=n['player'+w+'_id'];return{name:pid?(S.players[pid]||'—'):(n.is_bye?'BYE':null),win:!!(n.winner_id&&n.winner_id===pid),seed:n['seed'+w]||''};};
+  const rounds=keys.map(k=>{
+    const[part,round]=k.split('|');
+    const ms=groups[k].sort((a,b)=>a.slot-b.slot);
+    const name=part==='GF'?'Гранд-финал':part==='L'?('Нижняя '+round):('Верхняя '+round);
+    return{name,matches:ms.map(n=>({id:n.identifier,feeders:feeders[n.id]||[],a:seat(n,1),b:seat(n,2),played:!!n.winner_id}))};
+  });
+  return{rounds};
+}
 function renderBracket(t){
   const slug=challongeSlug(t.challonge_url);
+  // ПРИОРИТЕТ ИСТОЧНИКА: своя сетка (движок) → кэш Challonge → encounters → каркас.
+  const own=nodesToModel(t);
+  if(own){
+    const badge=`<span style="display:inline-block;padding:2px 9px;border-radius:99px;background:linear-gradient(90deg,#7b5bff,#ff3b6b);color:#fff;font-size:11px;font-weight:700;letter-spacing:.4px">СВОЯ СЕТКА</span>`;
+    const note=`<div style="max-width:1080px;margin:0 auto;padding:16px 28px 0;color:var(--sub);font-size:13px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">${badge}</div>`;
+    $('content').innerHTML=note+`<div class="bracket-wrap">${renderBracketBody(own.rounds,t.bracket_type||'')}</div>`;
+    return;
+  }
   // ИСТОЧНИК (гибрид): для турниров с challonge_url авторитет сетки = кэш Challonge (синк на бэке),
   // иначе фолбэк на encounters, иначе каркас.
   const ch=S.cache[t.id];

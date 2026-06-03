@@ -110,18 +110,20 @@ function normalize(doc: any) {
       })),
   }));
 
-  // дедуп участников по нику (group_player_ids создаёт дубли) для результатов
+  // дедуп участников по нику (group_player_ids создаёт дубли)
   const seen = new Set<string>();
   const results: { name: string; place: number }[] = [];
+  const participants: { name: string; seed: number | null }[] = [];
   for (const p of parts.values()) {
-    if (p.rank == null) continue;
     const key = p.name.toLowerCase();
     if (seen.has(key)) continue;
     seen.add(key);
-    results.push({ name: p.name, place: p.rank });
+    participants.push({ name: p.name, seed: p.seed });           // полный список для импорта в админку
+    if (p.rank != null) results.push({ name: p.name, place: p.rank });
   }
+  participants.sort((a, b) => (a.seed ?? 1e9) - (b.seed ?? 1e9));
 
-  return { rounds, results, source: "challonge", fetched_at: new Date().toISOString() };
+  return { rounds, results, participants, source: "challonge", fetched_at: new Date().toISOString() };
 }
 
 Deno.serve(async (req) => {
