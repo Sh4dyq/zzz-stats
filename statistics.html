@@ -68,10 +68,16 @@
   .pphoto{position:relative;display:inline-block;width:28px;height:28px;flex-shrink:0;vertical-align:middle}
   .pphoto img{position:absolute;inset:0;width:28px;height:28px;object-fit:cover;border-radius:6px;z-index:1}
   /* рейтинг */
-  .rk-num{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;font-size:17px;color:var(--sub)}
-  .rk-score{font-family:'JetBrains Mono',monospace;font-weight:600;font-size:14px;color:var(--sub)}
-  .rk-img{height:26px;width:auto;vertical-align:middle;display:inline-block;margin-left:2px}
-  .rk-cell{display:inline-flex;align-items:center;gap:7px;justify-content:center}
+  .rk-num{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;font-size:17px;color:var(--sub);padding:9px 14px}
+  .rk-score{font-family:'JetBrains Mono',monospace;font-weight:600;font-size:14px;color:var(--sub);margin-left:6px}
+  .rk-img{height:26px;width:auto;vertical-align:middle;display:inline-block;flex-shrink:0}
+  .rk-cell{display:inline-flex;align-items:center;gap:0;justify-content:center}
+  #rating-area table{table-layout:fixed;width:100%}
+  #rating-area table th:nth-child(1),#rating-area table td:nth-child(1){width:10%}
+  #rating-area table th:nth-child(2),#rating-area table td:nth-child(2){width:35%}
+  #rating-area table th:nth-child(3),#rating-area table td:nth-child(3){width:25%}
+  #rating-area table th:nth-child(n+4),#rating-area table td:nth-child(n+4){width:10%}
+  .rk-col{text-align:center}
   .spinner{width:22px;height:22px;border:2px solid var(--border);border-top-color:var(--red);border-radius:50%;animation:spin .7s linear infinite;margin:0 auto}
   /* читаемость таблицы персонажей */
   tbody tr:hover td{background:#17171c}
@@ -1140,18 +1146,18 @@ function renderRating(){
   const view=S.rview,data=computeRating(view);
   const area=document.getElementById('rating-area'),note=document.getElementById('rating-note');
   if(!data.length){area.innerHTML=`<table><tbody><tr><td class="empty" colspan="6">Нет данных</td></tr></tbody></table>`;note.textContent='';return;}
-  const rk=s=>`<span class="rk-cell"><span class="rk-score">${s.toFixed(1)}</span>${ratingBadge(s)}</span>`;
+  const rk=s=>`<span class="rk-cell">${ratingBadge(s)}<span class="rk-score">${s.toFixed(1)}</span></span>`;
   let head,rows;
   if(view==='p'){
-    head=`<thead><tr><th class="nc" onclick="sortR(0)">#</th><th class="nc" onclick="sortR(1)">Ник</th><th onclick="sortR(2)" title="${RATING_TIP_P}">Рейтинг</th><th onclick="sortR(3)">Σ матчей</th><th onclick="sortR(4)">WR%</th><th onclick="sortR(5)">AVG таймер</th></tr></thead>`;
-    rows=data.map((r,i)=>`<tr><td class="rk-num">${i+1}</td><td class="nc"><div style="display:flex;align-items:center;gap:6px">${picP(r.ent)}<span>${r.ent.nickname}</span></div></td><td>${rk(r.score)}</td><td>${r.games}</td><td class="${wc(r.wr)}">${f1(r.wr)}</td><td>${r.extra}</td></tr>`).join('');
+    head=`<thead><tr><th onclick="sortR(0)">#</th><th onclick="sortR(1)">Ник</th><th onclick="sortR(2)" title="${RATING_TIP_P}">Рейтинг</th><th class="rk-col" onclick="sortR(3)">Σ матчей</th><th class="rk-col" onclick="sortR(4)">WR%</th><th class="rk-col" onclick="sortR(5)">AVG таймер</th></tr></thead>`;
+    rows=data.map((r,i)=>`<tr><td class="rk-num">${i+1}</td><td><div style="display:flex;align-items:center;gap:6px">${picP(r.ent)}<span>${r.ent.nickname}</span></div></td><td>${rk(r.score)}</td><td class="rk-col">${r.games}</td><td class="rk-col ${wc(r.wr)}">${f1(r.wr)}</td><td class="rk-col">${r.extra}</td></tr>`).join('');
     note.textContent=RATING_TIP_P;
   }else{
     const lbl=view==='c'?'Персонаж':'Амплификатор';
-    head=`<thead><tr><th class="nc" onclick="sortR(0)">#</th><th class="nc" onclick="sortR(1)">${lbl}</th><th onclick="sortR(2)" title="${RATING_TIP_CP}">Рейтинг</th><th onclick="sortR(3)">Σ игр</th><th onclick="sortR(4)">WR%</th><th onclick="sortR(5)">Пик %T</th></tr></thead>`;
+    head=`<thead><tr><th onclick="sortR(0)">#</th><th onclick="sortR(1)">${lbl}</th><th onclick="sortR(2)" title="${RATING_TIP_CP}">Рейтинг</th><th class="rk-col" onclick="sortR(3)">Σ игр</th><th class="rk-col" onclick="sortR(4)">WR%</th><th class="rk-col" onclick="sortR(5)">Пик %T</th></tr></thead>`;
     rows=data.map((r,i)=>{
       const ic=r.isChar?iconChar(r.ent,24):ampImg(r.ent,24);
-      return`<tr><td class="rk-num">${i+1}</td><td class="nc"><div style="display:flex;align-items:center;gap:6px">${ic}<span>${r.ent.name}</span></div></td><td>${rk(r.score)}</td><td>${r.games}</td><td class="${wc(r.wr)}">${f1(r.wr)}</td><td>${f1(r.ppt)}</td></tr>`;
+      return`<tr><td class="rk-num">${i+1}</td><td><div style="display:flex;align-items:center;gap:6px">${ic}<span>${r.ent.name}</span></div></td><td>${rk(r.score)}</td><td class="rk-col">${r.games}</td><td class="rk-col ${wc(r.wr)}">${f1(r.wr)}</td><td class="rk-col">${f1(r.ppt)}</td></tr>`;
     }).join('');
     note.textContent=RATING_TIP_CP;
   }
