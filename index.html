@@ -721,15 +721,17 @@
   // Единый выбор турниров: live (идёт сейчас) и lastFinished (последний завершённый).
   // Опирается на tournaments.status ('live'/'finished'/'upcoming'); если колонки нет —
   // деградирует: live = самый свежий, lastFinished = следующий за ним.
+  // ts отсортирован по sort_order (порядок админки). «Актуальный» турнир выбираем той же
+  // цепочкой, что и statistics/bracket: live → первый не-анонс → первый. Раньше live искался
+  // ТОЛЬКО по status==='live'; если статус не выставлен (актуальный закреплён через sort_order),
+  // live=null и на главной показывался не тот турнир — отсюда «ломается актуальный турнир».
   function pickTours(ts){
     const hasStatus=ts.some(t=>t.status);
-    const live=ts.find(t=>t.status==='live')||null;
+    const live=ts.find(t=>t.status==='live')||ts.find(t=>t.status!=='upcoming')||ts[0]||null;
     const upcoming=ts.find(t=>t.status==='upcoming')||null;
     if(!hasStatus){ // старая БД без статусов — деградируем к порядку
       return{live:ts[0]||null,lastFinished:ts[1]||ts[0]||null,upcoming:null};
     }
-    // lastFinished = самый свежий завершённый (ts уже отсортированы created_at desc);
-    // upcoming НИКОГДА не идёт в «топ турнира» — там нет данных.
     const lastFinished=ts.find(t=>t.status==='finished')||live||null;
     return{live,lastFinished,upcoming};
   }
@@ -761,15 +763,18 @@
     document.querySelectorAll('.num').forEach(n=>setTimeout(()=>animateNum(n),300));
 
     // ---- выбор турниров + подписи ----
+    // «Топ турнира» = актуальный (закреплённый) турнир, как в statistics/bracket,
+    // а не «последний завершённый» — иначе на главной висел не тот турнир.
     const{live,lastFinished}=pickTours(T);
-    if(lastFinished){
-      const km=document.getElementById('kicker-tour');if(km)km.textContent=lastFinished.name;
+    const cur=live||lastFinished;
+    if(cur){
+      const km=document.getElementById('kicker-tour');if(km)km.textContent=cur.name;
       const pl=document.getElementById('podium-link');
-      if(pl)pl.textContent=lastFinished.name+' · полный рейтинг →';
+      if(pl){pl.textContent=cur.name+' · полный рейтинг →';pl.href='bracket.html?tid='+encodeURIComponent(cur.id);}
     }
 
-    // ---- подиум: топ-3 по победам во встречах lastFinished-турнира ----
-    renderPodium(E,P,msByEnc,lastFinished);
+    // ---- подиум: топ-3 по победам во встречах актуального турнира ----
+    renderPodium(E,P,msByEnc,cur);
     // ---- последние матчи (с таймерами и актуальностью) ----
     renderRecent(E,P,T,msByEnc);
   }

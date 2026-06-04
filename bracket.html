@@ -427,7 +427,10 @@ async function boot(){
     sb.from('brackets').select('*').then(r=>r,()=>({data:[]})),
     sb.from('bracket_nodes').select('*').then(r=>r,()=>({data:[]}))
   ]);
-  S.tours=ts.data||[];
+  // порядок как в админке: ручной sort_order поверх created_at (иначе «актуальный
+  // турнир» из curTour() брался по дате создания, а не по закреплённому порядку — и
+  // расходился со statistics, где сортировка по sort_order применяется).
+  S.tours=(ts.data||[]).slice().sort((a,b)=>(a.sort_order??1e9)-(b.sort_order??1e9));
   (ps.data||[]).forEach(p=>S.players[p.id]=p.nickname);
   S.encounters=es.data||[];
   (rs.data||[]).forEach(r=>{(S.results[r.tournament_id]=S.results[r.tournament_id]||[]).push(r)});
@@ -438,11 +441,13 @@ async function boot(){
   (bn.data||[]).forEach(n=>{const tid=brTour[n.bracket_id];if(!tid)return;(S.nodes[tid]=S.nodes[tid]||[]).push(n);});
   S.charMap={};(ch.data||[]).forEach(c=>S.charMap[c.id]=c);
   S.matchesByEnc={};(mt.data||[]).forEach(m=>{(S.matchesByEnc[m.encounter_id]=S.matchesByEnc[m.encounter_id]||[]).push(m);});
-  // default landing = «Все сетки» index
-  S.view='all';S.cur=null;
-  renderTourbar();
   renderFmtTabs();
-  render();
+  // deep-link ?tid=<id> (с главной: «полный рейтинг → страница результатов сетки»).
+  const wantId=new URLSearchParams(location.search).get('tid');
+  const wantT=wantId&&S.tours.find(t=>String(t.id)===String(wantId));
+  if(wantT){openTour(wantT);}
+  // default landing = «Все сетки» index
+  else{S.view='all';S.cur=null;renderTourbar();render();}
 }
 
 function openTour(t){S.cur=t;S.view='tour';S.fmt='bracket';

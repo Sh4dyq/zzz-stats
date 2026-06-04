@@ -69,8 +69,9 @@
   .empty{padding:48px 0;text-align:center;color:var(--sub);font-size:15px;font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;letter-spacing:.04em}
   /* рейтинг */
   .rk-num{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;font-size:17px;color:var(--sub)}
-  .rk-score{font-family:'JetBrains Mono',monospace;font-weight:600;font-size:14px}
-  .rk-badge{display:inline-block;min-width:34px;padding:2px 9px;border-radius:6px;font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;font-size:14px;letter-spacing:.02em;color:var(--rc);background:color-mix(in srgb,var(--rc) 16%,transparent);border:1px solid color-mix(in srgb,var(--rc) 45%,transparent)}
+  .rk-score{font-family:'JetBrains Mono',monospace;font-weight:600;font-size:14px;color:var(--sub)}
+  .rk-img{height:26px;width:auto;vertical-align:middle;display:inline-block;margin-left:2px}
+  .rk-cell{display:inline-flex;align-items:center;gap:7px;justify-content:center}
   .spinner{width:22px;height:22px;border:2px solid var(--border);border-top-color:var(--red);border-radius:50%;animation:spin .7s linear infinite;margin:0 auto}
   /* читаемость таблицы персонажей */
   tbody tr:hover td{background:#17171c}
@@ -239,7 +240,7 @@
   <button class="tab-btn active" data-tab="chars">Персонажи</button>
   <button class="tab-btn" data-tab="players">Игроки</button>
   <button class="tab-btn" data-tab="amps">Амплификаторы</button>
-  <button class="tab-btn" data-tab="rating">Рейтинг</button>
+  <button class="tab-btn" data-tab="rating">Рейтинги</button>
   <button class="tab-btn" data-tab="ext">Расширенная</button>
 </div>
 
@@ -928,10 +929,17 @@ function computeExt(){
   let tot=0,fpW=0,fpD=0,dblW=0,dblD=0,wT=[],lT=[],rests=0,wR=0,lR=0,wN=0,lN=0;
   S.matches.forEach(m=>{
     tot++;const enc=S.encMap[m.encounter_id];if(!enc)return;
-    if(m.is_draw){fpD++;dblD++;}
-    else if(m.winner_id===m.fp_player_id)fpW++;
+    // Победа стороны фп/дабл считается ПО ТАЙМЕРУ (меньше = выиграл игру), а не по winner_id —
+    // так каждый матч встречи плюсуется именно той стороне, что выиграла, и метрика не зависит
+    // от того, проставлен ли winner_id. Ничья / нет таймера / равные таймеры → пол-очка обеим.
+    const fpIsP1=m.fp_player_id===enc.player1_id;
+    const fpT=fpIsP1?m.player1_timer_sec:m.player2_timer_sec;
+    const dblT=fpIsP1?m.player2_timer_sec:m.player1_timer_sec;
+    if(m.is_draw||fpT==null||dblT==null||fpT===dblT){fpD++;dblD++;}
+    else if(fpT<dblT)fpW++;
     else dblW++;
-    const p1isWin=m.winner_id===enc.player1_id;
+    // Таймеры/рестарты победителя и проигравшего тоже по таймеру (меньший = победитель).
+    const p1isWin=(m.player1_timer_sec!=null&&m.player2_timer_sec!=null)?m.player1_timer_sec<m.player2_timer_sec:m.winner_id===enc.player1_id;
     const wTimer=p1isWin?m.player1_timer_sec:m.player2_timer_sec;
     const lTimer=p1isWin?m.player2_timer_sec:m.player1_timer_sec;
     const wRst=(p1isWin?m.player1_restarts:m.player2_restarts)||0;
@@ -1061,16 +1069,37 @@ function sortA(k){S.aSort.asc=S.aSort.k===k?!S.aSort.asc:(k==='name');S.aSort.k=
 // чтобы 1–2 удачные игры не давали топ-рейтинг. PRIOR_N = «виртуальные» игры при 50%.
 const PRIOR_N=6;
 const bayesWR=(wEq,games)=>(wEq+PRIOR_N*0.5)/((games||0)+PRIOR_N); // 0..1
-// Тир по score (0..100) → [метка, цвет].
+// Тир по score (0..100) → метка. 5 ступеней (без D) — под иконки web/icons/grades.
+// Пороги подобраны под реальный разброс score (0.7×WR-байес + 0.3×пик/таймер ≈ 35..90).
 function ratingTier(s){
-  if(s>=78)return['S+','#ff3860'];
-  if(s>=70)return['S','#f5c842'];
-  if(s>=62)return['A','#a970ff'];
-  if(s>=54)return['B','#3dd9d6'];
-  if(s>=46)return['C','#c4f500'];
-  return['D','#8a8a93'];
+  if(s>=75)return'S+';
+  if(s>=66)return'S';
+  if(s>=57)return'A';
+  if(s>=48)return'B';
+  return'C';
 }
-const ratingBadge=s=>{const[t,c]=ratingTier(s);return`<span class="rk-badge" style="--rc:${c}">${t}</span>`;};
+// Бейдж-оценка = картинка из web/icons/grades/<тир>.png (S+→S%2B.png).
+const ratingBadge=s=>{const t=ratingTier(s);return`<img class="rk-img" src="web/icons/grades/${encodeURIComponent(t)}.png" alt="${t}" title="Оценка ${t}">`;};
+// Описание формулы для тултипа графы «Рейтинг» (как у «Кост η»).
+const RATING_TIP_CP='Рейтинг = 0.7 × винрейт (байес-поправка на число игр, стягивает редких к 50%) + 0.3 × пикрейт (относительно самого популярного). Оценки: S+ ≥75, S ≥66, A ≥57, B ≥48, C <48.';
+const RATING_TIP_P='Рейтинг = 0.7 × винрейт (байес-поправка на число матчей) + 0.3 × скорость (нормированный средний таймер, быстрее = выше). Оценки: S+ ≥75, S ≥66, A ≥57, B ≥48, C <48.';
+
+let rSort={idx:null,asc:true};
+// Сортировка таблицы рейтинга по индексу колонки (как sortP, но для #rating-area).
+// Колонка # (ранг по рейтингу) остаётся приклеенной к строке — видно исходное место.
+function sortR(idx){
+  const tbl=document.querySelector('#rating-area table'),tb=tbl&&tbl.tBodies[0];if(!tb)return;
+  const rows=[...tb.rows].filter(r=>!r.querySelector('.empty'));if(rows.length<2)return;
+  rSort.asc=rSort.idx===idx?!rSort.asc:false;rSort.idx=idx;const asc=rSort.asc;
+  const parse=txt=>{txt=(txt||'').trim();if(txt===''||txt==='—')return{n:null,s:''};
+    const t=txt.match(/^(\d+):(\d{2})$/);if(t)return{n:+t[1]*60+ +t[2]};
+    const num=parseFloat(txt.replace(/\s/g,'').replace(',','.').replace(/[^\d.\-]/g,''));
+    return isNaN(num)?{n:null,s:txt.toLowerCase()}:{n:num};};
+  rows.sort((a,b)=>{const A=parse(a.cells[idx]&&a.cells[idx].textContent),B=parse(b.cells[idx]&&b.cells[idx].textContent);
+    if(A.n==null&&B.n==null)return(A.s||'').localeCompare(B.s||'')*(asc?1:-1);
+    if(A.n==null)return 1;if(B.n==null)return -1;return asc?A.n-B.n:B.n-A.n;});
+  rows.forEach(r=>tb.appendChild(r));
+}
 
 function computeRating(view){
   if(view==='p'){
@@ -1103,23 +1132,24 @@ function renderRating(){
   const view=S.rview,data=computeRating(view);
   const area=document.getElementById('rating-area'),note=document.getElementById('rating-note');
   if(!data.length){area.innerHTML=`<table><tbody><tr><td class="empty" colspan="6">Нет данных</td></tr></tbody></table>`;note.textContent='';return;}
+  const rk=s=>`<span class="rk-cell"><span class="rk-score">${s.toFixed(1)}</span>${ratingBadge(s)}</span>`;
   let head,rows;
   if(view==='p'){
-    head=`<thead><tr><th class="nc">#</th><th class="nc">Ник</th><th>Σ матчей</th><th>WR%</th><th>AVG таймер</th><th>Рейтинг</th></tr></thead>`;
-    rows=data.map((r,i)=>`<tr><td class="rk-num">${i+1}</td><td class="nc"><div style="display:flex;align-items:center;gap:6px">${picP(r.ent)}<span>${r.ent.nickname}</span></div></td><td>${r.games}</td><td class="${wc(r.wr)}">${f1(r.wr)}</td><td>${r.extra}</td><td><span class="rk-score">${r.score.toFixed(1)}</span> ${ratingBadge(r.score)}</td></tr>`).join('');
-    note.textContent='Рейтинг игрока = 0.7 × винрейт (с байесовской поправкой на число матчей) + 0.3 × скорость (нормированный средний таймер). Чем меньше матчей, тем сильнее винрейт стянут к 50%.';
+    head=`<thead><tr><th class="nc" onclick="sortR(0)">#</th><th class="nc" onclick="sortR(1)">Ник</th><th onclick="sortR(2)" title="${RATING_TIP_P}">Рейтинг</th><th onclick="sortR(3)">Σ матчей</th><th onclick="sortR(4)">WR%</th><th onclick="sortR(5)">AVG таймер</th></tr></thead>`;
+    rows=data.map((r,i)=>`<tr><td class="rk-num">${i+1}</td><td class="nc"><div style="display:flex;align-items:center;gap:6px">${picP(r.ent)}<span>${r.ent.nickname}</span></div></td><td>${rk(r.score)}</td><td>${r.games}</td><td class="${wc(r.wr)}">${f1(r.wr)}</td><td>${r.extra}</td></tr>`).join('');
+    note.textContent=RATING_TIP_P;
   }else{
     const lbl=view==='c'?'Персонаж':'Амплификатор';
-    head=`<thead><tr><th class="nc">#</th><th class="nc">${lbl}</th><th>Σ игр</th><th>WR%</th><th>Пик %T</th><th>Рейтинг</th></tr></thead>`;
+    head=`<thead><tr><th class="nc" onclick="sortR(0)">#</th><th class="nc" onclick="sortR(1)">${lbl}</th><th onclick="sortR(2)" title="${RATING_TIP_CP}">Рейтинг</th><th onclick="sortR(3)">Σ игр</th><th onclick="sortR(4)">WR%</th><th onclick="sortR(5)">Пик %T</th></tr></thead>`;
     rows=data.map((r,i)=>{
       const ic=r.isChar?iconChar(r.ent,24):ampImg(r.ent,24);
-      return`<tr><td class="rk-num">${i+1}</td><td class="nc"><div style="display:flex;align-items:center;gap:6px">${ic}<span>${r.ent.name}</span></div></td><td>${r.games}</td><td class="${wc(r.wr)}">${f1(r.wr)}</td><td>${f1(r.ppt)}</td><td><span class="rk-score">${r.score.toFixed(1)}</span> ${ratingBadge(r.score)}</td></tr>`;
+      return`<tr><td class="rk-num">${i+1}</td><td class="nc"><div style="display:flex;align-items:center;gap:6px">${ic}<span>${r.ent.name}</span></div></td><td>${rk(r.score)}</td><td>${r.games}</td><td class="${wc(r.wr)}">${f1(r.wr)}</td><td>${f1(r.ppt)}</td></tr>`;
     }).join('');
-    note.textContent='Рейтинг = 0.7 × винрейт (с байесовской поправкой на число игр) + 0.3 × пикрейт (относительно самого популярного). Поправка стягивает редко взятых к 50%.';
+    note.textContent=RATING_TIP_CP;
   }
   area.innerHTML=`<table>${head}<tbody>${rows}</tbody></table>`;
 }
-function setRating(v){S.rview=v;['c','a','p'].forEach(k=>{const b=document.getElementById('rseg-'+k);if(b)b.className='seg-btn'+(k===v?' on':'');});renderRating();}
+function setRating(v){S.rview=v;rSort={idx:null,asc:true};['c','a','p'].forEach(k=>{const b=document.getElementById('rseg-'+k);if(b)b.className='seg-btn'+(k===v?' on':'');});renderRating();}
 
 function renderAll(){
   const isAll=S.tour===ALL;
