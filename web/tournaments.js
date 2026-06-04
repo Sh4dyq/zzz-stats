@@ -53,7 +53,9 @@ async function pgTournaments(){
       <div><label>Участников (предполагаемо)</label><input id="t-exp" type="number" min="2" placeholder="30"></div>
       <div><label>Этапов (группы→плейофф)</label><input id="t-stages" type="number" min="1" value="1"></div>
       <div style="grid-column:1/-1"><label>Ссылка на Challonge</label><input id="t-ch" type="text" placeholder="https://challonge.com/ru/NSPR6"></div>
+      <div style="grid-column:1/-1"><label>Ссылка на Шиюй (nanoka, Frontier 4)</label><input id="t-shiyu" type="text" placeholder="https://zzz.nanoka.cc/shiyu/620531"></div>
     </div>
+    <div style="font-size:11px;color:var(--sub);margin-top:6px">Ротацию подтянем после создания — в «⚙ Настройки» турнира кнопкой «Импорт ротации».</div>
     <button class="btn btn-y" style="margin-top:12px" onclick="addTour()">Добавить</button>
   </div>
   <div class="space-y" id="tour-list">${list||'<p style="color:var(--sub);font-size:14px">Турниров ещё нет</p>'}</div>`);
@@ -68,7 +70,8 @@ function tourFormPatch(p){
   const exp=document.getElementById(p+'exp')?.value;
   const stg=document.getElementById(p+'stages')?.value;
   const ch=document.getElementById(p+'ch')?.value?.trim()||null;
-  return{bracket_type:bracket,event_date:d1,event_date_end:d2,expected_players:exp?+exp:null,stages_count:stg?+stg:(fmt2?2:1),challonge_url:ch};
+  const shy=document.getElementById(p+'shiyu')?.value?.trim()||null;
+  return{bracket_type:bracket,event_date:d1,event_date_end:d2,expected_players:exp?+exp:null,stages_count:stg?+stg:(fmt2?2:1),challonge_url:ch,shiyu_url:shy};
 }
 async function addTour(){
   const n=v('t-name');if(!n)return toast('Впиши название','err');
@@ -91,9 +94,103 @@ async function openTourSettings(id,name){
       <div><label>Участников (предполагаемо)</label><input id="${p}exp" type="number" min="2" value="${t.expected_players??''}"></div>
       <div><label>Этапов</label><input id="${p}stages" type="number" min="1" value="${t.stages_count??1}"></div>
       <div style="grid-column:1/-1"><label>Ссылка на Challonge</label><input id="${p}ch" type="text" value="${escapeHtml(t.challonge_url||'')}"></div>
+      <div style="grid-column:1/-1"><label>Ссылка на Шиюй (nanoka, Frontier 4)</label><input id="${p}shiyu" type="text" value="${escapeHtml(t.shiyu_url||'')}" placeholder="https://zzz.nanoka.cc/shiyu/620531"></div>
     </div>
     <button class="btn btn-y" style="margin-top:12px" onclick="saveTourSettings('${id}')">Сохранить</button>
+  </div>
+  <div class="card" style="margin-bottom:16px">
+    <h3>Ротация Шиюй (Frontier 4)</h3>
+    <div style="font-size:12px;color:var(--sub);margin-bottom:10px">Вставь ссылку на актуальную Шиюй выше и жми «Импорт». Картинки мобов берутся с nanoka на лету — в базе хранятся только данные и имена файлов.</div>
+    <div id="${p}shiyu-status" style="font-size:13px;margin-bottom:10px">${shiyuStatusHTML(t.shiyu_data)}</div>
+    <button class="btn btn-y" onclick="importShiyuRotation('${id}')">📥 Импорт ротации с nanoka</button>
+    ${t.shiyu_data?`<button class="btn-r" style="margin-left:8px;font-size:12px;padding:6px 12px" onclick="clearShiyuRotation('${id}')">Очистить ротацию</button>`:''}
   </div>`);
+}
+// краткий статус сохранённой ротации (для карточки настроек)
+function shiyuStatusHTML(sd){
+  if(!sd)return '<span style="color:var(--sub)">Ротация не загружена.</span>';
+  const rooms=sd.rooms||[];
+  const mon=rooms.reduce((s,r)=>s+(r.monsters?.length||0),0);
+  const upd=sd.fetched_at?new Date(sd.fetched_at).toLocaleString('ru'):'';
+  return `<span style="color:#3ddc84;font-weight:600">✓ Загружено:</span> ${escapeHtml(sd.frontier||sd.name||'Frontier')}${sd.level?` (Lv.${sd.level})`:''} · бафф «${escapeHtml(sd.buff?.title||'—')}» · комнат ${rooms.length}, мобов ${mon}${upd?` <span style="color:var(--sub)">· ${upd}</span>`:''}`;
+}
+// ===== Импорт ротации Shiyu с nanoka =====
+// Версия датамайна (VER) зашита только в CORS-закрытый HTML nanoka → берём через
+// edge-функцию nanoka-ver. Если она не задеплоена — фолбэк: спросить VER вручную
+// (меняется лишь в игровой патч ~раз в 6 недель). Сам JSON ротации тянем напрямую (CORS=*).
+const SHIYU_ELEMS=['ice','fire','electric','ether','physical','wind'];
+function _shyImgBase(image){return String(image||'').split('/').pop().replace(/\.(png|webp|jpe?g)$/i,'')||null;}
+function _shyColor(s){ // <color=#hex>txt</color> → подсветка; \n уже разбивается выше
+  return String(s||'').replace(/<color=#?[0-9a-fA-F]{6,8}>(.*?)<\/color>/g,'<span class="hl">$1</span>');
+}
+// nanoka shiyu JSON → наша модель {id,name,frontier,level,buff,rooms,...}. Берём зону stage_num===4.
+function normalizeShiyu(doc,srcUrl,ver){
+  const zones=doc.zone||{};
+  let zone=Object.values(zones).find(z=>z.stage_num===4);
+  if(!zone)zone=Object.values(zones).sort((a,b)=>(b.stage_num||0)-(a.stage_num||0))[0]; // фолбэк: топ-frontier
+  if(!zone)throw new Error('в JSON нет зон');
+  // бафф: единственная непустая запись layer_buff
+  const bEntry=Object.values(zone.layer_buff||{}).find(b=>b.title||b.desc)||{};
+  // nanoka иногда оставляет title неразрешённым ключом локализации (напр. «62001522_Title») → прячем
+  const rawTitle=String(bEntry.title||'').trim();
+  const title=/(^\d|_Title$)/i.test(rawTitle)?'':rawTitle;
+  const buff={title,lines:String(bEntry.desc||'').split('\n').map(l=>_shyColor(l.trim())).filter(Boolean)};
+  // комнаты: по ключам layer_room по возрастанию (1-я, 2-я половина)
+  const rooms=Object.keys(zone.layer_room||{}).sort().map(rk=>{
+    const room=zone.layer_room[rk];
+    const weakness=Object.values(room.monster_weakness||{}).map(s=>String(s).toLowerCase()).filter(e=>SHIYU_ELEMS.includes(e));
+    const monsters=Object.values(room.monster_list||{}).map(m=>{
+      const el=m.element||{},st=m.stats||{};
+      return{
+        name:m.name||'—',img:_shyImgBase(m.image),
+        hp:Math.round(st.hp||0),atk:Math.round(st.attack||0),def:Math.round(st.defence||0),
+        stun:Math.round(st.stun||0),anomaly:Math.round(st.attribute_infliction||0),
+        weak:SHIYU_ELEMS.filter(e=>el[e]===1),res:SHIYU_ELEMS.filter(e=>el[e]===-1)
+      };
+    });
+    return{waves:room.waves_num||1,weakness,monsters};
+  });
+  return{id:doc.id,name:doc.name||'',frontier:zone.name||'',level:zone.monster_level||null,
+    buff,rooms,source_url:srcUrl,ver,fetched_at:new Date().toISOString()};
+}
+async function getNanokaVer(){
+  try{
+    const{data,error}=await sb.functions.invoke('nanoka-ver');
+    if(!error&&data&&data.ver)return data.ver;
+  }catch(_){/* функция не задеплоена → фолбэк ниже */}
+  const man=prompt('Не удалось получить версию датамайна автоматически (edge-функция nanoka-ver не задеплоена?).\n\nВпиши версию вручную — она в адресе любых картинок на zzz.nanoka.cc, формат вроде 3.0.4+16078270:');
+  return man?man.trim():null;
+}
+async function importShiyuRotation(tourId){
+  const url=document.getElementById('ts-shiyu')?.value?.trim();
+  if(!url)return toast('Сначала впиши ссылку на Шиюй','err');
+  const m=url.match(/(\d{5,})/);
+  if(!m)return toast('В ссылке не найден id Шиюй (ожидаю …/shiyu/<число>)','err');
+  const id=m[1];
+  toast('Получаю версию датамайна…');
+  const ver=await getNanokaVer();
+  if(!ver)return toast('Импорт отменён (нет версии)','err');
+  toast('Тяну ротацию с nanoka…');
+  let doc;
+  try{
+    const r=await fetch(`https://static.nanoka.cc/zzz/${ver}/en/shiyu/${id}.json`);
+    if(!r.ok)throw new Error('HTTP '+r.status);
+    doc=await r.json();
+  }catch(e){return toast('Не удалось скачать JSON ротации: '+e.message,'err');}
+  let data;
+  try{data=normalizeShiyu(doc,url,ver);}catch(e){return toast('Разбор ротации не удался: '+e.message,'err');}
+  const{error}=await sb.from('tournaments').update({shiyu_url:url,shiyu_data:data}).eq('id',tourId);
+  if(dbErr(error,'сохранение ротации'))return;
+  toast(`Ротация загружена: ${data.frontier||'Frontier'} · мобов ${data.rooms.reduce((s,r)=>s+r.monsters.length,0)}`);
+  await refreshData();
+  const st=document.getElementById('ts-shiyu-status');if(st)st.innerHTML=shiyuStatusHTML(data);
+}
+async function clearShiyuRotation(tourId){
+  if(!confirm('Очистить сохранённую ротацию Шиюй?'))return;
+  const{error}=await sb.from('tournaments').update({shiyu_data:null}).eq('id',tourId);
+  if(dbErr(error,'очистка ротации'))return;
+  toast('Ротация очищена');await refreshData();
+  const t=D.tours.find(x=>x.id===tourId);openTourSettings(tourId,t?.name||'');
 }
 async function saveTourSettings(id){
   const name=document.getElementById('ts-name')?.value?.trim();

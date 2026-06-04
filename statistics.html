@@ -141,7 +141,41 @@
   .nav a.soon{color:#54545c;cursor:default}
   .nav a.soon::before{content:"СКОРО";position:absolute;top:-3px;right:2px;font-size:8px;font-weight:800;letter-spacing:.05em;color:var(--red);font-style:normal}
   .nav a.soon:hover{color:#54545c}
-  .tabrow{border-bottom:1px solid var(--border);padding:0 22px;display:flex;background:rgba(11,11,13,.4)}
+  .tabrow{border-bottom:1px solid var(--border);padding:0 22px;display:flex;align-items:stretch;background:rgba(11,11,13,.4)}
+  /* Текущая Шиюй — кнопка справа в ряду вкладок */
+  .shiyu-btn{margin-left:auto;display:none;align-items:center;gap:8px;border:none;background:none;padding:14px 22px;font-family:'Saira Condensed',sans-serif;font-style:italic;font-size:19px;font-weight:800;text-transform:uppercase;letter-spacing:.02em;color:var(--sub);cursor:pointer;transition:.15s;position:relative}
+  .shiyu-btn .sb-ic{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;flex-shrink:0}
+  .shiyu-btn:hover{color:var(--text)}
+  .shiyu-btn.active{color:#fff}
+  .shiyu-btn.active::after{content:"";position:absolute;left:22px;right:22px;bottom:-1px;height:3px;border-radius:3px 3px 0 0;background:var(--grad)}
+  /* Shiyu rotation layout */
+  .sh-wrap{display:flex;flex-direction:column;gap:18px}
+  .sh-lbl{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;letter-spacing:.09em;color:var(--sub);font-size:12.5px}
+  .sh-card{border:1px solid var(--border);border-radius:12px;background:var(--card);padding:16px 18px}
+  .sh-buff h4{margin:0 0 7px;font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;font-size:17px;color:#fff;letter-spacing:.01em}
+  .sh-buff .bl{display:flex;gap:8px;color:var(--text);font-size:14px;line-height:1.5;font-family:'Rajdhani',sans-serif;font-weight:500}
+  .sh-buff .bl+.bl{margin-top:3px}
+  .sh-buff .bl::before{content:"·";color:var(--sub)}
+  .sh-buff b{color:#fff;font-weight:700}
+  .sh-buff .hl{color:#f0d12b;font-weight:700}
+  .sh-room-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px}
+  .sh-room-title{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;font-size:21px;color:#fff;letter-spacing:.01em}
+  .sh-waves{font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:600;color:var(--sub);letter-spacing:.02em}
+  .sh-wk{display:flex;align-items:center;flex-wrap:wrap;gap:7px;margin-top:6px}
+  .sh-wk .wk-lbl{color:var(--sub);font-size:13px;font-family:'Rajdhani',sans-serif;font-weight:600;margin-right:2px}
+  .sh-chip{display:inline-flex;align-items:center;gap:5px;padding:3px 9px 3px 5px;border:1px solid var(--border);border-radius:999px;background:var(--panel-2);font-family:'Rajdhani',sans-serif;font-weight:600;font-size:12.5px;line-height:1}
+  .sh-grid{display:grid;grid-template-columns:1fr 1fr;gap:13px;margin-top:14px}
+  .sh-mon{border:1px solid var(--border);border-radius:10px;background:var(--panel-2);padding:13px}
+  .sh-mon-top{display:flex;gap:13px}
+  .sh-mon-img{width:58px;height:58px;border-radius:8px;background:linear-gradient(135deg,#1f1f25,#2a2a32);border:1px solid var(--border);flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#4a4a54}
+  .sh-mon-img svg{width:26px;height:26px;fill:none;stroke:currentColor;stroke-width:1.6}
+  .sh-mon-img img{width:100%;height:100%;object-fit:cover;border-radius:7px;display:block}
+  .sh-mon-name{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;font-size:18px;color:#fff;line-height:1.05;margin-bottom:5px}
+  .sh-mon-stats{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--text);line-height:1.6}
+  .sh-mon-stats .s-sep{color:var(--sub);margin:0 5px}
+  .sh-mon-wk{display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin-top:9px}
+  .sh-mon-wk .wk-lbl{color:var(--sub);font-size:12px;font-family:'Rajdhani',sans-serif;font-weight:600;width:96px;flex-shrink:0}
+  @media(max-width:760px){.sh-grid{grid-template-columns:1fr}}
   /* tournament scope tabs */
   body>.tourrow{position:relative;z-index:40;display:flex;align-items:stretch;padding:0 22px;border-bottom:1px solid var(--border);background:rgba(16,16,20,.55)}
   .tour-tab{position:relative;display:flex;flex-direction:column;justify-content:center;gap:3px;border:none;background:none;padding:11px 22px;cursor:pointer;text-align:left;transition:.15s;min-height:58px}
@@ -257,6 +291,10 @@
   <button class="tab-btn" data-tab="amps">Амплификаторы</button>
   <button class="tab-btn" data-tab="rating">Рейтинги</button>
   <button class="tab-btn" data-tab="ext">Расширенная</button>
+  <button class="shiyu-btn" id="shiyu-btn" data-tab="shiyu">
+    <svg class="sb-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2 4 6v6c0 5 3.4 8.3 8 10 4.6-1.7 8-5 8-10V6l-8-4z" stroke-linejoin="round"/></svg>
+    Шиюй турнира
+  </button>
 </div>
 
 <!-- Content -->
@@ -328,6 +366,11 @@
         <tbody id="ext-body"><tr><td class="empty" colspan="12">Нет данных</td></tr></tbody>
       </table>
     </div>
+  </div>
+
+  <!-- CURRENT SHIYU ROTATION -->
+  <div id="tab-shiyu" class="tab-pane" style="display:none">
+    <div id="shiyu-area"></div>
   </div>
 </div>
 
@@ -1200,12 +1243,85 @@ function renderAll(){
   const el=document.getElementById('tab-'+active);if(el)el.style.display='block';
 }
 
+// ---- Шиюй турнира (ротация) ----
+// Источник = tournaments.shiyu_data (Frontier 4), грузится через админ-импорт с nanoka
+// (web/tournaments.js → importShiyuRotation). SHIYU_ROTATION ниже = фолбэк-срез, если у
+// турнира ротация не загружена. Картинки мобов = hotlink на CDN nanoka (поле img). См. память shiyu-rotation.
+const SHIYU_ROTATION={
+  buff:{title:'Overwhelming Force',lines:[
+    'Agent Sheer DMG increases by 35%, and their <span class="hl">Physical DMG</span> increases by 10%.',
+    'Agent <b>Basic Attack</b>, <b>EX Special Attack</b>, and <b>Ultimate</b> ignore 10% of enemy <span class="hl">Physical RES</span> on hit.'
+  ]},
+  rooms:[
+    {title:'Battle Rooms 1',waves:2,weakness:['physical','fire'],monsters:[
+      {name:'Wanted Enforcer',hp:6385961,atk:2228,def:794,stun:8322,anomaly:0,weak:['fire','physical'],res:['ice']},
+      {name:'Troublemaker - Wanted Enforcer',hp:15161033,atk:2785,def:952,stun:12194,anomaly:0,weak:['fire','physical'],res:['ice']},
+      {name:'Wanted Intimidator',hp:4808470,atk:1996,def:794,stun:6349,anomaly:0,weak:['fire','physical'],res:['ice']}
+    ]},
+    {title:'Battle Rooms 2',waves:1,weakness:['ice','ether'],monsters:[
+      {name:'Tepes',img:'Monster_Tepes',hp:15713671,atk:3343,def:952,stun:17437,anomaly:0,weak:['ice','ether'],res:[]}
+    ]}
+  ]
+};
+const _shNum=n=>(n||0).toLocaleString('ru-RU').replace(/ /g,' ');
+function _shChip(el){return `<span class="sh-chip">${iconElement(el,15)}<span>${IC_ELEM_LBL[el]||el}</span></span>`;}
+const _shPhSvg=`<svg viewBox="0 0 24 24"><path d="M4 4h16v16H4z"/><path d="m4 16 5-5 4 4 3-3 4 4"/><circle cx="9" cy="9" r="1.6"/></svg>`;
+// Картинки мобов НЕ хранятся локально: берётся basename (поле img) и строится URL прямо на CDN nanoka.
+// При 404 onerror подменяет на SVG-плейсхолдер. См. memory shiyu-rotation / nanoka-cdn.
+const SH_CDN='https://static.nanoka.cc/assets/zzz/';
+function _shMonImg(m){
+  if(!m.img)return `<div class="sh-mon-img">${_shPhSvg}</div>`;
+  const u=SH_CDN+m.img+'.webp';
+  return `<div class="sh-mon-img"><img src="${u}" alt="${m.name}" loading="lazy" onerror="this.parentNode.innerHTML='${_shPhSvg.replace(/'/g,"\\'")}'"></div>`;
+}
+function renderShiyu(){
+  // источник = ротация выбранного турнира (shiyu_data из админ-импорта); фолбэк — статичный срез
+  const t=(typeof TOURS!=='undefined'?TOURS:[]).find(x=>x.id===S.tour);
+  const r=(t&&t.shiyu_data&&t.shiyu_data.rooms&&t.shiyu_data.rooms.length)?t.shiyu_data:SHIYU_ROTATION;
+  const buff=`<div class="sh-card sh-buff">${r.buff.title?`<h4>${r.buff.title}</h4>`:''}${r.buff.lines.map(l=>`<div class="bl">${l}</div>`).join('')}</div>`;
+  const halfLbl=['Первая половина','Вторая половина'];
+  const rooms=r.rooms.map((rm,i)=>{
+    const mons=rm.monsters.map(m=>`
+      <div class="sh-mon">
+        <div class="sh-mon-top">
+          ${_shMonImg(m)}
+          <div>
+            <div class="sh-mon-name">${m.name}</div>
+            <div class="sh-mon-stats">HP ${_shNum(m.hp)}<span class="s-sep">·</span>ATK ${_shNum(m.atk)}<span class="s-sep">·</span>DEF ${_shNum(m.def)}<br>Stun ${_shNum(m.stun)}<span class="s-sep">·</span>Anomaly ${_shNum(m.anomaly)}</div>
+          </div>
+        </div>
+        <div class="sh-mon-wk"><span class="wk-lbl">Уязвимость</span>${m.weak.map(_shChip).join('')}</div>
+        ${m.res.length?`<div class="sh-mon-wk"><span class="wk-lbl">Сопротивление</span>${m.res.map(_shChip).join('')}</div>`:''}
+      </div>`).join('');
+    const title=halfLbl[i]||rm.title||`Комната ${i+1}`;
+    return `<div class="sh-card sh-room">
+      <div class="sh-room-head"><span class="sh-room-title">${title}</span><span class="sh-waves">Волн: ${rm.waves}</span></div>
+      <div class="sh-grid">${mons}</div>
+    </div>`;
+  }).join('');
+  document.getElementById('shiyu-area').innerHTML=`<div class="sh-wrap"><div class="sh-lbl">Бафф комнаты</div>${buff}${rooms}</div>`;
+}
+function openShiyu(){
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('.tab-pane').forEach(t=>t.style.display='none');
+  document.getElementById('shiyu-btn').classList.add('active');
+  renderShiyu();
+  document.getElementById('tab-shiyu').style.display='block';
+}
+document.getElementById('shiyu-btn').onclick=openShiyu;
+
 // Init
 let TOURS=[];
 function activateTour(id,tab){
   S.tour=id;
   document.querySelectorAll('.tour-tab').forEach(t=>t.classList.remove('active'));
   if(tab)tab.classList.add('active');
+  // кнопка «Шиюй турнира» — только в выбранном турнире, у которого загружена ротация
+  const sbtn=document.getElementById('shiyu-btn');
+  const curTour=TOURS.find(x=>x.id===id);
+  const hasShiyu=!!(curTour&&curTour.shiyu_data&&curTour.shiyu_data.rooms&&curTour.shiyu_data.rooms.length);
+  if(id===ALL||!hasShiyu){sbtn.style.display='none';sbtn.classList.remove('active');}
+  else{sbtn.style.display='inline-flex';}
   loadAll();
 }
 async function init(){
@@ -1290,6 +1406,7 @@ async function init(){
 document.querySelectorAll('.tab-btn').forEach(btn=>{
   btn.onclick=()=>{
     document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+    document.getElementById('shiyu-btn').classList.remove('active');
     btn.classList.add('active');
     document.querySelectorAll('.tab-pane').forEach(t=>t.style.display='none');
     const el=document.getElementById('tab-'+btn.dataset.tab);if(el)el.style.display='block';
