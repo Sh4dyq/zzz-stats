@@ -167,8 +167,8 @@
   .sh-grid{display:grid;grid-template-columns:1fr 1fr;gap:13px;margin-top:14px}
   .sh-mon{border:1px solid var(--border);border-radius:10px;background:var(--panel-2);padding:13px}
   .sh-mon-top{display:flex;gap:13px}
-  .sh-mon-img{width:58px;height:58px;border-radius:8px;background:linear-gradient(135deg,#1f1f25,#2a2a32);border:1px solid var(--border);flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#4a4a54}
-  .sh-mon-img svg{width:26px;height:26px;fill:none;stroke:currentColor;stroke-width:1.6}
+  .sh-mon-img{width:88px;height:88px;border-radius:9px;background:linear-gradient(135deg,#1f1f25,#2a2a32);border:1px solid var(--border);flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#4a4a54}
+  .sh-mon-img svg{width:38px;height:38px;fill:none;stroke:currentColor;stroke-width:1.6}
   .sh-mon-img img{width:100%;height:100%;object-fit:cover;border-radius:7px;display:block}
   .sh-mon-name{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;font-size:18px;color:#fff;line-height:1.05;margin-bottom:5px}
   .sh-mon-stats{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--text);line-height:1.6}
@@ -1278,7 +1278,7 @@ function renderShiyu(){
   // источник = ротация выбранного турнира (shiyu_data из админ-импорта); фолбэк — статичный срез
   const t=(typeof TOURS!=='undefined'?TOURS:[]).find(x=>x.id===S.tour);
   const r=(t&&t.shiyu_data&&t.shiyu_data.rooms&&t.shiyu_data.rooms.length)?t.shiyu_data:SHIYU_ROTATION;
-  const buff=`<div class="sh-card sh-buff">${r.buff.title?`<h4>${r.buff.title}</h4>`:''}${r.buff.lines.map(l=>`<div class="bl">${l}</div>`).join('')}</div>`;
+  const buff=`<div class="sh-card sh-buff">${r.buff.title?`<h4>${r.buff.title}</h4>`:''}${r.buff.lines.map(l=>`<div class="bl">${String(l).replace(/^[·•]\s*/,'')}</div>`).join('')}</div>`;
   const halfLbl=['Первая половина','Вторая половина'];
   const rooms=r.rooms.map((rm,i)=>{
     const mons=rm.monsters.map(m=>`

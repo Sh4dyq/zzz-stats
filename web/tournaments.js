@@ -134,7 +134,8 @@ function normalizeShiyu(doc,srcUrl,ver){
   // nanoka иногда оставляет title неразрешённым ключом локализации (напр. «62001522_Title») → прячем
   const rawTitle=String(bEntry.title||'').trim();
   const title=/(^\d|_Title$)/i.test(rawTitle)?'':rawTitle;
-  const buff={title,lines:String(bEntry.desc||'').split('\n').map(l=>_shyColor(l.trim())).filter(Boolean)};
+  // ведущий маркер «· » убираем — буллет рисует CSS .bl::before (иначе двойная точка)
+  const buff={title,lines:String(bEntry.desc||'').split('\n').map(l=>_shyColor(l.trim().replace(/^[·•]\s*/,''))).filter(Boolean)};
   // комнаты: по ключам layer_room по возрастанию (1-я, 2-я половина)
   const rooms=Object.keys(zone.layer_room||{}).sort().map(rk=>{
     const room=zone.layer_room[rk];
