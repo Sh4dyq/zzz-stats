@@ -331,6 +331,7 @@
 <!-- Format sub-tabs (видны только внутри турнира) -->
 <div class="fmtrow" id="fmtrow" hidden>
   <button class="fmt-btn active" data-fmt="bracket">Сетка</button>
+  <button class="fmt-btn" data-fmt="review">Обзор встреч</button>
   <button class="fmt-btn" data-fmt="results">Результаты</button>
 </div>
 
@@ -399,8 +400,30 @@ const seedsOf=tid=>(S.parts[tid]||[]).slice().sort((a,b)=>(a.seed||1e9)-(b.seed|
 const partCount=tid=>{const sd=(S.parts[tid]||[]).length;if(sd)return sd;const s=new Set();S.encounters.filter(e=>e.tournament_id==tid).forEach(e=>{if(e.player1_id)s.add(e.player1_id);if(e.player2_id)s.add(e.player2_id)});return s.size};
 // максимально возможное число матчей турнира по формату и числу участников
 const maxMatches=t=>{const n=Math.max(partCount(t.id),t.expected_players||0);if(n<2)return 0;return t.bracket_type==='DE'?2*(n-1):n-1;};
-// прогресс турнира = сыгранные встречи (с победителем) от максимума матчей (сразу полная шкала)
-const tourProgress=tid=>{const t=S.tours.find(x=>x.id==tid)||{};const e=S.encounters.filter(x=>x.tournament_id==tid);const done=e.filter(x=>x.winner_id).length;const total=Math.max(maxMatches(t),e.length);return{done,total,pct:total?Math.round(done/total*100):0};};
+// прогресс турнира. done (1-е число) = матчи, УЖЕ ЗАКРЫТЫЕ в сетке — включая
+// тех-лузы и проходы без отдельной встречи (матч с проставленным победителем
+// считается сыгранным). total (2-е) = все матчи сетки по её структуре и числу
+// игроков. Приоритет источника: СВОЯ сетка (узлы, без BYE) → кэш Challonge
+// (авторитетен: walkover/bye там уже закрыты) → структурный максимум по формату.
+const prg=(done,total)=>({done,total,pct:total?Math.round(done/total*100):0});
+const tourProgress=tid=>{
+  const t=S.tours.find(x=>x.id==tid)||{};
+  const nodes=S.nodes&&S.nodes[tid];
+  if(nodes&&nodes.length){
+    const real=nodes.filter(n=>!n.is_bye);           // BYE — не матч; тех-лузы (winner без встречи) считаются
+    const done=real.filter(n=>n.winner_id).length;
+    return prg(done,real.length||done);
+  }
+  const ch=S.cache[tid];
+  if(ch&&Array.isArray(ch.rounds)&&ch.rounds.length){
+    let total=0,done=0;
+    ch.rounds.forEach(r=>(r.matches||[]).forEach(m=>{total++;if(m.played)done++;}));
+    if(total)return prg(done,total);
+  }
+  const e=S.encounters.filter(x=>x.tournament_id==tid);
+  const done=e.filter(x=>x.winner_id).length;
+  return prg(done,Math.max(maxMatches(t),e.length,done));
+};
 const progHTML=pr=>`<div class="prog"><div class="bar"><div class="fill" style="width:${pr.pct}%"></div></div><span class="pln">${pr.done}/${pr.total}</span></div>`;
 // актуальный турнир: live → последний не-анонс → первый
 const curTour=()=>S.tours.find(t=>t.status==='live')||S.tours.find(t=>t.status!=='upcoming')||S.tours[0]||null;
@@ -503,6 +526,7 @@ function render(){
   const t=S.cur;
   if(!t){return openAll();}
   renderMeta(t);
+  if(S.fmt==='review') return renderReview(t);
   if(S.fmt==='results') return renderResults(t);
   renderBracket(t);
 }
@@ -777,12 +801,17 @@ function encReviewCards(t){
     <div class="rev-grid">${encs.map(card).join('')}</div>
   </div>`;
 }
+// «Обзор встреч» — отдельная вкладка ПЕРЕД результатами (плашки сыгранных встреч).
+function renderReview(t){
+  const cards=encReviewCards(t);
+  $('content').innerHTML=cards||`<div class="panel"><h3>Обзор встреч пуст</h3>
+    <p>Здесь появятся сыгранные встречи с таймерами и пиками, как только их добавят в статистику.</p></div>`;
+}
 function renderResults(t){
   const rs=(S.results[t.id]||[]).slice().sort((a,b)=>(a.place||99)-(b.place||99));
-  const cards=encReviewCards(t);
   if(!rs.length){
     $('content').innerHTML=`<div class="panel"><h3>Результаты не заполнены</h3>
-      <p>Места и призовые появятся после завершения турнира — их подтянет синк с Challonge (final_rank) или ручной ввод в админке.</p></div>${cards}`;
+      <p>Места и призовые появятся после завершения турнира — их подтянет синк с Challonge (final_rank) или ручной ввод в админке.</p></div>`;
     return;
   }
   $('content').innerHTML=`<div class="rtbl">`+rs.map(r=>{
@@ -791,7 +820,7 @@ function renderResults(t){
       <span class="plc ${g}">${r.place||'—'}</span>
       <span class="rnm">${esc(S.players[r.player_id]||'—')}</span>
       ${r.prize?`<span class="rprz">${Number(r.prize).toLocaleString('ru')} ₽</span>`:''}</div>`;
-  }).join('')+`</div>`+cards;
+  }).join('')+`</div>`;
 }
 
 // twitch live pill (decapi, same as other pages)

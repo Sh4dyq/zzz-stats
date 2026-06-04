@@ -10,6 +10,117 @@ const DRAFT_TEMPLATE=(fp,dbl)=>[
   {n:17,pid:fp,type:'pick'},{n:18,pid:dbl,type:'pick'},
 ];
 
+// Многоуровневая проверка результата матча (задача P5 из remaining-tasks-plan).
+// Проверяет: правильность стороны (фп матча N = «игрок N» встречи), что фп
+// действительно фп (пики is_fp принадлежат фп, фп входит во встречу), что
+// сторона фп не дублируется внутри встречи (фп чередуется между матчами),
+// таймеры>0, согласованность победитель↔таймер и отсутствие дублей персонажей.
+// errors — серьёзные (блокируют без подтверждения); warnings — мягкие (инфо).
+function validateMatchData(o){
+  const{num,p1Id,p2Id,fpId,t1,t2,isDraw,winnerId,picks=[],bans=[],otherFpId}=o;
+  const errors=[],warnings=[];
+  const dblId=fpId===p1Id?p2Id:p1Id;
+  // правильность стороны + «фп действительно фп»
+  if([p1Id,p2Id].indexOf(fpId)<0)errors.push('фп не входит в эту встречу');
+  else if(fpId!==(+num===1?p1Id:p2Id))errors.push(`фп матча ${num} должен быть «Игрок ${num}» встречи`);
+  // сторона фп не дублируется внутри встречи (фп чередуется между матчами)
+  if(otherFpId&&otherFpId===fpId)errors.push('этот игрок уже фп в другом матче встречи — сторона дублируется (фп должен чередоваться)');
+  // пики с флагом is_fp должны принадлежать именно фп (и наоборот)
+  picks.forEach(p=>{
+    if(p.is_fp&&p.player_id!==fpId)errors.push('пик помечен как фп, но принадлежит даблу');
+    if(p.is_double&&p.player_id===fpId)errors.push('пик фп помечен как дабл');
+  });
+  // таймеры > 0
+  if(t1!=null&&t1<=0)errors.push('таймер фп должен быть > 0');
+  if(t2!=null&&t2<=0)errors.push('таймер дабла должен быть > 0');
+  // победитель ↔ таймер
+  if(!isDraw&&winnerId&&t1!=null&&t2!=null&&t1!==t2){
+    if(winnerId!==(t1<t2?fpId:dblId))warnings.push('победитель не совпадает с лучшим таймером');
+  }
+  // дубли персонажей (один игрок выбрал/забанил персонажа дважды)
+  const dup=(rows,lbl)=>{const s={};rows.forEach(r=>{const k=r.player_id+'|'+r.character_id;if(s[k])warnings.push(`${lbl}: персонаж выбран дважды одним игроком`);s[k]=1;});};
+  dup(picks,'пики');dup(bans,'баны');
+  return{errors,warnings};
+}
+
+// Проверка ростер-консистентности (часть задачи P5): сверяет пики игрока
+// (персонаж + минскейп) с его ЗАРЕГИСТРИРОВАННЫМ ростером турнира и с его же
+// пиками в ДРУГИХ матчах того же турнира (между играми и встречами). Возвращает
+// массив строк-предупреждений (мягких — ростер бывает авто/неполный). existingId
+// исключаем, чтобы матч не сверялся сам с собой при пересохранении.
+async function rosterConsistencyWarnings(encId,picks,existingId){
+  if(!picks.length)return[];
+  const{data:encRow}=await sb.from('encounters').select('tournament_id').eq('id',encId).maybeSingle();
+  const tid=encRow?.tournament_id;if(!tid)return[];
+  const chMap={};D.chars.forEach(c=>chMap[c.id]=c);
+  const plMap={};D.players.forEach(p=>plMap[p.id]=p);
+  const nm=id=>chMap[id]?.name||'?',pn=id=>plMap[id]?.nickname||'?';
+  // зарегистрированный ростер турнира
+  const{data:rost}=await sb.from('player_rosters').select('player_id,character_id,mindscape').eq('tournament_id',tid);
+  const rkey={};(rost||[]).forEach(r=>rkey[r.player_id+'|'+r.character_id]=r.mindscape);
+  const rostPlayers=new Set((rost||[]).map(r=>r.player_id));
+  // пики в других матчах турнира → минскейп персонажа по игроку (между матчами)
+  const{data:encs}=await sb.from('encounters').select('id').eq('tournament_id',tid);
+  const encIds=(encs||[]).map(e=>e.id);
+  const{data:oMs}=encIds.length?await sb.from('matches').select('id').in('encounter_id',encIds):{data:[]};
+  const mIds=(oMs||[]).map(m=>m.id).filter(id=>id!==existingId);
+  const{data:oPicks}=mIds.length?await sb.from('match_picks').select('player_id,character_id,mindscape').in('match_id',mIds):{data:[]};
+  const seen={};(oPicks||[]).forEach(p=>{const k=p.player_id+'|'+p.character_id;if(seen[k]==null)seen[k]=p.mindscape;});
+  const warns=[];
+  picks.forEach(p=>{
+    const rk=p.player_id+'|'+p.character_id;
+    if(rkey[rk]!=null&&rkey[rk]!==p.mindscape)warns.push(`${pn(p.player_id)}: ${nm(p.character_id)} M${p.mindscape} ≠ ростер турнира (M${rkey[rk]})`);
+    else if(rkey[rk]==null&&rostPlayers.has(p.player_id))warns.push(`${pn(p.player_id)}: ${nm(p.character_id)} не в зарегистрированном ростере турнира`);
+    if(seen[rk]!=null&&seen[rk]!==p.mindscape)warns.push(`${pn(p.player_id)}: ${nm(p.character_id)} M${p.mindscape} ≠ другой матч турнира (M${seen[rk]})`);
+  });
+  return[...new Set(warns)];
+}
+
+// Полный аудит всех матчей турнира (для пост-проверки после булк-импорта, где
+// были самые опасные проблемы). Перечитывает встречи+матчи+пики/баны из БД и
+// гоняет validateMatchData по каждому матчу (с otherFpId соседнего матча), плюс
+// сквозную ростер-консистентность по всему турниру (минскейп персонажа должен
+// совпадать между матчами и с зарегистрированным ростером). Возвращает
+// {errors,warnings} — массивы помеченных строк.
+async function auditTournamentMatches(tourId){
+  const errors=[],warnings=[];
+  const plMap={};D.players.forEach(p=>plMap[p.id]=p);
+  const chMap={};D.chars.forEach(c=>chMap[c.id]=c);
+  const pn=id=>plMap[id]?.nickname||'?',cn=id=>chMap[id]?.name||'?';
+  const{data:encs}=await sb.from('encounters').select('*').eq('tournament_id',tourId);
+  if(!encs||!encs.length)return{errors,warnings};
+  const{data:ms}=await sb.from('matches').select('*,picks:match_picks(*),bans:match_bans(*)').in('encounter_id',encs.map(e=>e.id));
+  const byEnc={};(ms||[]).forEach(m=>{(byEnc[m.encounter_id]=byEnc[m.encounter_id]||[]).push(m);});
+  encs.forEach(e=>{
+    const list=(byEnc[e.id]||[]).slice().sort((a,b)=>(a.match_number||0)-(b.match_number||0));
+    const lbl=`${pn(e.player1_id)} vs ${pn(e.player2_id)}`;
+    if(list.length<2)warnings.push(`${lbl}: только ${list.length} матч(ей) из 2 (пара собралась не полностью)`);
+    list.forEach(m=>{
+      const other=(list.find(x=>x!==m)||{}).fp_player_id||null;
+      const onP1=m.fp_player_id===e.player1_id;
+      const t1=onP1?m.player1_timer_sec:m.player2_timer_sec; // t1 = таймер фп
+      const t2=onP1?m.player2_timer_sec:m.player1_timer_sec;
+      const vr=validateMatchData({num:m.match_number,p1Id:e.player1_id,p2Id:e.player2_id,fpId:m.fp_player_id,
+        t1,t2,isDraw:m.is_draw,winnerId:m.winner_id,picks:m.picks||[],bans:m.bans||[],otherFpId:other});
+      vr.errors.forEach(x=>errors.push(`${lbl} · м${m.match_number}: ${x}`));
+      vr.warnings.forEach(x=>warnings.push(`${lbl} · м${m.match_number}: ${x}`));
+    });
+  });
+  // сквозная ростер-консистентность турнира
+  const{data:rost}=await sb.from('player_rosters').select('player_id,character_id,mindscape').eq('tournament_id',tourId);
+  const rkey={};(rost||[]).forEach(r=>rkey[r.player_id+'|'+r.character_id]=r.mindscape);
+  const rostPlayers=new Set((rost||[]).map(r=>r.player_id));
+  const seen={};
+  (ms||[]).forEach(m=>(m.picks||[]).forEach(p=>{
+    const k=p.player_id+'|'+p.character_id;
+    if(rkey[k]!=null&&rkey[k]!==p.mindscape)warnings.push(`${pn(p.player_id)}: ${cn(p.character_id)} M${p.mindscape} ≠ ростер турнира (M${rkey[k]})`);
+    else if(rkey[k]==null&&rostPlayers.has(p.player_id))warnings.push(`${pn(p.player_id)}: ${cn(p.character_id)} вне зарегистрированного ростера`);
+    if(seen[k]!=null&&seen[k]!==p.mindscape)warnings.push(`${pn(p.player_id)}: ${cn(p.character_id)} M${p.mindscape} расходится между матчами (было M${seen[k]})`);
+    if(seen[k]==null)seen[k]=p.mindscape;
+  }));
+  return{errors:[...new Set(errors)],warnings:[...new Set(warnings)]};
+}
+
 async function pgMatches(){
   const{data:encsRaw}=await sb.from('encounters').select('*').order('created_at',{ascending:false});
   // ручной порядок (sort_order) поверх дефолтной сортировки; строки без него — в конец, стабильно.
@@ -208,9 +319,28 @@ async function bulkImportDrafts(){
       }
     }catch(e){errs.push(`пара ${grp[0].fp}/${grp[0].dbl}: ${e.message}`);}
   }
-  set(`Готово: ${ok} матч(ей) в ${keys.length} встреч(ах)`+(errs.length?` · ⚠ ${errs.length}: ${errs.join('; ')}`:''));
-  toast(errs.length?'Импорт с предупреждениями':'Импорт завершён',errs.length?'err':'ok');
-  await refreshData();pgMatches();
+  // ОБЯЗАТЕЛЬНАЯ пост-проверка ВСЕГО турнира после импорта (в булке были самые
+  // опасные ошибки): сторона/фп/дубли/таймеры/победитель + ростер-консистентность.
+  await refreshData();
+  set(`Импорт завершён (${ok} матч(ей)) · проверяю турнир…`);
+  const audit=await auditTournamentMatches(t);
+  const rep=[...audit.errors.map(x=>'⛔ '+x),...audit.warnings.map(x=>'⚠ '+x)];
+  const summary=`Готово: ${ok} матч(ей) в ${keys.length} встреч(ах)`
+    +(errs.length?` · импорт-ошибки ${errs.length}: ${errs.join('; ')}`:'')
+    +(rep.length?` · проверка: ${audit.errors.length} ошибок / ${audit.warnings.length} предупр.`:' · проверка: всё чисто');
+  const el=document.getElementById('bulk-status');
+  if(el){
+    el.innerHTML=escapeHtml(summary)+(rep.length
+      ?`<div style="margin-top:6px;max-height:200px;overflow:auto;border:1px solid var(--border);border-radius:6px;padding:6px 9px;line-height:1.5">${rep.map(x=>`<div>${escapeHtml(x)}</div>`).join('')}</div>`
+      :'');
+  }
+  if(rep.length)console.warn('[bulk-import audit]\n'+rep.join('\n'));
+  const bad=errs.length||audit.errors.length;
+  toast(bad?`Импорт: ${audit.errors.length} ошибок проверки — см. отчёт`:(audit.warnings.length?'Импорт ОК, есть предупреждения':'Импорт завершён, проверка чистая'),bad?'err':'ok');
+  // pgMatches() перерисовал бы страницу и стёр отчёт — перерисовываем только когда
+  // всё чисто; при проблемах оставляем отчёт на экране (список встреч обновится при
+  // следующем заходе на вкладку).
+  if(!rep.length)pgMatches();
 }
 
 // Headless-импорт: ссылка драфта → матч + пики/баны в БД, без DOM-борда.
@@ -239,6 +369,11 @@ async function importMatchFromLink(encId,num,p1Id,p2Id,link,pen){
   const p2R=fpId===p1Id?(sDbl.restarts||0):(sFp.restarts||0);
   let winnerId=null;
   if(fpT!=null&&dblT!=null)winnerId=fpT<=dblT?fpId:dblId;
+  // Валидация стороны/фп/дублирования перед записью (см. validateMatchData).
+  const{data:otherMs}=await sb.from('matches').select('fp_player_id').eq('encounter_id',encId).neq('match_number',+num);
+  const otherFpId=(otherMs||[]).map(m=>m.fp_player_id).find(Boolean)||null;
+  const vr=validateMatchData({num,p1Id,p2Id,fpId,t1:fpT,t2:dblT,isDraw:false,winnerId,otherFpId});
+  if(vr.errors.length)throw new Error('валидация: '+vr.errors.join('; '));
   const mData={encounter_id:encId,match_number:+num,fp_player_id:fpId,is_draw:false,winner_id:winnerId,
     player1_timer_sec:p1Timer,player2_timer_sec:p2Timer,player1_restarts:p1R,player2_restarts:p2R};
   const{data:exist}=await sb.from('matches').select('id').eq('encounter_id',encId).eq('match_number',+num).maybeSingle();
@@ -666,12 +801,7 @@ async function saveMatch(encId,num,p1Id,p2Id,fpId,existingId){
     player1_timer_sec:p1Timer,player2_timer_sec:p2Timer,
     player1_restarts:p1R,player2_restarts:p2R};
 
-  let mid=existingId;
-  if(mid){const{error}=await sb.from('matches').update(mData).eq('id',mid);if(dbErr(error,'обновление матча'))return;}
-  else{const{data,error}=await sb.from('matches').insert(mData).select().single();if(dbErr(error,'создание матча'))return;mid=data?.id;}
-  if(!mid)return toast('Ошибка сохранения матча','err');
-
-  // Собираем баны и пики из драфт-борда
+  // Собираем баны и пики из драфт-борда (match_id допишем после получения mid).
   // team_slot вычисляем по позиции пика среди пиков этого игрока: первые 3 → T1, следующие 3 → T2
   const template=DRAFT_TEMPLATE(fpId,dblId);
   const fpPickOrder=template.filter(s=>s.type==='pick'&&s.pid===fpId).map(s=>s.n);
@@ -687,17 +817,37 @@ async function saveMatch(encId,num,p1Id,p2Id,fpId,existingId){
     if(!el.value)return;
     const slot=+el.dataset.slot,type=el.dataset.type,pid=el.dataset.pid;
     if(type==='ban'){
-      bans.push({match_id:mid,player_id:pid,character_id:el.value,ban_order:slot});
+      bans.push({player_id:pid,character_id:el.value,ban_order:slot});
     }else{
       const ms=+document.querySelector(`.draft-ms[data-slot="${slot}"]`)?.value||0;
       const sigId=document.querySelector(`.draft-sig[data-slot="${slot}"]`)?.value||null;
       const ref=+document.querySelector(`.draft-ref[data-slot="${slot}"]`)?.value||1;
       const team=teamSlotFor(pid,slot);
-      picks.push({match_id:mid,player_id:pid,character_id:el.value,
+      picks.push({player_id:pid,character_id:el.value,
         mindscape:ms,team_slot:team,sig_id:sigId,has_signature:!!sigId,refinement:ref,pick_order:slot,
         is_fp:pid===fpId,is_double:pid!==fpId});
     }
   });
+
+  // Многоуровневая валидация перед записью: сторона/фп/дубли/таймеры.
+  // otherFpId — фп соседнего матча встречи (для проверки, что сторона не дублируется).
+  const{data:otherMs}=await sb.from('matches').select('fp_player_id').eq('encounter_id',encId).neq('match_number',+num);
+  const otherFpId=(otherMs||[]).map(m=>m.fp_player_id).find(Boolean)||null;
+  const vr=validateMatchData({num,p1Id,p2Id,fpId,t1,t2,isDraw,winnerId,picks,bans,otherFpId});
+  const rWarn=await rosterConsistencyWarnings(encId,picks,existingId);
+  const warnings=[...vr.warnings,...rWarn];
+  if(vr.errors.length||warnings.length){
+    const msg=[vr.errors.length?'⛔ Ошибки:\n• '+vr.errors.join('\n• '):'',
+              warnings.length?'⚠ Предупреждения:\n• '+warnings.join('\n• '):'']
+             .filter(Boolean).join('\n\n');
+    if(!confirm(msg+'\n\nВсё равно сохранить матч?'))return;
+  }
+
+  let mid=existingId;
+  if(mid){const{error}=await sb.from('matches').update(mData).eq('id',mid);if(dbErr(error,'обновление матча'))return;}
+  else{const{data,error}=await sb.from('matches').insert(mData).select().single();if(dbErr(error,'создание матча'))return;mid=data?.id;}
+  if(!mid)return toast('Ошибка сохранения матча','err');
+  bans.forEach(b=>b.match_id=mid);picks.forEach(p=>p.match_id=mid);
 
   {const{error}=await sb.from('match_bans').delete().eq('match_id',mid);if(dbErr(error,'очистка банов'))return;}
   if(bans.length){const{error}=await sb.from('match_bans').insert(bans);if(dbErr(error,'сохранение банов'))return;}
