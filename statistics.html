@@ -43,6 +43,12 @@
   #players-area table td.nc>div{height:100%;line-height:1}
   #players-area table td.ic>span{display:flex;align-items:center;justify-content:center;height:100%;line-height:1}
   th,td{padding:9px 14px;border:1px solid var(--border);text-align:center;vertical-align:middle;overflow:hidden}
+  /* Таблица «Персонажи»: ~30 колонок — ужимаем гориз. паддинг и узкие колонки, чтобы влезть по ширине (шрифты не трогаем) */
+  #tab-chars th,#tab-chars td{padding-left:6px;padding-right:6px}
+  #tab-chars td.nc,#tab-chars th.nc{min-width:124px;padding-left:10px;padding-right:10px}
+  #tab-chars td.ic,#tab-chars th.ic{padding-left:4px;padding-right:4px}
+  /* Кост / Кост η содержат диапазоны «a–b» — фикс. узкая ширина, чтобы не растягивали строку */
+  #tab-chars .th-g[onclick*="'cost'"],#tab-chars .th-g[onclick*="'eta'"]{width:38px;min-width:38px}
   th{background:#101013;font-size:12.5px;font-weight:500;color:var(--sub);cursor:pointer;user-select:none;font-family:'Rajdhani',sans-serif;font-weight:600;letter-spacing:.04em}
   th:hover{color:var(--text);background:#17171c}
   .th-g{text-align:center!important;background:#121214!important;color:#fff!important;font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;font-size:13px;letter-spacing:.03em;border-bottom:2px solid var(--red)!important}
@@ -379,6 +385,8 @@ const ALL='__all__';
 const ETA_AVG=1605/17;
 const eta=(cost,wrv,pk)=>(pk&&typeof cost==='number'&&cost>0&&typeof wrv==='number')?wrv*ETA_AVG/cost:'—';
 const f1=v=>typeof v==='number'?v.toFixed(2)+'%':v;
+// Сортировка по диапазону «a–b»: по возрастанию (asc) берём нижнюю границу, по убыванию — верхнюю.
+const rngVal=(v,asc)=>{if(typeof v==='number')return v;const p=String(v).split('–');const lo=parseFloat(p[0])||0,hi=parseFloat(p[p.length-1])||0;return asc?lo:hi;};
 const wr=(w,d,t)=>t?(w+0.5*d)/t*100:0;
 const wc=v=>v>55?'g':v<45?'r':'m';
 const pctT=(n,t)=>t?n/t*100:0;
@@ -512,11 +520,13 @@ function computeChars(){
   S.picks.forEach(pk=>{
     const m=S.matchMap[pk.match_id];if(!m)return;
     const key=pk.character_id+'_'+pk.mindscape;
-    if(!statMap[key])statMap[key]={cid:pk.character_id,ms:pk.mindscape,pk:0,pw:0,pd:0,fp:0,fw:0,fd:0,dp:0,dw:0,dd:0,sp:0,sw:0,sd:0,scSet:new Set()};
+    if(!statMap[key])statMap[key]={cid:pk.character_id,ms:pk.mindscape,pk:0,pw:0,pd:0,fp:0,fw:0,fd:0,dp:0,dw:0,dd:0,t1:0,t2:0,sp:0,sw:0,sd:0,scSet:new Set()};
     const s=statMap[key];
     s.pk++;
     const isW=m.winner_id===pk.player_id,isD=m.is_draw;
     if(isW)s.pw++;else if(isD)s.pd++;
+    // К1 / К2 — половина драфта игрока: team_slot=1 (первые 3 пика) / team_slot=2 (следующие 3).
+    if(pk.team_slot===1)s.t1++;else if(pk.team_slot===2)s.t2++;
     // Фп / Дабл — разбиение пиков по стороне драфта: фп = пик игрока с первым
     // пиком (is_fp), дабл = пик второго (дабл) игрока. Выводим дабл из !is_fp,
     // а не из устаревшего поля is_double («зеркальный пик», которого в данных нет).
@@ -573,6 +583,7 @@ function computeChars(){
       pk:s.pk,pw:s.pw,pd:s.pd,pl:s.pk-s.pw-s.pd,pwr,ppt:pctT(s.pk,T),
       fp:s.fp,fw:s.fw,fd:s.fd,fl:s.fp-s.fw-s.fd,fwr:wr(s.fw,s.fd,s.fp),
       dp:s.dp,dw:s.dw,dd:s.dd,dl:s.dp-s.dw-s.dd,dwr:wr(s.dw,s.dd,s.dp),
+      t1:s.t1,t1pt:pctT(s.t1,T),t2:s.t2,t2pt:pctT(s.t2,T),
       bn,bpt:pctT(bd,T),pbn:s.pk+bn,pbpt:pctT(s.pk+bd,T),
       rs,rspt:pctT(rs,totalPlayers),
       sp:s.sp,sw:s.sw,sd:s.sd,sl:s.sp-s.sw-s.sd,swr:wr(s.sw,s.sd,s.sp),spt:pctT(s.sp,T)
@@ -586,6 +597,7 @@ function computeChars(){
       const bn=banCountMs[cidv][ms]||0,bd=banDistMs(cidv,ms),cost=S.costs[cidv]?.[ms],rs=rosterCount[cidv+'_'+ms]||0;
       g.variants.push({ms,cost:cost?.cost??'—',sc:'—',_sc:[],eta:'—',
         pk:0,pw:0,pd:0,pl:0,pwr:0,ppt:0,fp:0,fw:0,fd:0,fl:0,fwr:0,dp:0,dw:0,dd:0,dl:0,dwr:0,
+        t1:0,t1pt:0,t2:0,t2pt:0,
         bn,bpt:pctT(bd,T),pbn:bn,pbpt:pctT(bd,T),rs,rspt:pctT(rs,totalPlayers),
         sp:0,sw:0,sd:0,sl:0,swr:0,spt:0});
     });
@@ -609,6 +621,7 @@ function computeChars(){
         pk:0,pw:0,pd:0,pl:0,pwr:'—',ppt:0,
         fp:0,fw:0,fd:0,fl:0,fwr:'—',
         dp:0,dw:0,dd:0,dl:0,dwr:'—',
+        t1:0,t1pt:0,t2:0,t2pt:0,
         bn,bpt:pctT(bd,T),pbn:bn,pbpt:pctT(bd,T),
         rs,rspt:pctT(rs,totalP0),
         sp:0,sw:0,sd:0,sl:0,swr:'—',spt:0,
@@ -617,7 +630,7 @@ function computeChars(){
       return;
     }
     g.variants.sort((a,b)=>a.ms-b.ms);
-    const sum={pk:0,pw:0,pd:0,fp:0,fw:0,fd:0,dp:0,dw:0,dd:0,bn:0,rs:0,sp:0,sw:0,sd:0};
+    const sum={pk:0,pw:0,pd:0,fp:0,fw:0,fd:0,dp:0,dw:0,dd:0,t1:0,t2:0,bn:0,rs:0,sp:0,sw:0,sd:0};
     g.variants.forEach(v=>Object.keys(sum).forEach(k=>sum[k]+=typeof v[k]==='number'?v[k]:0));
     const T2=S.matches.length,totalP=Object.keys(S.rosters).length||1;
     // Баны не зависят от майндскейпа: берём счётчик по персонажу ОДИН раз, а не sum по вариантам
@@ -626,6 +639,7 @@ function computeChars(){
     const agg={...sum,bn:aBn,
       pl:sum.pk-sum.pw-sum.pd,fl:sum.fp-sum.fw-sum.fd,dl:sum.dp-sum.dw-sum.dd,sl:sum.sp-sum.sw-sum.sd,
       pwr:wr(sum.pw,sum.pd,sum.pk),fwr:wr(sum.fw,sum.fd,sum.fp),dwr:wr(sum.dw,sum.dd,sum.dp),swr:wr(sum.sw,sum.sd,sum.sp),
+      t1pt:pctT(sum.t1,T2),t2pt:pctT(sum.t2,T2),
       ppt:pctT(sum.pk,T2),bpt:pctT(aBd,T2),pbn:sum.pk+aBn,pbpt:pctT(sum.pk+aBd,T2),
       rspt:pctT(sum.rs,totalP),spt:pctT(sum.sp,T2)
     };
@@ -653,28 +667,33 @@ function cellsHTML(d,isAll){
   // WR: прочерк, если в сегменте 0 игр (как на Liquipedia)
   const wrc=(v,tot)=>tot?`<td class="${wc(v)}">${f1(v)}</td>`:`<td class="m">—</td>`;
   const co=isAll?'':`<td class="gb">${d.cost}</td><td>${typeof d.eta==='number'?d.eta.toFixed(1):(d.eta||'—')}</td>`;
+  const ros=isAll?'':`<td class="gb">${d.rs}</td><td>${f1(d.rspt)}</td>`;
   return `${co}<td class="gb">${d.pk}</td><td>${d.pw}</td><td class="m">${d.pd}</td><td>${d.pl}</td>${wrc(d.pwr,d.pk)}<td>${f1(d.ppt)}</td>`+
     `<td class="gb">${d.fp}</td><td>${d.fw}</td><td class="m">${d.fd}</td><td>${d.fl}</td>${wrc(d.fwr,d.fp)}`+
     `<td class="gb">${d.dp}</td><td>${d.dw}</td><td class="m">${d.dd}</td><td>${d.dl}</td>${wrc(d.dwr,d.dp)}`+
-    `<td class="gb">${d.bn}</td><td>${f1(d.bpt)}</td><td class="gb">${d.pbn}</td><td>${f1(d.pbpt)}</td><td class="gb">${d.rs}</td><td>${f1(d.rspt)}</td>`;
+    `<td class="gb">${d.bn}</td><td>${f1(d.bpt)}</td><td class="gb">${d.pbn}</td><td>${f1(d.pbpt)}</td>`+
+    `<td class="gb">${d.t1}</td><td>${f1(d.t1pt)}</td><td class="gb">${d.t2}</td><td>${f1(d.t2pt)}</td>${ros}`;
 }
 
 function renderChars(data){
   const isAll=S.tour===ALL;
   const co=isAll?'':'<th rowspan="2" class="nc gb th-g" onclick="sortC(\'cost\')" title="Стоимость персонажа">Кост</th><th rowspan="2" class="nc th-g" onclick="sortC(\'eta\')" title="КПД: WR% × средняя стоимость (1605/17 ≈ 94.4) ÷ кост. Выше = эффективнее за свой кост.">Кост <span style="text-transform:none;font-family:\'Cambria Math\',Cambria,\'Times New Roman\',serif;font-style:italic;font-weight:600">&eta;</span></th>';
   const TS='Всего',TW='Победы',TD='Ничьи',TL='Поражения',TWR='Винрейт (ничья = ½)',TPT='Доля от всех матчей';
+  const rosH=isAll?'':'<th colspan="2" class="th-g gb">В ростере</th>';
   document.getElementById('chars-head').innerHTML=`<tr>
     <th rowspan="2" class="nc th-g" onclick="sortC('name')">Имя</th>
-    <th rowspan="2" class="ic th-g" onclick="sortC('rarity')" title="Редкость">Редкость</th>
+    <th rowspan="2" class="ic th-g" onclick="sortC('rarity')" title="Редкость">Редк.</th>
     <th rowspan="2" class="ic th-g" onclick="sortC('role')" title="Роль">Роль</th>
-    <th rowspan="2" class="ic th-g" onclick="sortC('element')" title="Атрибут">Атрибут</th>${co}
+    <th rowspan="2" class="ic th-g" onclick="sortC('element')" title="Атрибут">Атр.</th>${co}
     <th colspan="6" class="th-g gb">Пики</th><th colspan="5" class="th-g gb">Фп</th><th colspan="5" class="th-g gb">Дабл</th>
-    <th colspan="2" class="th-g gb">Баны</th><th colspan="2" class="th-g gb">Пики+баны</th><th colspan="2" class="th-g gb">В ростере</th>
+    <th colspan="2" class="th-g gb">Баны</th><th colspan="2" class="th-g gb">Пики+баны</th>
+    <th colspan="4" class="th-g gb">Половины</th>${rosH}
   </tr><tr>
     <th class="gb" onclick="sortC('pk')" title="${TS}">Σ</th><th onclick="sortC('pw')" title="${TW}">W</th><th title="${TD}">D</th><th onclick="sortC('pl')" title="${TL}">L</th><th onclick="sortC('pwr')" title="${TWR}">WR%</th><th onclick="sortC('ppt')" title="${TPT}">%T</th>
     <th class="gb" onclick="sortC('fp')" title="${TS}">Σ</th><th onclick="sortC('fw')" title="${TW}">W</th><th title="${TD}">D</th><th onclick="sortC('fl')" title="${TL}">L</th><th onclick="sortC('fwr')" title="${TWR}">WR%</th>
     <th class="gb" onclick="sortC('dp')" title="${TS}">Σ</th><th onclick="sortC('dw')" title="${TW}">W</th><th title="${TD}">D</th><th onclick="sortC('dl')" title="${TL}">L</th><th onclick="sortC('dwr')" title="${TWR}">WR%</th>
-    <th class="gb" onclick="sortC('bn')" title="Сколько раз забанен">Σ</th><th onclick="sortC('bpt')" title="${TPT}">%T</th><th class="gb" onclick="sortC('pbn')" title="Пики + баны">Σ</th><th onclick="sortC('pbpt')" title="${TPT}">%T</th><th class="gb" onclick="sortC('rs')" title="Сколько игроков взяли в ростер">Σ</th><th onclick="sortC('rspt')" title="Доля игроков">%T</th>
+    <th class="gb" onclick="sortC('bn')" title="Сколько раз забанен">Σ</th><th onclick="sortC('bpt')" title="${TPT}">%T</th><th class="gb" onclick="sortC('pbn')" title="Пики + баны">Σ</th><th onclick="sortC('pbpt')" title="${TPT}">%T</th>
+    <th class="gb" onclick="sortC('t1')" title="Пики в 1-ю половину (первые 3 пика игрока)">1п</th><th onclick="sortC('t1pt')" title="${TPT}">%T</th><th class="gb" onclick="sortC('t2')" title="Пики во 2-ю половину (следующие 3 пика игрока)">2п</th><th onclick="sortC('t2pt')" title="${TPT}">%T</th>${isAll?'':'<th class="gb" onclick="sortC(\'rs\')" title="Сколько игроков взяли в ростер">Σ</th><th onclick="sortC(\'rspt\')" title="Доля игроков">%T</th>'}
   </tr>`;
 
   if(!data.length){document.getElementById('chars-body').innerHTML=`<tr><td class="empty" colspan="40">Нет данных для этого турнира</td></tr>`;return;}
@@ -682,8 +701,8 @@ function renderChars(data){
   const k=S.cSort.k,asc=S.cSort.asc;
   const charKeys={name:'name',rarity:'rarity',role:'role',element:'element'};
   data.sort((a,b)=>{
-    let va=charKeys[k]?(a.char[charKeys[k]]||''):(typeof a.agg[k]==='number'?a.agg[k]:parseFloat(a.agg[k])||0);
-    let vb=charKeys[k]?(b.char[charKeys[k]]||''):(typeof b.agg[k]==='number'?b.agg[k]:parseFloat(b.agg[k])||0);
+    let va=charKeys[k]?(a.char[charKeys[k]]||''):rngVal(a.agg[k],asc);
+    let vb=charKeys[k]?(b.char[charKeys[k]]||''):rngVal(b.agg[k],asc);
     return typeof va==='string'?(asc?va.localeCompare(vb):vb.localeCompare(va)):(asc?va-vb:vb-va);
   });
 
@@ -1058,8 +1077,8 @@ function renderAmps(data){
   const k=S.aSort.k,asc=S.aSort.asc;
   data.sort((a,b)=>{
     if(k==='name')return asc?(a.sig.name||'').localeCompare(b.sig.name||''):(b.sig.name||'').localeCompare(a.sig.name||'');
-    const va=typeof a[k]==='number'?a[k]:parseFloat(a[k])||0;
-    const vb=typeof b[k]==='number'?b[k]:parseFloat(b[k])||0;
+    const va=rngVal(a[k],asc);
+    const vb=rngVal(b[k],asc);
     return asc?va-vb:vb-va;
   });
 
