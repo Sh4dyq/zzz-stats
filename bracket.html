@@ -353,7 +353,7 @@
 
 <!-- Format sub-tabs (видны только внутри турнира) -->
 <div class="fmtrow" id="fmtrow" hidden>
-  <button class="fmt-btn active" data-fmt="bracket">Сетка</button>
+  <button class="fmt-btn active" data-fmt="bracket">Сетка турнира</button>
   <button class="fmt-btn" data-fmt="review">Обзор встреч</button>
   <button class="fmt-btn" data-fmt="results">Результаты</button>
 </div>
@@ -840,8 +840,8 @@ function renderReview(t){
 function renderResults(t){
   const rs=(S.results[t.id]||[]).slice().sort((a,b)=>(a.place||99)-(b.place||99));
   if(!rs.length){
-    $('content').innerHTML=`<div class="panel"><h3>Результаты не заполнены</h3>
-      <p>Места и призовые появятся после завершения турнира — их подтянет синк с Challonge (final_rank) или ручной ввод в админке.</p></div>`;
+    $('content').innerHTML=`<div class="panel"><h3>Результаты ещё не известны</h3>
+      <p>Места и призовые появятся после завершения турнира.</p></div>`;
     return;
   }
   $('content').innerHTML=`<div class="rtbl">`+rs.map(r=>{
