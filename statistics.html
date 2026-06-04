@@ -1011,19 +1011,22 @@ function computeAmps(){
     const chars=Object.keys(a.perChar).map(cidv=>{
       const pc=a.perChar[cidv];
       return{char:S.charMap[cidv],pk:pc.pk,pw:pc.pw,pd:pc.pd,pl:pc.pk-pc.pw-pc.pd,
-        pwr:wr(pc.pw,pc.pd,pc.pk),ppt:pctT(pc.pk,a.pk),cost:ampRange(costMap[s.id]?.[cidv]||[])};
+        pwr:wr(pc.pw,pc.pd,pc.pk),ppt:pctT(pc.pk,a.pk),own:null,cost:ampRange(costMap[s.id]?.[cidv]||[])};
     }).sort((x,y)=>y.pk-x.pk);
     const allCost=[].concat(...Object.values(costMap[s.id]||{}));
-    // %T амплификатора — доля игр сигнатурного персонажа, где взяли этот амплификатор
+    // %T общий — присутствие ампа в матчах (любой носитель), как у персонажей.
+    // %T на владельце — доля игр родного персонажа, где надели именно эту сигну (attach-rate).
     const sigPk=a.perChar[s.character_id]?.pk||0;
     return{sig:s,char:S.charMap[s.character_id],cost:ampRange(allCost),
-      pk:a.pk,pw:a.pw,pd:a.pd,pl:a.pk-a.pw-a.pd,pwr:wr(a.pw,a.pd,a.pk),ppt:pctT(sigPk,charPickTotal[s.character_id]||0),chars};
+      pk:a.pk,pw:a.pw,pd:a.pd,pl:a.pk-a.pw-a.pd,pwr:wr(a.pw,a.pd,a.pk),
+      ppt:pctT(a.pk,T),own:pctT(sigPk,charPickTotal[s.character_id]||0),chars};
   });
 }
 
 function ampCells(d){
   const wrc=d.pk?`<td class="${wc(d.pwr)}">${f1(d.pwr)}</td>`:`<td class="m">—</td>`;
-  return`<td class="gb">${d.pk}</td><td>${d.pw}</td><td class="m">${d.pd}</td><td>${d.pl}</td>${wrc}<td>${f1(d.ppt)}</td>`;
+  const ownc=d.own==null?`<td class="m">—</td>`:`<td>${f1(d.own)}</td>`;
+  return`<td class="gb">${d.pk}</td><td>${d.pw}</td><td class="m">${d.pd}</td><td>${d.pl}</td>${wrc}<td>${f1(d.ppt)}</td>${ownc}`;
 }
 
 function renderAmps(data){
@@ -1031,12 +1034,12 @@ function renderAmps(data){
   const coH=isAll?'':`<th rowspan="2" class="gb th-g" onclick="sortA('cost')" title="Стоимость амплификатора">Кост</th>`;
   document.getElementById('amps-head').innerHTML=`<tr>
     <th rowspan="2" class="nc th-g" onclick="sortA('name')">Амплификатор</th>${coH}
-    <th colspan="6" class="th-g gb">Пики</th>
+    <th colspan="7" class="th-g gb">Пики</th>
   </tr><tr>
-    <th class="gb" onclick="sortA('pk')" title="Всего">Σ</th><th onclick="sortA('pw')" title="Победы">W</th><th title="Ничьи">D</th><th onclick="sortA('pl')" title="Поражения">L</th><th onclick="sortA('pwr')" title="Винрейт (ничья = ½)">WR%</th><th onclick="sortA('ppt')" title="Доля от всех матчей">%T</th>
+    <th class="gb" onclick="sortA('pk')" title="Всего">Σ</th><th onclick="sortA('pw')" title="Победы">W</th><th title="Ничьи">D</th><th onclick="sortA('pl')" title="Поражения">L</th><th onclick="sortA('pwr')" title="Винрейт (ничья = ½)">WR%</th><th onclick="sortA('ppt')" title="Общий: доля матчей, где амплификатор появился на любом носителе">%T</th><th onclick="sortA('own')" title="На владельце: доля игр родного персонажа, где надета именно эта сигна">Влад%</th>
   </tr>`;
 
-  if(!data.length){document.getElementById('amps-body').innerHTML=`<tr><td class="empty" colspan="8">Нет амплификаторов</td></tr>`;return;}
+  if(!data.length){document.getElementById('amps-body').innerHTML=`<tr><td class="empty" colspan="9">Нет амплификаторов</td></tr>`;return;}
 
   const k=S.aSort.k,asc=S.aSort.asc;
   data.sort((a,b)=>{
