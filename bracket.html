@@ -48,6 +48,11 @@
   .livetw svg{width:17px;height:17px;fill:var(--purple)}
   .livetw .tw{color:var(--purple)}.livetw .vbar{width:1px;height:18px;background:rgba(255,255,255,.18)}
   .livetw.offline .dot{background:#5e5e66;box-shadow:none;animation:none}
+  /* hornybox mini button — высота как у twitch-пилюли */
+  .hbbtn{display:flex;align-items:center;justify-content:center;padding:10px 16px;border-radius:10px;
+    background:var(--panel-2);border:1px solid var(--border);transition:.15s;flex-shrink:0}
+  .hbbtn:hover{border-color:var(--lime)}
+  .hbbtn img{height:20px;width:auto;display:block;mix-blend-mode:lighten;flex-shrink:0}
 
   /* ===== in-page navigation: «Все сетки» (left) + активный турнир (right) ===== */
   .tourrow{position:relative;z-index:40;display:flex;align-items:stretch;padding:0 22px;border-bottom:1px solid var(--border);background:rgba(16,16,20,.55)}
@@ -318,6 +323,9 @@
     </nav>
   </div>
   <div style="display:flex;align-items:center;gap:14px">
+    <a href="https://hornybox.ru/?r=Nexus_Shiyu" target="_blank" rel="noopener noreferrer" class="hbbtn">
+      <img src="hornybox-logo.png" alt="HornyBox">
+    </a>
     <a href="https://twitch.tv/Nexus_Shiyu" target="_blank" class="livetw" id="livetw">
       <svg viewBox="0 0 24 24"><path d="M4 2 2 6v14h5v3l3-3h4l6-6V2H4zm16 11-3 3h-4l-3 3v-3H6V4h14v9z"/><path d="M15 7h2v5h-2zM10 7h2v5h-2z"/></svg>
       <span class="tw">Twitch</span><span class="vbar"></span><span class="lv">Live</span><span class="dot"></span>

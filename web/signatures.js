@@ -2,7 +2,7 @@
 async function ensureSigSchema(){
   if(D.hasSigImg!==undefined)return;
   const{error}=await sb.from('signatures').select('image_url').limit(1);
-  D.hasSigImg=!error; // колонка image_url (Этап B)
+  D.hasSigImg=!error; // доступна ли колонка image_url
 }
 
 // Мини-картинка амплификатора. Источник: image_url из БД (опц. переопределение)

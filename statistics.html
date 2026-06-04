@@ -9,8 +9,6 @@
 <title>Nexus Stats — Статистика турниров</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Saira+Condensed:ital,wght@0,700;0,800;0,900;1,800;1,900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<script src="https://cdn.tailwindcss.com"></script>
-<script>tailwind.config={theme:{extend:{fontFamily:{raj:['Rajdhani','sans-serif'],mono:['JetBrains Mono','monospace']}}}}</script>
 <style>
   :root{
     --bg:#0b0b0d;--card:#161618;--panel-2:#1c1c20;--panel-3:#242429;
@@ -714,16 +712,6 @@ function computePlayers(){
     });
   });
   return{mStats,vStats};
-}
-
-function rosterCols(pid){
-  const r=S.rosters[pid]||[];
-  if(!r.length)return'<td>—</td>'.repeat(5);
-  let atk=0,stun=0,rupt=0,supdef=0,ano=0;
-  r.forEach(x=>{const c=S.charMap[x.character_id];if(!c)return;
-    if(c.role==='atk')atk++;else if(c.role==='stun')stun++;else if(c.role==='rupt')rupt++;else if(c.role==='sup'||c.role==='def')supdef++;else if(c.role==='ano')ano++;
-  });
-  return`<td>${atk}</td><td>${stun}</td><td>${rupt}</td><td>${supdef}</td><td>${ano}</td>`;
 }
 
 function renderPV(vStats,isAll){

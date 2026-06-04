@@ -109,13 +109,6 @@ function setMindscape(cid,ms){
   renderSelected();
 }
 
-function addToRoster(cid,ms){
-  _RS=_RS.filter(r=>r.character_id!==cid);
-  _RS.push({character_id:cid,mindscape:ms});
-  document.getElementById('ms-picker').style.display='none';
-  renderSelected();
-}
-
 function removeFromRoster(cid){
   _RS=_RS.filter(r=>r.character_id!==cid);
   if(document.getElementById('ms-picker').style.display!=='none'){

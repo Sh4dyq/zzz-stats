@@ -2,14 +2,13 @@
 
 const ELEMENTS={ice:'Лёд',fire:'Огонь',electric:'Электро',physical:'Физический',ether:'Эфир',wind:'Ветер'};
 const ELEM_C={ice:'#7dd3fc',fire:'#fb923c',electric:'#1e90ff',physical:'#fbbf24',ether:'#f472b6',wind:'#64b5f6'};
-const ROLE_LBL={atk:'Attack',stun:'Stun',rupt:'Rupture',sup:'Support',def:'Defense',ano:'Anomaly'};
 
 async function ensureSchema(){
   if(D.hasElement!==undefined)return;
   const{error}=await sb.from('characters').select('element').limit(1);
   D.hasElement=!error;
   const{error:e2}=await sb.from('characters').select('portrait_url,icon_url').limit(1);
-  D.hasImages=!e2; // колонки portrait_url/icon_url (Этап B)
+  D.hasImages=!e2; // доступны ли колонки portrait_url/icon_url
 }
 
 // Загрузка одной картинки персонажа в Storage и запись url в БД.
@@ -28,10 +27,6 @@ function charPayload(o){
   if(D.hasElement)p.element=o.element||null;
   return p;
 }
-function roleSelect(id,val){
-  return`<select id="${id}">${Object.entries(ROLE_LBL).map(([k,l])=>`<option value="${k}" ${val===k?'selected':''}>${l}</option>`).join('')}</select>`;
-}
-
 let _editChar=null;
 
 async function pgCharacters(){

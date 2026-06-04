@@ -54,12 +54,11 @@ function iconElement(element,size){
 }
 
 // --- Малая иконка персонажа ---
-// c — объект персонажа {name, role, icon_url?}. icon_url появится на Этапе B (Storage).
+// c — объект персонажа {name, role, icon_url?}.
 function iconChar(c,size){
   const s=size||32;
   const name=(c&&c.name)||'';
-  // fallback — нейтральный пустой слот под мини-фото (реальное фото подставится на Этапе B).
-  // Никаких 2-буквенных надписей.
+  // fallback — нейтральный пустой слот под мини-фото. Никаких 2-буквенных надписей.
   const fb=`<span class="pic" style="display:inline-block;`+
     `width:${s}px;height:${s}px;border-radius:6px;background:#1c1f2e;flex-shrink:0"></span>`;
   // Одна картинка на персонажа. Источник:
@@ -116,14 +115,4 @@ function icSelectPick(id,el){
 if(typeof document!=='undefined'&&!window._icSelInit){
   window._icSelInit=true;
   document.addEventListener('click',e=>{if(!e.target.closest('.icsel'))document.querySelectorAll('.icsel-list.open').forEach(l=>l.classList.remove('open'));});
-}
-
-// --- Большой портрет персонажа (для анализатора, Этап B) ---
-function iconCharPortrait(c,size){
-  const s=size||96;
-  if(c&&c.portrait_url){
-    return `<img src="${_icEsc(c.portrait_url)}" alt="${_icEsc((c&&c.name)||'')}" width="${s}" height="${s}" `+
-      `style="width:${s}px;height:${s}px;object-fit:cover;border-radius:8px;flex-shrink:0">`;
-  }
-  return iconChar(c,s);
 }
