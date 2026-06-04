@@ -65,6 +65,8 @@
   .plc.g3{background-image:linear-gradient(90deg,#f0a06b,#c46a32)}
   .prize-rub{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;font-size:16px;background:linear-gradient(90deg,#f8d36a,#d99a16);-webkit-background-clip:text;background-clip:text;color:transparent;padding-right:.1em;white-space:nowrap}
   .empty{padding:48px 0;text-align:center;color:var(--sub);font-size:15px;font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;letter-spacing:.04em}
+  .pphoto{position:relative;display:inline-block;width:28px;height:28px;flex-shrink:0;vertical-align:middle}
+  .pphoto img{position:absolute;inset:0;width:28px;height:28px;object-fit:cover;border-radius:6px;z-index:1}
   /* рейтинг */
   .rk-num{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;font-size:17px;color:var(--sub)}
   .rk-score{font-family:'JetBrains Mono',monospace;font-weight:600;font-size:14px;color:var(--sub)}
@@ -386,8 +388,23 @@ function favCharOf(pid){
   if(tied.length>1){const sOnly=tied.filter(id=>S.charMap[id].rarity!=='A');if(sOnly.length)tied=sOnly;}
   return tied[Math.floor(Math.random()*tied.length)];
 }
-// Плейсхолдер фото игрока = иконка любимого персонажа (если несколько — случайный); иначе пустой слот.
-function picP(p){const cid=favCharOf(p.id);return cid?iconChar(S.charMap[cid],28):pic(p.nickname,'');}
+// Фото игрока: web/players/<slug>.{webp,png,jpg}; если фото нет — аватар
+// (иконка любимого персонажа, иначе пустой слот) как финальный фолбэк.
+function playerImgErr(img){
+  const ex=['webp','png','jpg'];
+  const cur=(img.src.split('.').pop()||'').toLowerCase();
+  const i=ex.indexOf(cur);
+  if(i>=0&&i<ex.length-1){img.src=img.src.replace(/\.[^.]+$/,'.'+ex[i+1]);return;}
+  img.remove(); // фото нет — остаётся аватар-перс под фото
+}
+function picP(p,avatarHtml){
+  const cid=favCharOf(p.id);
+  const avatar=avatarHtml!=null?avatarHtml:(cid?iconChar(S.charMap[cid],28):pic(p.nickname,''));
+  const sl=(p.nickname||'').trim().toLowerCase();
+  if(!sl)return avatar;
+  // фото игрока поверх аватара; при отсутствии всех форматов фото удаляется и виден аватар
+  return `<span class="pphoto">${avatar}<img src="web/players/${sl}.webp" alt="" loading="lazy" onerror="playerImgErr(this)"></span>`;
+}
 
 async function loadAll(){
   document.getElementById('loading').style.display='block';
@@ -874,8 +891,8 @@ function renderMisc(){
     const fav=d.fav
       ? `<span class="fav">${iconChar(S.charMap[d.fav],28)}${d.favN>1?`<span class="cnt">(${d.favN})</span>`:''}</span>`
       : '—';
-    // используем зафиксированную аватарку (а не picP, который рерандомит)
-    const avatar=d.avatar?iconChar(S.charMap[d.avatar],28):picP(p);
+    // фото игрока приоритетно; финальный фолбэк — зафиксированная аватарка (без рерандома)
+    const avatar=picP(p,d.avatar?iconChar(S.charMap[d.avatar],28):pic(p.nickname,''));
     const pr=S.playerMap[p.id]?.prize;
     const prize=pr!=null?`<span class="prize-rub">${String(pr).replace(/\B(?=(\d{3})+(?!\d))/g,' ')} ₽</span>`:'—';
     return`<tr><td class="nc"><div style="display:flex;align-items:center;gap:6px">${avatar}<span>${p.nickname}</span></div></td>`+

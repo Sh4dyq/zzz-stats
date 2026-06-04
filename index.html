@@ -239,11 +239,13 @@
   .wl .w{color:#46d369}.wl .l{color:#ff6b7d}
 
   /* podium (top-3, в духе постеров WINNERS) */
-  .podium{display:grid;grid-template-columns:1fr 1.12fr 1fr;gap:16px;align-items:end;margin-bottom:56px}
+  .podium{display:grid;grid-template-columns:1fr 1.28fr 0.84fr;gap:16px;align-items:end;margin-bottom:56px}
   .pod{position:relative;background:var(--card);border:1px solid var(--border);border-radius:16px;
     padding:46px 22px 22px;display:flex;flex-direction:column;align-items:center;text-align:center;overflow:hidden}
   .pod::before{content:"";position:absolute;left:0;right:0;top:0;height:4px}
-  .pod.p1{padding-top:58px}
+  .pod.p1{padding-top:62px}
+  .pod.p2{padding-top:36px}
+  .pod.p3{padding-top:16px}
   .pod.p1::before{background:var(--gold-grad)}
   .pod.p2::before{background:linear-gradient(90deg,#eef1f6,#aeb4c0)}
   .pod.p3::before{background:linear-gradient(90deg,#f0a06b,#c46a32)}
@@ -251,9 +253,9 @@
     font-weight:900;font-size:74px;line-height:.8;color:#fff;opacity:.07}
   .pod-av{position:relative;width:104px;height:104px;border-radius:16px;overflow:hidden;margin-bottom:14px;
     border:2px solid var(--border);background:var(--panel-3)}
-  .pod.p1 .pod-av{width:120px;height:120px;border-color:var(--gold)}
-  .pod.p2 .pod-av{border-color:#cdd2da}
-  .pod.p3 .pod-av{border-color:#e08b53}
+  .pod.p1 .pod-av{width:128px;height:128px;border-color:var(--gold)}
+  .pod.p2 .pod-av{width:104px;height:104px;border-color:#cdd2da}
+  .pod.p3 .pod-av{width:88px;height:88px;border-color:#e08b53}
   .pod-av img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block;z-index:1}
   .pod-av .ini{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
     font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;font-size:38px;color:var(--sub)}
@@ -555,7 +557,7 @@
     </div>
 
     <div class="sec-head">
-      <h2>Топ <em>турнира</em></h2>
+      <h2>Топ <em>последнего турнира</em></h2>
       <a href="statistics.html#players" class="link" id="podium-link">Qualifiers II · полный рейтинг →</a>
     </div>
     <div class="podium" id="podium"></div>
@@ -737,11 +739,13 @@
   }
 
   async function loadLanding(){
-    const[{data:tours},{data:players},{data:encs}]=await Promise.all([
+    const[{data:tours},{data:players},{data:encs},resR]=await Promise.all([
       sb.from('tournaments').select('*').order('created_at',{ascending:false}),
       sb.from('players').select('*'),
-      sb.from('encounters').select('*')
+      sb.from('encounters').select('*'),
+      sb.from('tournament_results').select('*').then(r=>r,()=>({data:[]}))
     ]);
+    const resByTour={};(resR&&resR.data||[]).forEach(r=>{(resByTour[r.tournament_id]=resByTour[r.tournament_id]||{})[r.player_id]=r;});
     const T=(tours||[]).slice().sort((a,b)=>(a.sort_order??1e9)-(b.sort_order??1e9));
     const P={};(players||[]).forEach(p=>P[p.id]=p);
     const E=encs||[];
@@ -774,14 +778,15 @@
     }
 
     // ---- подиум: топ-3 по победам во встречах актуального турнира ----
-    renderPodium(E,P,msByEnc,cur);
+    renderPodium(E,P,msByEnc,cur,resByTour);
     // ---- последние матчи (с таймерами и актуальностью) ----
     renderRecent(E,P,T,msByEnc);
   }
 
-  function renderPodium(E,P,msByEnc,tour){
+  function renderPodium(E,P,msByEnc,tour,resByTour){
     const wrap=document.getElementById('podium');if(!wrap)return;
     if(!tour){wrap.innerHTML='';return;}
+    // выбор топ-3 по результатам ЭТОГО турнира (победы во встречах)
     const tally={};
     E.filter(e=>e.tournament_id===tour.id).forEach(e=>{
       [e.player1_id,e.player2_id].forEach(pid=>{tally[pid]=tally[pid]||{pid,w:0,l:0};});
@@ -793,13 +798,25 @@
       .sort((a,b)=>b.w-a.w||wrp(b.w,b.l)-wrp(a.w,a.l)||a.l-b.l)
       .slice(0,3);
     if(!top.length){wrap.innerHTML='<p style="color:var(--sub);font-size:14px">Нет результатов по этому турниру</p>';return;}
+    // статистика/винрейт — по ВСЕЙ статистике (все турниры)
+    const allTally={};
+    E.forEach(e=>{
+      if(e.winner_id){
+        allTally[e.winner_id]=allTally[e.winner_id]||{w:0,l:0};allTally[e.winner_id].w++;
+        const loser=e.winner_id===e.player1_id?e.player2_id:e.player1_id;
+        allTally[loser]=allTally[loser]||{w:0,l:0};allTally[loser].l++;
+      }
+    });
+    const res=resByTour&&resByTour[tour.id]||{};
     wrap.innerHTML='';
     [1,0,2].forEach(i=>{ // визуальный порядок: серебро · золото · бронза
       const s=top[i];if(!s)return;
       const p=P[s.pid]||{nickname:'?'};const place=i+1;
-      const wr=wrp(s.w,s.l);
-      const img=`<img src="web/players/${esc(slug(p.nickname))}.webp" alt="" onerror="this.remove()">`;
-      const prize=p.prize!=null?`<div class="pprize">${fmtN(p.prize)} ₽</div>`:'';
+      const a=allTally[s.pid]||{w:0,l:0};const wr=wrp(a.w,a.l);
+      const img=`<img src="web/players/${esc(slug(p.nickname))}.webp" alt="" onerror="imgFallback(this)">`;
+      // призовые — из результатов ЭТОГО турнира
+      const prz=res[s.pid]&&res[s.pid].prize!=null?res[s.pid].prize:null;
+      const prize=prz!=null?`<div class="pprize">${fmtN(prz)} ₽</div>`:'';
       const d=document.createElement('div');
       d.className='pod p'+place;
       d.innerHTML=`
@@ -807,12 +824,19 @@
         <div class="pod-av"><span class="ini">${ini(p.nickname)}</span>${img}</div>
         <div class="medal">${place} место</div>
         <div class="nm">${esc(p.nickname)}</div>
-        <div class="meta">${s.w}W · ${s.l}L · WIN RATE ${wr}%</div>
-        <div class="pwl"><span class="w">${s.w}W</span><span class="l">${s.l}L</span></div>
-        ${prize}
-        <span class="stage">${esc(tour.name)}</span>`;
+        <div class="meta">${a.w}W · ${a.l}L · WIN RATE ${wr}%</div>
+        <div class="pwl"><span class="w">${a.w}W</span><span class="l">${a.l}L</span></div>
+        ${prize}`;
       wrap.appendChild(d);
     });
+  }
+  // фолбэк фото игрока по форматам: webp → png → jpg, иначе показываем инициалы
+  function imgFallback(img){
+    const ex=['webp','png','jpg'];
+    const cur=(img.src.split('.').pop()||'').toLowerCase();
+    const i=ex.indexOf(cur);
+    if(i>=0&&i<ex.length-1){img.src=img.src.replace(/\.[^.]+$/,'.'+ex[i+1]);}
+    else img.remove();
   }
 
   function renderRecent(E,P,T,msByEnc){

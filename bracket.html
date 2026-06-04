@@ -265,15 +265,29 @@
   @keyframes spin{to{transform:rotate(360deg)}}
 
   /* results table (Результаты tab) */
-  .rtbl{max-width:680px;margin:24px auto;border:1px solid var(--border);border-radius:12px;overflow:hidden;background:var(--card)}
-  .rrow{display:flex;align-items:center;gap:14px;padding:13px 18px}
+  .rtbl{max-width:720px;margin:24px auto;border:1px solid var(--border);border-radius:12px;overflow:hidden;background:var(--card)}
+  .rrow{display:flex;align-items:center;gap:16px;padding:15px 22px}
   .rrow+.rrow{border-top:1px solid var(--line)}
-  .rrow .plc{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;font-size:22px;width:42px;color:var(--sub)}
-  .rrow .plc.g1{background:linear-gradient(90deg,#f8d36a,#d99a16);-webkit-background-clip:text;background-clip:text;color:transparent}
-  .rrow .plc.g2{background:linear-gradient(90deg,#eef1f6,#aeb4c0);-webkit-background-clip:text;background-clip:text;color:transparent}
-  .rrow .plc.g3{background:linear-gradient(90deg,#f0a06b,#c46a32);-webkit-background-clip:text;background-clip:text;color:transparent}
-  .rrow .rnm{flex:1;font-weight:600;font-size:16px}
-  .rrow .rprz{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;font-size:16px;background:linear-gradient(90deg,#f8d36a,#d99a16);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .rrow .plc{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;font-size:28px;width:48px;color:var(--sub);flex-shrink:0}
+  .rrow .rav{width:38px;height:38px;border-radius:8px;background:var(--panel-3);display:flex;align-items:center;justify-content:center;font-family:'Saira Condensed',sans-serif;font-style:italic;font-size:15px;font-weight:900;color:var(--sub);flex-shrink:0;overflow:hidden}
+  .rrow .rav img{width:100%;height:100%;object-fit:cover;display:block}
+  .rrow .rnm{flex:1;font-weight:600;font-size:19px}
+  .rrow .rprz{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;font-size:19px;background:linear-gradient(90deg,#f8d36a,#d99a16);-webkit-background-clip:text;background-clip:text;color:transparent;flex-shrink:0}
+  /* медальные места — больше фото, больше ник, золото/серебро/бронза по нику (1>2>3) */
+  .rrow.g1{padding:22px}.rrow.g2{padding:20px}.rrow.g3{padding:18px}
+  .rrow.g1 .plc,.rrow.g2 .plc,.rrow.g3 .plc{width:54px}
+  .rrow.g1 .rav{width:64px;height:64px;border-radius:11px;font-size:24px}
+  .rrow.g2 .rav{width:56px;height:56px;border-radius:10px;font-size:21px}
+  .rrow.g3 .rav{width:48px;height:48px;border-radius:9px;font-size:18px}
+  .rrow.g1 .rnm{font-size:32px;font-weight:800}
+  .rrow.g2 .rnm{font-size:27px;font-weight:800}
+  .rrow.g3 .rnm{font-size:23px;font-weight:700}
+  .plc.g1,.rrow.g1 .rnm{background:linear-gradient(90deg,#f8d36a,#d99a16);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .plc.g2,.rrow.g2 .rnm{background:linear-gradient(90deg,#eef1f6,#aeb4c0);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .plc.g3,.rrow.g3 .rnm{background:linear-gradient(90deg,#f0a06b,#c46a32);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .rrow.g1 .rav{box-shadow:0 0 0 2px #d99a16}
+  .rrow.g2 .rav{box-shadow:0 0 0 2px #aeb4c0}
+  .rrow.g3 .rav{box-shadow:0 0 0 2px #c46a32}
 
   /* footer */
   footer{border-top:1px solid var(--border);background:#08080a;margin-top:48px}
@@ -437,6 +451,8 @@ const progHTML=pr=>`<div class="prog"><div class="bar"><div class="fill" style="
 const curTour=()=>S.tours.find(t=>t.status==='live')||S.tours.find(t=>t.status!=='upcoming')||S.tours[0]||null;
 const $=id=>document.getElementById(id);
 const esc=s=>(s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+// фолбэк фото игрока по форматам: webp → png → jpg, иначе показываем инициалы
+function imgFallback(img){const ex=['webp','png','jpg'];const cur=(img.src.split('.').pop()||'').toLowerCase();const i=ex.indexOf(cur);if(i>=0&&i<ex.length-1){img.src=img.src.replace(/\.[^.]+$/,'.'+ex[i+1]);}else img.remove();}
 
 // ---- challonge link normalization (ready for proxy/iframe fallback) ----
 function challongeSlug(url){
@@ -745,7 +761,7 @@ function seedHTML(s,played){
   const sl=(s.name||'').trim().toLowerCase();
   return `<div class="seed ${cls}">
     <span class="sd">${s.seed||''}</span>
-    <span class="av"><img src="web/players/${esc(sl)}.webp" alt="" onerror="this.remove()">${init}</span>
+    <span class="av"><img src="web/players/${esc(sl)}.webp" alt="" onerror="imgFallback(this)">${init}</span>
     <span class="nm">${esc(s.name)}</span>
     <span class="sc">${s.win?'✓':''}</span></div>`;
 }
@@ -824,9 +840,13 @@ function renderResults(t){
   }
   $('content').innerHTML=`<div class="rtbl">`+rs.map(r=>{
     const g=r.place<=3?'g'+r.place:'';
-    return `<div class="rrow">
+    const nm=S.players[r.player_id]||'—';
+    const init=(nm||'?').replace(/[^A-Za-zА-Яа-я0-9$]/g,'').slice(0,2).toUpperCase()||'—';
+    const sl=(nm||'').trim().toLowerCase();
+    return `<div class="rrow ${g}">
       <span class="plc ${g}">${r.place||'—'}</span>
-      <span class="rnm">${esc(S.players[r.player_id]||'—')}</span>
+      <span class="rav"><img src="web/players/${esc(sl)}.webp" alt="" onerror="imgFallback(this)">${init}</span>
+      <span class="rnm">${esc(nm)}</span>
       ${r.prize?`<span class="rprz">${Number(r.prize).toLocaleString('ru')} ₽</span>`:''}</div>`;
   }).join('')+`</div>`;
 }
