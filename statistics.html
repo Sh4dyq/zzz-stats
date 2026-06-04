@@ -36,7 +36,13 @@
   .tab-btn.active::after{content:"";position:absolute;left:14px;right:14px;bottom:-1px;height:3px;border-radius:3px 3px 0 0;background:var(--grad)}
   .tbl-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:12px;background:var(--card)}
   table{border-collapse:collapse;font-size:15px;white-space:nowrap;width:100%;font-family:'JetBrains Mono',monospace}
-  th,td{padding:9px 14px;border:1px solid var(--border);text-align:center}
+  #players-area table{table-layout:fixed;width:100%}
+  #players-area table thead th{height:40px;min-height:40px;max-height:40px;padding:7px 14px;line-height:1;vertical-align:middle}
+  #players-area table tbody td,#players-area table tbody th{height:40px;min-height:40px;max-height:40px;padding:7px 14px;line-height:1;vertical-align:middle;overflow:hidden}
+  #players-area table td.nc{padding:7px 14px;height:40px;min-height:40px;max-height:40px}
+  #players-area table td.nc>div{height:100%;line-height:1}
+  #players-area table td.ic>span{display:flex;align-items:center;justify-content:center;height:100%;line-height:1}
+  th,td{padding:9px 14px;border:1px solid var(--border);text-align:center;vertical-align:middle;overflow:hidden}
   th{background:#101013;font-size:12.5px;font-weight:500;color:var(--sub);cursor:pointer;user-select:none;font-family:'Rajdhani',sans-serif;font-weight:600;letter-spacing:.04em}
   th:hover{color:var(--text);background:#17171c}
   .th-g{text-align:center!important;background:#121214!important;color:#fff!important;font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;font-size:13px;letter-spacing:.03em;border-bottom:2px solid var(--red)!important}
@@ -50,14 +56,11 @@
   select,input[type=text],input[type=number]{background:var(--panel-2);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:8px 12px;font-family:'Rajdhani',sans-serif;font-weight:600;font-size:14px;transition:.15s}
   select{cursor:pointer}
   select:focus,input:focus{outline:none;border-color:var(--red)}
-  .pic{width:22px;height:22px;border-radius:5px;display:inline-flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;flex-shrink:0;font-family:'Rajdhani',sans-serif}
+  .pic{width:24px;height:24px;border-radius:5px;display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;flex-shrink:0;font-family:'Rajdhani',sans-serif}
   .badge-s{font-size:9px;font-weight:800;padding:1px 5px;border-radius:4px;background:linear-gradient(180deg,#f8d36a,#d99a16);color:#231703;font-family:'Rajdhani',sans-serif;letter-spacing:.05em}
   .badge-a{font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;background:var(--panel-3);color:var(--sub);font-family:'Rajdhani',sans-serif;letter-spacing:.05em}
-  .ms-tag{font-size:10px;padding:1px 6px;border-radius:4px;background:rgba(255,31,68,.14);border:1px solid rgba(255,31,68,.35);color:#ff7587;font-family:'JetBrains Mono',monospace;font-weight:600}
-  .hl-cell{background:rgba(255,31,68,.13);color:#ff6b7d;font-weight:800;font-size:14px!important;font-family:'Saira Condensed',sans-serif;font-style:italic}
-  .note{font-size:12px;color:var(--sub);margin-top:10px;font-family:'Rajdhani',sans-serif;font-weight:500}
-  .fav{display:inline-flex;align-items:center;gap:7px;flex-wrap:wrap}
-  .fav .cnt{color:var(--sub);font-size:12px;font-family:'JetBrains Mono',monospace;margin-left:-2px}
+  .fav{display:inline-flex;align-items:center;gap:7px;flex-wrap:nowrap;white-space:nowrap;height:24px}
+  .fav .cnt{color:var(--sub);font-size:12px;font-family:'JetBrains Mono',monospace;margin-left:-2px;line-height:1}
   .plc{display:inline-block;font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;font-size:18px;line-height:1;color:var(--text);padding-right:.18em}
   .plc.g1,.plc.g2,.plc.g3{-webkit-background-clip:text;background-clip:text;color:transparent}
   .plc.g1{background-image:linear-gradient(90deg,#f8d36a,#d99a16)}
@@ -65,8 +68,8 @@
   .plc.g3{background-image:linear-gradient(90deg,#f0a06b,#c46a32)}
   .prize-rub{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;font-size:16px;background:linear-gradient(90deg,#f8d36a,#d99a16);-webkit-background-clip:text;background-clip:text;color:transparent;padding-right:.1em;white-space:nowrap}
   .empty{padding:48px 0;text-align:center;color:var(--sub);font-size:15px;font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;letter-spacing:.04em}
-  .pphoto{position:relative;display:inline-block;width:28px;height:28px;flex-shrink:0;vertical-align:middle}
-  .pphoto img{position:absolute;inset:0;width:28px;height:28px;object-fit:cover;border-radius:6px;z-index:1}
+  .pphoto{position:relative;display:inline-block;width:24px;height:24px;flex-shrink:0;vertical-align:middle}
+  .pphoto img{position:absolute;inset:0;width:24px;height:24px;object-fit:cover;border-radius:6px;z-index:1}
   /* рейтинг */
   .rk-num{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;font-size:17px;color:var(--sub);padding:9px 14px}
   .rk-score{font-family:'JetBrains Mono',monospace;font-weight:600;font-size:14px;color:var(--sub);margin-left:6px}
@@ -383,7 +386,7 @@ const fSec=s=>{if(!s&&s!==0)return'—';return`${Math.floor(s/60)}:${String(s%60
 const avg=a=>a.length?Math.round(a.reduce((x,y)=>x+y,0)/a.length):null;
 const cid=s=>s.replace(/[^A-Za-z0-9]/g,'_');
 
-function pic(name,role){const c=(S.characters||[]).find(x=>x.name===name)||{name,role};return iconChar(c,28);}
+function pic(name,role){const c=(S.characters||[]).find(x=>x.name===name)||{name,role};return iconChar(c,24);}
 // Любимый персонаж игрока по пикам (все ранги; при ничьей прячем A, иначе случайный).
 function favCharOf(pid){
   const m={};
@@ -405,7 +408,7 @@ function playerImgErr(img){
 }
 function picP(p,avatarHtml){
   const cid=favCharOf(p.id);
-  const avatar=avatarHtml!=null?avatarHtml:(cid?iconChar(S.charMap[cid],28):pic(p.nickname,''));
+  const avatar=avatarHtml!=null?avatarHtml:(cid?iconChar(S.charMap[cid],24):pic(p.nickname,''));
   const sl=(p.nickname||'').trim().toLowerCase();
   if(!sl)return avatar;
   // фото игрока поверх аватара; при отсутствии всех форматов фото удаляется и виден аватар
@@ -813,8 +816,8 @@ function renderRosters(isAll){
     if(!cids.length)return`<td class="ic">—</td>`;
     // «Все турниры» — только числовое (среднее); по турниру — иконки + (N)
     if(isAll)return`<td class="ic">${fmtN(b.n)}</td>`;
-    const icons=cids.map(cid=>iconChar(S.charMap[cid],22)).join('');
-    return`<td class="ic"><span style="display:inline-flex;align-items:center;gap:2px;flex-wrap:wrap;justify-content:center">${icons}<span class="cnt">(${fmtN(b.n)})</span></span></td>`;
+    const icons=cids.map(cid=>iconChar(S.charMap[cid],24)).join('');
+    return`<td class="ic"><span style="display:inline-flex;align-items:center;gap:2px;flex-wrap:nowrap;justify-content:center">${icons}<span class="cnt">(${fmtN(b.n)})</span></span></td>`;
   };
   const head=`<thead><tr><th class="nc">Ник</th>`+
     `<th class="ic" title="Атака" onclick="sortP(1)">${iconRole('atk',18)}</th>`+
@@ -822,7 +825,7 @@ function renderRosters(isAll){
     `<th class="ic" title="Разрыв" onclick="sortP(3)">${iconRole('rupt',18)}</th>`+
     `<th class="ic" title="Саппорт / Защита" onclick="sortP(4)"><span style="display:inline-flex;align-items:center;justify-content:center;gap:3px">${iconRole('sup',18)}<span style="color:var(--sub)">/</span>${iconRole('def',18)}</span></th>`+
     `<th class="ic" title="Аномалия" onclick="sortP(5)">${iconRole('ano',18)}</th>`+
-    `${isAll?'<th class="ic" title="Турниров с ростером" onclick="sortP(6)">Σ турн.</th>':''}</tr></thead>`;
+    `${isAll?'<th class="ic" title="Турниров с ростером" onclick="sortP(6)">Сыграно турниров</th>':''}</tr></thead>`;
   const activePl=S.players.filter(p=>data[p.id]);
   if(!activePl.length){document.getElementById('players-area').innerHTML=`<table>${head}<tbody><tr><td class="empty" colspan="7">Нет данных по ростерам</td></tr></tbody></table>`;return;}
   const rows=activePl.map(p=>{
@@ -895,10 +898,10 @@ function renderMisc(){
   const rows=activePl.map(p=>{
     const d=data[p.id];
     const fav=d.fav
-      ? `<span class="fav">${iconChar(S.charMap[d.fav],28)}${d.favN>1?`<span class="cnt">(${d.favN})</span>`:''}</span>`
+      ? `<span class="fav">${iconChar(S.charMap[d.fav],24)}${d.favN>1?`<span class="cnt">(${d.favN})</span>`:''}</span>`
       : '—';
     // фото игрока приоритетно; финальный фолбэк — зафиксированная аватарка (без рерандома)
-    const avatar=picP(p,d.avatar?iconChar(S.charMap[d.avatar],28):pic(p.nickname,''));
+    const avatar=picP(p,d.avatar?iconChar(S.charMap[d.avatar],24):pic(p.nickname,''));
     const pr=S.playerMap[p.id]?.prize;
     const prize=pr!=null?`<span class="prize-rub">${String(pr).replace(/\B(?=(\d{3})+(?!\d))/g,' ')} ₽</span>`:'—';
     return`<tr><td class="nc"><div style="display:flex;align-items:center;gap:6px">${avatar}<span>${p.nickname}</span></div></td>`+
