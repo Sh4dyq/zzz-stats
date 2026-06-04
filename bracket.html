@@ -76,7 +76,7 @@
   .idx-h{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;text-transform:uppercase;font-size:30px;margin-bottom:4px}
   .idx-sub{color:var(--sub);font-size:14px;font-weight:500;margin-bottom:22px}
   .idx-tbl{border:1px solid var(--border);border-radius:13px;overflow:hidden;background:var(--card)}
-  .idx-head,.idx-row{display:grid;grid-template-columns:minmax(260px,2.8fr) minmax(150px,1.3fr) .6fr .9fr 1.3fr;align-items:center;gap:16px;padding:14px 22px}
+  .idx-head,.idx-row{display:grid;grid-template-columns:minmax(260px,2.8fr) minmax(150px,1.3fr) .6fr .9fr 1.3fr .8fr;align-items:center;gap:16px;padding:14px 22px}
   .idx-head{background:#101013;border-bottom:1px solid var(--border);font-family:'Rajdhani',sans-serif;font-weight:600;font-size:12px;letter-spacing:.05em;text-transform:uppercase;color:var(--sub)}
   .idx-row{border-top:1px solid var(--line);cursor:pointer;transition:.12s}
   .idx-row:first-child{border-top:none}
@@ -106,6 +106,7 @@
     .idx-row .idx-cell:nth-child(3)::after{content:' уч.';color:#5e5e66}
     .idx-row .idx-cell:nth-child(4){order:3}                    /* дата */
     .idx-row .idx-cell:nth-child(5){order:4;flex:1 1 100%}      /* прогресс на всю строку */
+    .idx-row .idx-cell:nth-child(6){order:5}                    /* статус */
   }
 
   /* progress bar (index column + tournament meta) */
@@ -565,16 +566,21 @@ function renderAll(){
     <div class="idx-sub">Турнирные сетки Nexus Shiyu · нажми на турнир, чтобы открыть его сетку</div>
     <div class="idx-tbl">
       <div class="idx-head">
-        <div>Название</div><div>Формат</div><div>Участники</div><div>Даты проведения</div><div>Прогресс</div>
+        <div>Название</div><div>Формат</div><div>Участники</div><div>Даты проведения</div><div>Прогресс</div><div>Статус</div>
       </div>
-      ${rows.map(t=>`
-        <div class="idx-row${(t.status||'')==='live'?' live-row':''}" data-id="${t.id}">
+      ${rows.map(t=>{
+        const st=t.status||'finished';
+        const stLabel={live:'Live',upcoming:'Upcoming',finished:'Finished'}[st]||st;
+        return`
+        <div class="idx-row${(t.status||'')==='live'?' live-row':''}", data-id="${t.id}">
           <div class="ir-name"><span class="ir-thumb">${esc((t.name||'?').slice(0,2).toUpperCase())}</span>${hlName(t.name)}${(t.status||'')==='live'?'<span class="live-dot" title="Идёт сейчас"></span>':''}</div>
           <div class="idx-cell"><span class="fmt-pill">${esc(fmtFull(t))}</span></div>
           <div class="idx-cell mut">${partCount(t.id)||t.expected_players||'—'}</div>
           <div class="idx-cell mut">${fmtRange(t)}</div>
           <div class="idx-cell">${progHTML(tourProgress(t.id))}</div>
-        </div>`).join('')}
+          <div class="idx-cell"><span class="st-pill st-${st}"><span class="sdot"></span>${stLabel}</span></div>
+        </div>`;
+      }).join('')}
     </div>
   </div>`;
   $('content').querySelectorAll('.idx-row').forEach(r=>r.onclick=()=>openTour(S.tours.find(t=>t.id==r.dataset.id)));
