@@ -420,7 +420,14 @@ const fmtFull=t=>{
 const hlName=name=>esc(name).replace(/(nexus\s*shiyu)/i,'<span style="color:var(--pink)">$1</span>');
 // участники: из tournament_participants (по сеянию), иначе уникальные из встреч
 const seedsOf=tid=>(S.parts[tid]||[]).slice().sort((a,b)=>(a.seed||1e9)-(b.seed||1e9)).map(p=>S.players[p.player_id]).filter(Boolean);
-const partCount=tid=>{const sd=(S.parts[tid]||[]).length;if(sd)return sd;const s=new Set();S.encounters.filter(e=>e.tournament_id==tid).forEach(e=>{if(e.player1_id)s.add(e.player1_id);if(e.player2_id)s.add(e.player2_id)});return s.size};
+const partCount=tid=>{
+  const t=S.tours.find(x=>x.id==tid)||{};
+  const sd=(S.parts[tid]||[]).length;
+  const s=new Set();S.encounters.filter(e=>e.tournament_id==tid).forEach(e=>{if(e.player1_id)s.add(e.player1_id);if(e.player2_id)s.add(e.player2_id)});
+  // узлы своей сетки: участники по уникальным игрокам в верхней сетке (без BYE)
+  const nodes=(S.nodes&&S.nodes[tid])||[];const ns=new Set();nodes.forEach(n=>{if(n.part==='W'&&n.round===1){if(n.player1_id)ns.add(n.player1_id);if(n.player2_id)ns.add(n.player2_id);}});
+  return Math.max(sd,s.size,ns.size,t.expected_players||0);
+};
 // максимально возможное число матчей турнира по формату и числу участников
 const maxMatches=t=>{const n=Math.max(partCount(t.id),t.expected_players||0);if(n<2)return 0;return t.bracket_type==='DE'?2*(n-1):n-1;};
 // прогресс турнира. done (1-е число) = матчи, УЖЕ ЗАКРЫТЫЕ в сетке — включая
@@ -643,11 +650,19 @@ function nodesToModel(t){
   const ord={W:0,L:1,GF:2};
   const keys=Object.keys(groups).sort((a,b)=>{const[pa,ra]=a.split('|'),[pb,rb]=b.split('|');return ord[pa]-ord[pb]||(+ra-+rb);});
   const seat=(n,w)=>{const pid=n['player'+w+'_id'];return{name:pid?(S.players[pid]||'—'):(n.is_bye?'BYE':null),win:!!(n.winner_id&&n.winner_id===pid),seed:n['seed'+w]||''};};
+  const wKeys=keys.filter(k=>k.split('|')[0]==='W'),lKeys=keys.filter(k=>k.split('|')[0]==='L');
+  const hasLower=lKeys.length>0;
+  const seName=(i,n)=>i===n-1?'Финал':i===n-2&&n>1?'Полуфинал':'Раунд '+(i+1); // SE: …, Полуфинал, Финал
+  const deName=(i,n)=>i===n-1?'Финал':'Раунд '+(i+1);                            // DE-секция: …, Финал
+  const nameOf=k=>{
+    const part=k.split('|')[0];
+    if(part==='GF')return'Гранд-финал';
+    if(part==='L')return'Нижняя '+deName(lKeys.indexOf(k),lKeys.length);
+    return hasLower?('Верхняя '+deName(wKeys.indexOf(k),wKeys.length)):seName(wKeys.indexOf(k),wKeys.length);
+  };
   const rounds=keys.map(k=>{
-    const[part,round]=k.split('|');
     const ms=groups[k].sort((a,b)=>a.slot-b.slot);
-    const name=part==='GF'?'Гранд-финал':part==='L'?('Нижняя '+round):('Верхняя '+round);
-    return{name,matches:ms.map(n=>({id:n.identifier,feeders:feeders[n.id]||[],a:seat(n,1),b:seat(n,2),played:!!n.winner_id}))};
+    return{name:nameOf(k),matches:ms.map(n=>({id:n.identifier,feeders:feeders[n.id]||[],a:seat(n,1),b:seat(n,2),played:!!n.winner_id}))};
   });
   return{rounds};
 }

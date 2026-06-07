@@ -16,11 +16,19 @@
     const seat=(n,w)=>{const pid=n['player'+w+'_id'];return{
       name:pid?(nickOf(pid)||'—'):null,bye:!pid&&n.is_bye,seed:n['seed'+w]||'',
       win:!!(n.winner_id&&n.winner_id===pid),pid:pid||''};};
+    const wKeys=keys.filter(k=>k.split('|')[0]==='W'),lKeys=keys.filter(k=>k.split('|')[0]==='L');
+    const hasLower=lKeys.length>0;
+    const seName=(i,n)=>i===n-1?'Финал':i===n-2&&n>1?'Полуфинал':'Раунд '+(i+1);
+    const deName=(i,n)=>i===n-1?'Финал':'Раунд '+(i+1);
+    const nameOf=k=>{
+      const part=k.split('|')[0];
+      if(part==='GF')return'Гранд-финал';
+      if(part==='L')return'Нижняя '+deName(lKeys.indexOf(k),lKeys.length);
+      return hasLower?('Верхняя '+deName(wKeys.indexOf(k),wKeys.length)):seName(wKeys.indexOf(k),wKeys.length);
+    };
     const rounds=keys.map(k=>{
-      const[part,round]=k.split('|');
       const ms=groups[k].sort((a,b)=>a.slot-b.slot);
-      const name=part==='GF'?'Гранд-финал':part==='L'?('Нижняя '+round):('Верхняя '+round);
-      return{name,matches:ms.map(n=>({id:n.identifier,node:n.id,feeders:feeders[n.id]||[],a:seat(n,1),b:seat(n,2),played:!!n.winner_id}))};
+      return{name:nameOf(k),matches:ms.map(n=>({id:n.identifier,node:n.id,feeders:feeders[n.id]||[],a:seat(n,1),b:seat(n,2),played:!!n.winner_id}))};
     });
     return{rounds};
   }
