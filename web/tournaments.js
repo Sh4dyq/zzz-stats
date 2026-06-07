@@ -892,13 +892,17 @@ function charCostsSection(tourId,tourName,existing,penalties){
   <button class="btn btn-y" style="margin-top:16px" onclick="saveCosts('${tourId}')">Сохранить все косты</button>`;
 }
 
-// Снапшот рулсетов (косты+штрафы) из репо; draft_systems закрыт CORS из браузера.
-let _shiyuSystems=null;
-async function loadShiyuSystems(){
-  if(_shiyuSystems)return _shiyuSystems;
-  const r=await fetch('web/data/shiyu_systems.json?v='+Date.now());
-  if(!r.ok)throw new Error('shiyu_systems.json не загрузился');
-  _shiyuSystems=await r.json();return _shiyuSystems;
+// Рулсет (косты+штрафы) тянем вживую через Edge Function shiyu-system — она проксирует
+// draft_systems/agents/engines (CORS залочен на shiyu origin) и резолвит ObjectId→enka.
+// Так новая система подхватывается одной кнопкой, без fetch_system.py и без коммита.
+const _sysCache={};
+async function fetchSystemRuleset(systemId){
+  if(_sysCache[systemId])return _sysCache[systemId];
+  const r=await fetch(`${SB_URL}/functions/v1/shiyu-system?system=${encodeURIComponent(systemId)}`,
+    {headers:{apikey:SB_KEY,Authorization:`Bearer ${SB_KEY}`}});
+  const d=await r.json().catch(()=>({}));
+  if(!r.ok||d.error)throw new Error(d.error||`shiyu-system ${r.status}`);
+  _sysCache[systemId]=d;return d;
 }
 
 // Импорт костов персонажей (по минскейпам) + штрафов рестартов из ссылки драфта.
@@ -913,8 +917,7 @@ async function importTourRuleset(tourId){
   set('Загружаю рулсет…');
   try{
     const state=await fetchDraftState(parsed.id,parsed.key);
-    const sys=(await loadShiyuSystems()).systems?.[state.system];
-    if(!sys)return set('Система '+state.system+' не в кэше. Запусти: python tools/fetch_system.py "'+url+'"');
+    const sys=await fetchSystemRuleset(state.system);
     const base=e=>String(e).split('_')[0];
     const byEnka={};D.chars.forEach(c=>{if(c.enka_id)byEnka[base(c.enka_id)]=c;});
     let filled=0,miss=0;
