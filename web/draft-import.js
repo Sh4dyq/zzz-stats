@@ -61,7 +61,11 @@ function normalizeDraft(state,ids){
   // selectedAgents идут в порядке flow → слот = index+1 (совпадает с DRAFT_TEMPLATE)
   const slots=(state.selectedAgents||[]).map((s,i)=>({
     n:i+1,type:s.type==='BAN'?'ban':'pick',actor:s.actor,enka:aEnka(s.agent)}));
-  return {players,slots};
+  // actor = индекс в state.players (см. fetch_draft.py p_id). Слот 1 принадлежит фп
+  // (DRAFT_TEMPLATE), поэтому реальный первоходящий = actor первого действия, а НЕ
+  // всегда player0 (порядок массива стабилен между играми, фп чередуется).
+  const firstActor=(slots[0]&&slots[0].actor)||'player0';
+  return {players,slots,firstActor};
 }
 
 // Резолв enka → персонаж БД; движок enka + персонаж → has_signature.

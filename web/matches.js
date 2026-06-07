@@ -297,7 +297,10 @@ async function bulkImportDrafts(){
       const state=await fetchDraftState(parsed.id,parsed.key);
       if(!state?.players)throw new Error('пустой драфт');
       const norm=normalizeDraft(state,ids);
-      metas.push({url:links[i],fp:norm.players.player0.name,dbl:norm.players.player1.name});
+      // фп = реальный первоходящий (actor слота 1), не всегда player0 — иначе обе
+      // игры пары получают одинаковый match_number и вторая перезатирает первую.
+      const fpKey=norm.firstActor,dblKey=fpKey==='player1'?'player0':'player1';
+      metas.push({url:links[i],fp:norm.players[fpKey].name,dbl:norm.players[dblKey].name});
     }catch(e){errs.push(`ссылка #${i+1}: ${e.message}`);}
   }
   // 2) группируем по неупорядоченной паре ников
