@@ -81,11 +81,19 @@ function normalize(doc: any) {
   }
   const roundKeys = [...byRound.keys()].sort((x, y) => (x > 0 && y > 0 ? x - y : y - x));
   const maxUpper = Math.max(0, ...roundKeys.filter((r) => r > 0));
+  const isDE = roundKeys.some((r) => r < 0);
+  const maxLowerAbs = Math.max(0, ...roundKeys.filter((r) => r < 0).map((r) => Math.abs(r)));
+  // Конвенция названий: DE — Верхняя/Нижняя · Раунд N…Финал, Гранд-финал отдельно;
+  // SE — Раунд N…, последние два Полуфинал и Финал. Префикс «Верхняя/Нижняя ·»
+  // нужен фронту (renderBracketBody) для раскладки секций; он его срезает в шапке.
   const roundName = (r: number) => {
-    if (r < 0) return `Нижняя сетка ${Math.abs(r)}`;
-    if (r === maxUpper) return "Гранд-финал";
-    if (r === maxUpper - 1) return "Финал";
-    if (r === maxUpper - 2) return "Полуфинал";
+    if (r < 0) return "Нижняя · " + (Math.abs(r) === maxLowerAbs ? "Финал" : `Раунд ${Math.abs(r)}`);
+    if (isDE) {
+      if (r === maxUpper) return "Гранд-финал";
+      return r === maxUpper - 1 ? "Верхняя · Финал" : `Верхняя · Раунд ${r}`;
+    }
+    if (r === maxUpper) return "Финал";
+    if (r === maxUpper - 1) return "Полуфинал";
     return `Раунд ${r}`;
   };
 

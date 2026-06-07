@@ -666,6 +666,26 @@ function nodesToModel(t){
   });
   return{rounds};
 }
+// Приводит названия раундов кэша Challonge к нашей конвенции (старый кэш мог
+// содержать «Полуфинал/Финал» в верхней сетке, «Нижняя сетка N», SE-финал как
+// «Гранд-финал»). DE: Верхняя/Нижняя · Раунд N…Финал, Гранд-финал отдельно.
+// SE: Раунд N…, Полуфинал, Финал. Структура раундов идёт по порядку из кэша.
+function relabelRounds(rounds){
+  const isLower=n=>/нижн|lower|loser/i.test(n||''),isGf=n=>/гранд|grand|finale/i.test(n||'');
+  const deName=(i,n)=>i===n-1?'Финал':'Раунд '+(i+1);
+  const seName=(i,n)=>i===n-1?'Финал':i===n-2&&n>1?'Полуфинал':'Раунд '+(i+1);
+  const lower=rounds.filter(r=>isLower(r.name));
+  if(lower.length){ // DE (наличие нижней сетки — единственный надёжный признак)
+    const gf=rounds.filter(r=>isGf(r.name));
+    const upper=rounds.filter(r=>!isLower(r.name)&&!isGf(r.name));
+    upper.forEach((r,i)=>r.name='Верхняя · '+deName(i,upper.length));
+    lower.forEach((r,i)=>r.name='Нижняя · '+deName(i,lower.length));
+    gf.forEach(r=>r.name='Гранд-финал');
+  }else{ // SE
+    rounds.forEach((r,i)=>r.name=seName(i,rounds.length));
+  }
+  return rounds;
+}
 function renderBracket(t){
   const slug=challongeSlug(t.challonge_url);
   // ПРИОРИТЕТ ИСТОЧНИКА: своя сетка (движок) → кэш Challonge → encounters → каркас.
@@ -680,7 +700,7 @@ function renderBracket(t){
   // иначе фолбэк на encounters, иначе каркас.
   const ch=S.cache[t.id];
   let src='enc';
-  let model=(ch&&Array.isArray(ch.rounds)&&ch.rounds.length)?(src='challonge',{rounds:ch.rounds}):modelFromEncounters(t);
+  let model=(ch&&Array.isArray(ch.rounds)&&ch.rounds.length)?(src='challonge',{rounds:relabelRounds(ch.rounds.map(r=>({...r})))}):modelFromEncounters(t);
   if(model&&src!=='challonge')src='enc';
   let skeleton=false;
   // нет сохранённых встреч → показываем КАРКАС по формату+числу участников
