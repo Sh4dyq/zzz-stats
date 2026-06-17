@@ -123,9 +123,14 @@ async function auditTournamentMatches(tourId){
 
 async function pgMatches(){
   const{data:encsRaw}=await sb.from('encounters').select('*').order('created_at',{ascending:false});
-  // ручной порядок (sort_order) поверх дефолтной сортировки; строки без него — в конец, стабильно.
-  // defensive: запрос по created_at (колонка точно есть), sort_order применяется клиентски.
-  const encs=(encsRaw||[]).slice().sort((a,b)=>(a.sort_order??1e9)-(b.sort_order??1e9));
+  // Порядок встреч: сначала по позиции турнира в админке (D.tours уже отсортирован
+  // по sort_order — новые/верхние турниры выше), затем ручной sort_order встречи,
+  // затем дата создания (новые выше). sort_order применяется клиентски.
+  const tourPos={};D.tours.forEach((t,i)=>tourPos[t.id]=i);
+  const encs=(encsRaw||[]).slice().sort((a,b)=>
+    (tourPos[a.tournament_id]??1e9)-(tourPos[b.tournament_id]??1e9)
+    ||(a.sort_order??1e9)-(b.sort_order??1e9)
+    ||new Date(b.created_at)-new Date(a.created_at));
   const{data:ms}=encs?.length?await sb.from('matches').select('*').in('encounter_id',encs.map(e=>e.id)):{data:[]};
   const mByEnc={};(ms||[]).forEach(m=>{if(!mByEnc[m.encounter_id])mByEnc[m.encounter_id]=[];mByEnc[m.encounter_id].push(m);});
   const tourMap={};D.tours.forEach(t=>tourMap[t.id]=t);
@@ -140,7 +145,7 @@ async function pgMatches(){
       <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:8px">
         <div style="display:flex;align-items:center;gap:8px;min-width:0">
           <span style="color:var(--sub);cursor:grab;font-size:16px;user-select:none" title="Перетащите для сортировки (порядок и на главной)">⠿</span>
-          <span style="font-weight:600">${p1?.nickname||'?'}</span><span style="color:var(--sub);margin:0 6px">vs</span><span style="font-weight:600">${p2?.nickname||'?'}</span>
+          <span style="font-weight:600">${p1?.nickname||'?'}</span>${p1?`<span title="Переименовать игрока (везде)" onclick="renamePlayer('${e.player1_id}')" style="cursor:pointer;color:var(--sub);font-size:12px;margin-left:2px">✎</span>`:''}<span style="color:var(--sub);margin:0 6px">vs</span><span style="font-weight:600">${p2?.nickname||'?'}</span>${p2?`<span title="Переименовать игрока (везде)" onclick="renamePlayer('${e.player2_id}')" style="cursor:pointer;color:var(--sub);font-size:12px;margin-left:2px">✎</span>`:''}
         </div>
         <span style="font-size:12px;color:var(--sub)">${t?.name||'?'}</span>
       </div>
@@ -187,7 +192,7 @@ async function pgMatches(){
     <h3>⚡ Массовый импорт по ссылкам</h3>
     <div style="font-size:11px;color:var(--sub);margin-bottom:8px">Вставь ВСЕ ссылки shiyu.darte.gg (по одной на строку, любой порядок). Парами по игрокам соберутся встречи (матч 1 и 2), импортируются результаты И полные ростеры обоих игроков. Существующие встречи переиспользуются (не дублируются).</div>
     <div style="margin-bottom:8px;max-width:340px"><label>Турнир</label>${sel('bulk-tour',D.tours,x=>x.id,x=>x.name)}</div>
-    <textarea id="bulk-links" rows="8" placeholder="https://shiyu.darte.gg/draft?draft_id=...&session_key=...&#10;https://shiyu.darte.gg/draft?draft_id=...&session_key=..." style="width:100%;padding:8px 10px;font-size:12px;font-family:'JetBrains Mono',monospace;resize:vertical"></textarea>
+    <textarea id="bulk-links" rows="16" placeholder="https://shiyu.darte.gg/draft?draft_id=...&session_key=...&#10;https://shiyu.darte.gg/draft?draft_id=...&session_key=..." style="width:100%;min-height:120px;padding:8px 10px;font-size:12px;font-family:'JetBrains Mono',monospace;resize:both"></textarea>
     <div id="bulk-status" style="font-size:11px;color:var(--sub);min-height:13px;margin:8px 0"></div>
     <button class="btn btn-g" onclick="bulkImportDrafts()">Импортировать всё</button>
   </div>
@@ -217,6 +222,25 @@ async function resolvePlayerNick(nick){
   if(error){dbErr(error,'создание игрока «'+nick+'»');return null;}
   D.players.push(data);
   return data.id;
+}
+
+// Переименование игрока прямо из встречи. Меняем по players.id → ник
+// обновляется ВЕЗДЕ (встречи/матчи/ростеры/результаты ссылаются на uuid).
+// Проверяем коллизию ника (без учёта регистра) с другим игроком.
+async function renamePlayer(pid){
+  const cur=D.players.find(p=>p.id===pid);
+  if(!cur)return toast('Игрок не найден','err');
+  const nick=prompt('Новый ник игрока:',cur.nickname);
+  if(nick==null)return;
+  const n=nick.trim();
+  if(!n)return toast('Ник не может быть пустым','err');
+  if(n===cur.nickname)return;
+  const clash=D.players.find(p=>p.id!==pid&&p.nickname.toLowerCase()===n.toLowerCase());
+  if(clash)return toast('Игрок с таким ником уже есть','err');
+  const{error}=await sb.from('players').update({nickname:n}).eq('id',pid);
+  if(dbErr(error,'переименование игрока'))return;
+  await refreshData();
+  toast('Игрок переименован');pgMatches();
 }
 
 async function addEnc(){
@@ -370,14 +394,18 @@ async function importMatchFromLink(encId,num,p1Id,p2Id,link,pen){
   const p1Timer=fpId===p1Id?fpT:dblT,p2Timer=fpId===p1Id?dblT:fpT;
   const p1R=fpId===p1Id?(sFp.restarts||0):(sDbl.restarts||0);
   const p2R=fpId===p1Id?(sDbl.restarts||0):(sFp.restarts||0);
-  let winnerId=null;
-  if(fpT!=null&&dblT!=null)winnerId=fpT<=dblT?fpId:dblId;
+  // Ничья проставляется автоматически: равные итоговые таймеры (с учётом штрафов) → draw.
+  let winnerId=null,isDraw=false;
+  if(fpT!=null&&dblT!=null){
+    if(fpT===dblT)isDraw=true;
+    else winnerId=fpT<dblT?fpId:dblId;
+  }
   // Валидация стороны/фп/дублирования перед записью (см. validateMatchData).
   const{data:otherMs}=await sb.from('matches').select('fp_player_id').eq('encounter_id',encId).neq('match_number',+num);
   const otherFpId=(otherMs||[]).map(m=>m.fp_player_id).find(Boolean)||null;
-  const vr=validateMatchData({num,p1Id,p2Id,fpId,t1:fpT,t2:dblT,isDraw:false,winnerId,otherFpId});
+  const vr=validateMatchData({num,p1Id,p2Id,fpId,t1:fpT,t2:dblT,isDraw,winnerId,otherFpId});
   if(vr.errors.length)throw new Error('валидация: '+vr.errors.join('; '));
-  const mData={encounter_id:encId,match_number:+num,fp_player_id:fpId,is_draw:false,winner_id:winnerId,
+  const mData={encounter_id:encId,match_number:+num,fp_player_id:fpId,is_draw:isDraw,winner_id:winnerId,
     player1_timer_sec:p1Timer,player2_timer_sec:p2Timer,player1_restarts:p1R,player2_restarts:p2R};
   const{data:exist}=await sb.from('matches').select('id').eq('encounter_id',encId).eq('match_number',+num).maybeSingle();
   let mid=exist?.id;
@@ -797,10 +825,15 @@ async function saveMatch(encId,num,p1Id,p2Id,fpId,existingId){
   const p2R=fpId===p1Id?r2:r1;
 
   let winnerId=v('m-winner');
-  if(!winnerId&&!isDraw&&t1!=null&&t2!=null){winnerId=t1<=t2?fpId:dblId;}
+  // Авто-ничья: равные таймеры и без явно выбранного победителя → draw.
+  let draw=isDraw;
+  if(!winnerId&&!draw&&t1!=null&&t2!=null){
+    if(t1===t2)draw=true;
+    else winnerId=t1<t2?fpId:dblId;
+  }
 
-  const mData={encounter_id:encId,match_number:+num,fp_player_id:fpId,is_draw:isDraw,
-    winner_id:isDraw?null:(winnerId||null),
+  const mData={encounter_id:encId,match_number:+num,fp_player_id:fpId,is_draw:draw,
+    winner_id:draw?null:(winnerId||null),
     player1_timer_sec:p1Timer,player2_timer_sec:p2Timer,
     player1_restarts:p1R,player2_restarts:p2R};
 
@@ -836,7 +869,7 @@ async function saveMatch(encId,num,p1Id,p2Id,fpId,existingId){
   // otherFpId — фп соседнего матча встречи (для проверки, что сторона не дублируется).
   const{data:otherMs}=await sb.from('matches').select('fp_player_id').eq('encounter_id',encId).neq('match_number',+num);
   const otherFpId=(otherMs||[]).map(m=>m.fp_player_id).find(Boolean)||null;
-  const vr=validateMatchData({num,p1Id,p2Id,fpId,t1,t2,isDraw,winnerId,picks,bans,otherFpId});
+  const vr=validateMatchData({num,p1Id,p2Id,fpId,t1,t2,isDraw:draw,winnerId,picks,bans,otherFpId});
   const rWarn=await rosterConsistencyWarnings(encId,picks,existingId);
   const warnings=[...vr.warnings,...rWarn];
   if(vr.errors.length||warnings.length){
