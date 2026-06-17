@@ -146,7 +146,9 @@
   .rev-sum{display:flex;align-items:center;gap:8px;font-family:'JetBrains Mono',monospace;font-size:15px;font-weight:600;color:var(--sub);flex-shrink:0}
   .rev-tot.win{color:#ff3b6b}
   .rev-arr{color:#ff3b6b;font-weight:900;font-family:'Saira Condensed',sans-serif;font-style:italic;padding:0 1px}
-  .rev-diff{display:inline-flex;align-items:center;gap:3px;color:#c9c9d0;font-weight:600}
+  /* единый размер дельты везде (в шапке и в каждом матче) — раньше в строках матча она наследовала крупный кегль карточки */
+  .rev-diff{display:inline-flex;align-items:center;gap:3px;color:#c9c9d0;font-weight:600;font-family:'JetBrains Mono',monospace;font-size:13px}
+  .rev-arr{font-size:14px}
   /* матч: ряд иконок (оба игрока на одном уровне), под ним ряд таймеров+рестартов, разница по центру */
   .rev-m{padding:9px 0}
   .rev-m+.rev-m{border-top:1px solid var(--line)}
@@ -215,8 +217,8 @@
   .match .seed+.seed{border-top:1px solid var(--line)}
   .seed .sd{font-family:'JetBrains Mono',monospace;font-size:9px;color:#7a7a85;width:18px;flex-shrink:0;text-align:center;align-self:stretch;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.03);border-right:1px solid var(--line);margin:0 3px 0 -10px}
   .seed.win .sd{color:#fff;background:rgba(255,31,68,.12)}
-  .seed .av{width:19px;height:19px;border-radius:5px;background:var(--panel-3);display:flex;align-items:center;justify-content:center;font-family:'Saira Condensed',sans-serif;font-style:italic;font-size:9px;font-weight:900;color:var(--sub);flex-shrink:0;overflow:hidden}
-  .seed .av img{width:100%;height:100%;object-fit:cover;display:block}
+  .seed .av{position:relative;width:19px;height:19px;border-radius:5px;background:var(--panel-3);display:flex;align-items:center;justify-content:center;font-family:'Saira Condensed',sans-serif;font-style:italic;font-size:9px;font-weight:900;color:var(--sub);flex-shrink:0;overflow:hidden}
+  .seed .av img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block}
   .seed .nm{font-weight:600;font-size:12.5px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#c9c9d0;letter-spacing:.01em}
   .seed .sc{font-family:'JetBrains Mono',monospace;font-weight:600;font-size:12px;color:var(--sub);min-width:16px;text-align:right}
   /* winner row */
@@ -270,8 +272,9 @@
   .rrow{display:flex;align-items:center;gap:16px;padding:15px 22px}
   .rrow+.rrow{border-top:1px solid var(--line)}
   .rrow .plc{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;font-size:28px;width:48px;color:var(--sub);flex-shrink:0}
-  .rrow .rav{width:38px;height:38px;border-radius:8px;background:var(--panel-3);display:flex;align-items:center;justify-content:center;font-family:'Saira Condensed',sans-serif;font-style:italic;font-size:15px;font-weight:900;color:var(--sub);flex-shrink:0;overflow:hidden}
-  .rrow .rav img{width:100%;height:100%;object-fit:cover;display:block}
+  .rrow .rav{position:relative;width:38px;height:38px;border-radius:8px;background:var(--panel-3);display:flex;align-items:center;justify-content:center;font-family:'Saira Condensed',sans-serif;font-style:italic;font-size:15px;font-weight:900;color:var(--sub);flex-shrink:0;overflow:hidden}
+  /* фото — абсолютный оверлей поверх инициалов, иначе flex сжимал img и фото «съезжало» */
+  .rrow .rav img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block}
   .rrow .rnm{flex:1;font-weight:600;font-size:19px}
   .rrow .rprz{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;font-size:19px;background:linear-gradient(90deg,#f8d36a,#d99a16);-webkit-background-clip:text;background-clip:text;color:transparent;flex-shrink:0}
   /* медальные места — больше фото, больше ник, золото/серебро/бронза по нику (1>2>3) */
@@ -498,9 +501,18 @@ async function boot(){
   S.matchesByEnc={};(mt.data||[]).forEach(m=>{(S.matchesByEnc[m.encounter_id]=S.matchesByEnc[m.encounter_id]||[]).push(m);});
   renderFmtTabs();
   // deep-link ?tid=<id> (с главной: «полный рейтинг → страница результатов сетки»).
-  const wantId=new URLSearchParams(location.search).get('tid');
+  const qs=new URLSearchParams(location.search);
+  const wantId=qs.get('tid');
+  const wantTab=qs.get('tab'); // bracket|review|results — с главной
   const wantT=wantId&&S.tours.find(t=>String(t.id)===String(wantId));
-  if(wantT){openTour(wantT);}
+  if(wantT){
+    openTour(wantT);
+    if(wantTab&&['bracket','review','results'].includes(wantTab)){
+      S.fmt=wantTab;
+      $('fmtrow').querySelectorAll('.fmt-btn').forEach(x=>x.classList.toggle('active',x.dataset.fmt===wantTab));
+      render();
+    }
+  }
   // default landing = «Все сетки» index
   else{S.view='all';S.cur=null;renderTourbar();render();}
 }
@@ -892,10 +904,17 @@ function renderResults(t){
   }).join('')+`</div>`;
 }
 
-// twitch live pill (decapi, same as other pages)
-fetch('https://decapi.me/twitch/uptime/Nexus_Shiyu').then(r=>r.text()).then(txt=>{
-  if(/offline/i.test(txt))$('livetw').classList.add('offline');
-}).catch(()=>{});
+// twitch live pill (decapi, same as other pages). По умолчанию офлайн, пока эфир
+// не подтверждён; меняем и класс, и текст «Live/Offline» (раньше текст всегда был Live).
+(function(){
+  const pill=$('livetw'),lv=pill&&pill.querySelector('.lv');
+  const apply=on=>{if(pill)pill.classList.toggle('offline',!on);if(lv)lv.textContent=on?'Live':'Offline';};
+  apply(false);
+  fetch('https://decapi.me/twitch/uptime/Nexus_Shiyu',{cache:'no-store'})
+    .then(r=>r.ok?r.text():Promise.reject())
+    .then(txt=>apply(!/offline|not found|error|unable/i.test(txt)))
+    .catch(()=>{});
+})();
 
 // ===== bracket connectors + state nodes (additive overlay — observes render output,
 //        does NOT modify renderRounds/modelFromEncounters/boot) =====

@@ -451,6 +451,8 @@
           <div class="nav-dd-menu">
             <a href="statistics.html#chars">Персонажи</a>
             <a href="statistics.html#players">Игроки</a>
+            <a href="statistics.html#amps">Амплификаторы</a>
+            <a href="statistics.html#rating">Рейтинги</a>
             <a href="statistics.html#ext">Расширенная</a>
           </div>
         </div>
@@ -542,7 +544,7 @@
       <div class="stat">
         <div class="lbl">Участников</div>
         <div class="num" data-to="48">0</div>
-        <div class="sub up">+12 новых</div>
+        <div class="sub up" id="participants-sub">за всё время</div>
       </div>
       <div class="stat">
         <div class="lbl">КРУПНЕЙШИЙ ПРИЗОВОЙ</div>
@@ -615,7 +617,7 @@
     <div class="matches">
       <div class="sec-head">
         <h2>Последние <em>матчи</em></h2>
-        <a href="https://sh4dyq.github.io/zzz-stats/bracket.html" class="link">Все матчи →</a>
+        <a href="bracket.html" class="link" id="all-matches-link">Все матчи →</a>
       </div>
       <div class="mgrid" id="mgrid"></div>
     </div>
@@ -773,8 +775,15 @@
     const cur=live||lastFinished;
     if(cur){
       const km=document.getElementById('kicker-tour');if(km)km.textContent=cur.name;
+      // «Все матчи» → обзор встреч актуального (или последнего) турнира
+      const am=document.getElementById('all-matches-link');
+      if(am)am.href='bracket.html?tid='+encodeURIComponent(cur.id)+'&tab=review';
+    }
+    // «полный рейтинг» → результаты последнего ЗАВЕРШЁННОГО турнира
+    if(lastFinished){
       const pl=document.getElementById('podium-link');
-      if(pl){pl.textContent=cur.name+' · полный рейтинг →';pl.href='bracket.html?tid='+encodeURIComponent(cur.id);}
+      if(pl){pl.textContent=lastFinished.name+' · полный рейтинг →';
+        pl.href='bracket.html?tid='+encodeURIComponent(lastFinished.id)+'&tab=results';}
     }
 
     // ---- подиум: топ-3 по победам во встречах актуального турнира ----
@@ -843,10 +852,8 @@
     const grid=document.getElementById('mgrid');if(!grid)return;
     const tName={};T.forEach(t=>tName[t.id]=t.name);
     const done=E.filter(e=>{const ms=msByEnc[e.id]||[];return e.winner_id||ms.some(m=>m.winner_id||m.is_draw);});
-    done.sort((a,b)=>{
-      const so=(a.sort_order??1e9)-(b.sort_order??1e9);if(so)return so;
-      return new Date(b.played_at||b.created_at||0)-new Date(a.played_at||a.created_at||0);
-    });
+    // «Последние матчи» — по дате (новые выше), а не по ручному sort_order турнира.
+    done.sort((a,b)=>new Date(b.played_at||b.created_at||0)-new Date(a.played_at||a.created_at||0));
     const list=done.slice(0,3);
     if(!list.length){grid.innerHTML='<p style="color:var(--sub);font-size:14px">Матчей пока нет</p>';return;}
     grid.innerHTML=list.map(e=>{
