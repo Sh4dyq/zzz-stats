@@ -236,11 +236,47 @@ async function renamePlayer(pid){
   if(!n)return toast('Ник не может быть пустым','err');
   if(n===cur.nickname)return;
   const clash=D.players.find(p=>p.id!==pid&&p.nickname.toLowerCase()===n.toLowerCase());
-  if(clash)return toast('Игрок с таким ником уже есть','err');
+  if(clash){
+    // Дубль на настоящий ник существующего игрока (смурф сменил ник на сайте драфтов):
+    // предлагаем СЛИТЬ — переприсвоить все игры/пики этому игроку и удалить дубль.
+    if(!confirm(`Игрок «${clash.nickname}» уже есть.\n\nПереприсвоить все игры «${cur.nickname}» этому игроку и удалить дубль «${cur.nickname}»?`))return;
+    await mergePlayerInto(pid,clash.id);
+    return;
+  }
   const{error}=await sb.from('players').update({nickname:n}).eq('id',pid);
   if(dbErr(error,'переименование игрока'))return;
   await refreshData();
   toast('Игрок переименован');pgMatches();
+}
+
+// Слияние игрока src → dst: переприсваивает все ссылки (встречи/матчи/пики/баны/
+// сетка) на dst и удаляет src. Турнир-скоупные таблицы с unique(tournament_id,
+// player_id) (ростеры/участники/результаты) у дубля просто удаляются — ростер dst
+// при необходимости пересоберётся из пиков. Несуществующие таблицы (миграции не
+// применены) игнорируются молча.
+async function mergePlayerInto(src,dst){
+  const reassign=async(table,col)=>{
+    const{error}=await sb.from(table).update({[col]:dst}).eq(col,src);
+    if(error&&!/does not exist|relation|schema cache/i.test(error.message||''))throw error;
+  };
+  const dropSrc=async(table)=>{
+    const{error}=await sb.from(table).delete().eq('player_id',src);
+    if(error&&!/does not exist|relation|schema cache/i.test(error.message||''))return; // таблицы может не быть
+  };
+  try{
+    for(const col of['player1_id','player2_id','winner_id'])await reassign('encounters',col);
+    for(const col of['fp_player_id','winner_id'])await reassign('matches',col);
+    await reassign('match_picks','player_id');
+    await reassign('match_bans','player_id');
+    for(const col of['player1_id','player2_id','winner_id'])await reassign('bracket_nodes',col);
+    await dropSrc('player_rosters');
+    await dropSrc('tournament_participants');
+    await dropSrc('tournament_results');
+    const{error}=await sb.from('players').delete().eq('id',src);
+    if(error)throw error;
+  }catch(e){dbErr(e,'слияние игроков');return;}
+  await refreshData();
+  toast('Игры переприсвоены, дубль удалён');pgMatches();
 }
 
 async function addEnc(){
