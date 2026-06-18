@@ -206,7 +206,7 @@
   .stat{position:relative;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:22px 24px;overflow:hidden}
   .stat::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--grad);opacity:.85}
   .stat .lbl{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;
-    font-size:13px;letter-spacing:.05em;color:var(--sub);margin-bottom:8px}
+    font-size:13px;letter-spacing:.05em;color:var(--red);margin-bottom:8px}
   .stat .num{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;font-size:54px;line-height:.92;color:#fff;padding-right:.06em}
   .stat .num u{text-decoration:none;font-size:26px;color:var(--sub);margin-left:2px}
   .stat .sub{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--sub);margin-top:8px;font-weight:500}
@@ -501,7 +501,7 @@
     <p class="lede">Аналитика турниров <b>Nexus Shiyu</b> по Zenless Zone Zero — статистика игроков, винрейты, пикрейты, история матчей и турнирные сетки.</p>
 
     <div class="seasons" id="seasons">
-      <a class="sbtn on" href="statistics.html?t=Proxy%20Rush%206" data-tour="Proxy Rush 6">Proxy Rush<small>6th · текущий</small></a>
+      <a class="sbtn on" href="statistics.html?t=Proxy%20Rush%207" data-tour="Proxy Rush 7">Proxy Rush<small>7th · текущий</small></a>
       <a class="sbtn" href="statistics.html?t=Qualifiers%20II" data-tour="Qualifiers II">Qualifiers<small>II</small></a>
       <a class="sbtn" href="statistics.html?t=Qualifiers%20I" data-tour="Qualifiers I">Qualifiers<small>I</small></a>
       <a class="sbtn" id="all-tournaments" href="statistics.html" data-tour="">Все<small>турниры</small></a>
@@ -512,22 +512,22 @@
   <section class="featured">
     <div class="fcard">
       <div class="fart">
-        <a href="https://t.me/nexus_shiyu/1087" target="_blank" rel="noopener noreferrer" style="display:block;width:100%;height:100%">
-          <img id="feat-art-img" src="nspr6-announce.jpg" alt="Key art турнира" onerror="this.onerror=null;this.src='nexus-logo.png';this.style.objectFit='contain';">
+        <a id="feat-link" href="#" target="_blank" rel="noopener noreferrer" style="display:block;width:100%;height:100%">
+          <img id="feat-art-img" src="" alt="Key art турнира" onerror="this.onerror=null;this.src='nexus-logo.png';this.style.objectFit='contain';">
         </a>
-        <span class="ribbon"><span class="pin"></span> Идёт сейчас</span>
+        <span class="ribbon" id="feat-ribbon"><span class="pin"></span> <span id="feat-ribbon-t">Идёт сейчас</span></span>
       </div>
       <div class="finfo">
-        <div class="kick">ДАТА ПРОВЕДЕНИЯ: 02–03 ИЮНЯ</div>
-        <h3>Nexus Shiyu:<br><span class="l2">Proxy Rush 6th</span></h3>
+        <div class="kick" id="feat-dates">ДАТА ПРОВЕДЕНИЯ</div>
+        <h3 id="feat-name"><span class="l2">—</span></h3>
         <div class="fmeta">
-          <div><div class="k">Формат</div><div class="v">SE</div></div>
-          <div><div class="k">Сетка</div><div class="v"><a href="https://challonge.com/ru/NSPR6" target="_blank" rel="noopener noreferrer">CHALLONGE/NSPR6</a></div></div>
+          <div><div class="k">Формат</div><div class="v" id="feat-format">—</div></div>
+          <div><div class="k">Сетка</div><div class="v"><a id="feat-bracket" href="#" target="_blank" rel="noopener noreferrer">—</a></div></div>
           <div><div class="k">Стрим</div><div class="v"><a href="https://twitch.tv/Nexus_Shiyu" target="_blank" rel="noopener noreferrer">TWITCH.TV/NEXUS_SHIYU</a></div></div>
         </div>
         <div class="fbottom">
-          <div class="fprize"><div class="k">Prize Pool</div><div class="v">5 000 ₽</div></div>
-          <a href="https://t.me/nexus_shiyu/1087" class="fcta">Подробнее</a>
+          <div class="fprize"><div class="k">Prize Pool</div><div class="v" id="feat-prize">—</div></div>
+          <a id="feat-cta" href="#" class="fcta">Подробнее</a>
         </div>
       </div>
     </div>
@@ -539,12 +539,12 @@
       <div class="stat">
         <div class="lbl">Турниров</div>
         <div class="num" data-to="6">0</div>
-        <div class="sub up">сезон 2026</div>
+        <div class="sub">сезон 2026</div>
       </div>
       <div class="stat">
         <div class="lbl">Участников</div>
         <div class="num" data-to="48">0</div>
-        <div class="sub up" id="participants-sub">за всё время</div>
+        <div class="sub" id="participants-sub">за всё время</div>
       </div>
       <div class="stat">
         <div class="lbl">КРУПНЕЙШИЙ ПРИЗОВОЙ</div>
@@ -559,7 +559,7 @@
     </div>
 
     <div class="sec-head">
-      <h2>Топ <em>последнего турнира</em></h2>
+      <h2>Топ <em style="background:none;color:var(--red);-webkit-text-fill-color:var(--red);padding-right:.06em">последнего турнира</em></h2>
       <a href="statistics.html#players" class="link" id="podium-link">Qualifiers II · полный рейтинг →</a>
     </div>
     <div class="podium" id="podium"></div>
@@ -671,6 +671,20 @@
   const sb=supabase.createClient(SB_URL,SB_KEY);
   const TWITCH='Nexus_Shiyu';
 
+  // ── Крупная карточка турнира сверху ───────────────────────────────
+  // Всё берётся из БД (правится в админке: tg_url → картинка+«Подробнее»,
+  // prize_pool → призовой). Этот конфиг — ТОЛЬКО запасной вариант, если поля
+  // в БД пустые. В норме трогать его не нужно.
+  const FEATURED={
+    image:'nspr7-announce.jpg',
+    link:'https://t.me/nexus_shiyu/1116',
+    prize:'5 000 ₽',
+    // Переопределения под конкретные турниры (ключ = tournaments.id):
+    // byId:{ 12:{image:'nspr8.jpg',link:'https://t.me/...',prize:'10 000 ₽'} }
+    byId:{}
+  };
+  const featCfg=t=>Object.assign({},FEATURED,(t&&FEATURED.byId&&FEATURED.byId[t.id])||{});
+
   const ini=n=>(n||'').replace(/[^A-Za-zА-Яа-я0-9$]/g,'').slice(0,2).toUpperCase();
   const wrp=(w,l)=>w+l?Math.round(w/(w+l)*100):0;
   const fmtN=s=>String(s).replace(/\B(?=(\d{3})+(?!\d))/g,' ');
@@ -722,6 +736,26 @@
       .catch(()=>{});
   })();
 
+  // даты проведения: event_date .. event_date_end → «16–17 ИЮНЯ»
+  const MON=['января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря'];
+  function fmtRange(t){
+    if(!t||!t.event_date)return'';
+    const a=new Date(t.event_date+'T00:00:00');if(isNaN(a))return'';
+    const b=t.event_date_end&&t.event_date_end!==t.event_date?new Date(t.event_date_end+'T00:00:00'):null;
+    if(b&&!isNaN(b)){
+      if(b.getMonth()===a.getMonth())return `${a.getDate()}–${b.getDate()} ${MON[a.getMonth()].toUpperCase()}`;
+      return `${a.getDate()} ${MON[a.getMonth()].toUpperCase()} – ${b.getDate()} ${MON[b.getMonth()].toUpperCase()}`;
+    }
+    return `${a.getDate()} ${MON[a.getMonth()].toUpperCase()}`;
+  }
+  // challonge_url → подпись «CHALLONGE/NSPR7»
+  function challongeLabel(url){
+    if(!url)return null;
+    const slug=String(url).trim().replace(/^https?:\/\/[^/]*challonge\.com\/(ru\/)?/i,'').replace(/\/+$/,'');
+    return slug?'CHALLONGE/'+slug.toUpperCase():null;
+  }
+  const challongeHref=url=>!url?null:/^https?:/i.test(url)?url:'https://challonge.com/'+String(url).replace(/^\/+/,'');
+
   // Единый выбор турниров: live (идёт сейчас) и lastFinished (последний завершённый).
   // Опирается на tournaments.status ('live'/'finished'/'upcoming'); если колонки нет —
   // деградирует: live = самый свежий, lastFinished = следующий за ним.
@@ -738,6 +772,72 @@
     }
     const lastFinished=ts.find(t=>t.status==='finished')||live||null;
     return{live,lastFinished,upcoming};
+  }
+
+  // крупная карточка: название/даты/формат/сетка из БД, картинка/ссылка/приз из FEATURED
+  function renderFeatured(t){
+    if(!t)return;
+    const cfg=featCfg(t);
+    // приоритет данных из БД (правится в админке) → конфиг как запасной
+    const link=t.tg_url||cfg.link;
+    const prize=t.prize_pool||cfg.prize;
+    let image=t.announce_image||cfg.image;
+    const set=(id,fn)=>{const el=document.getElementById(id);if(el)fn(el);};
+    // картинка + ссылки
+    set('feat-art-img',el=>{el.onerror=null;el.src=image||'nexus-logo.png';
+      if(!image){el.style.objectFit='contain';}
+      el.onerror=function(){this.onerror=null;this.src='nexus-logo.png';this.style.objectFit='contain';};});
+    // нет кэша картинки, но есть пост Telegram → достаём её на лету (и функция кэширует в БД)
+    if(!t.announce_image&&t.tg_url){
+      sb.functions.invoke('tg-image',{body:{url:t.tg_url,db_id:t.id}})
+        .then(r=>{const im=r&&r.data&&r.data.image;if(im)set('feat-art-img',el=>{el.onerror=null;el.style.objectFit='cover';el.src=im;});})
+        .catch(()=>{});
+    }
+    if(link){set('feat-link',el=>el.href=link);set('feat-cta',el=>el.href=link);}
+    // плашка-статус
+    const rib={live:'Идёт сейчас',finished:'Завершён',upcoming:'Скоро'}[t.status]||'Идёт сейчас';
+    set('feat-ribbon-t',el=>el.textContent=rib);
+    set('feat-ribbon',el=>{if(t.status==='finished')el.querySelector('.pin').style.animation='none';});
+    // даты
+    const dr=fmtRange(t);
+    set('feat-dates',el=>el.textContent=dr?'ДАТА ПРОВЕДЕНИЯ: '+dr.toUpperCase():'');
+    // название (если есть ':' — префикс обычным, остальное градиентом)
+    set('feat-name',el=>{
+      const n=(t.name||'').trim();
+      // приоритет разбиения: по ':' → по префиксу «Nexus Shiyu» → одной строкой
+      let head='',tail=n,ci=n.indexOf(':');
+      if(ci>0){head=n.slice(0,ci+1);tail=n.slice(ci+1).trim();}
+      else{const m=n.match(/^(nexus\s+shiyu)\s+(.+)$/i);if(m){head=m[1];tail=m[2];}}
+      el.innerHTML=head?`${esc(head)}<br><span class="l2">${esc(tail)}</span>`:`<span class="l2">${esc(tail)}</span>`;
+    });
+    // формат
+    set('feat-format',el=>el.textContent=(t.bracket_type||'—').toUpperCase());
+    // сетка
+    set('feat-bracket',el=>{
+      const lbl=challongeLabel(t.challonge_url),href=challongeHref(t.challonge_url);
+      if(lbl&&href){el.textContent=lbl;el.href=href;}
+      else{el.textContent='—';el.removeAttribute('href');}
+    });
+    // призовой фонд (чистое число → форматируем с пробелами и ₽; иначе как есть)
+    set('feat-prize',el=>{
+      if(!prize){el.textContent='—';return;}
+      el.textContent=/^\d+$/.test(String(prize).trim())?fmtN(prize)+' ₽':prize;
+    });
+  }
+
+  // список турниров над карточкой: актуальные из БД со ссылками в статистику
+  function renderSeasons(T,cur){
+    const box=document.getElementById('seasons');if(!box)return;
+    const st={live:'текущий',finished:'завершён',upcoming:'скоро'};
+    const top=T.slice(0,3);
+    const btns=top.map(t=>{
+      const m=(t.name||'').match(/^(.*?)\s+([0-9]+|[IVXLCM]+)$/i);
+      const main=m?m[1]:(t.name||'');
+      const sm=[m?m[2]:'',st[t.status]||''].filter(Boolean).join(' · ');
+      const on=cur&&t.id===cur.id?' on':'';
+      return `<a class="sbtn${on}" href="statistics.html?t=${encodeURIComponent(t.name||'')}" data-tour="${esc(t.name||'')}">${esc(main)}${sm?`<small>${esc(sm)}</small>`:''}</a>`;
+    }).join('');
+    box.innerHTML=btns+`<a class="sbtn" id="all-tournaments" href="statistics.html" data-tour="">Все<small>турниры</small></a>`;
   }
 
   async function loadLanding(){
@@ -779,6 +879,9 @@
       const am=document.getElementById('all-matches-link');
       if(am)am.href='bracket.html?tid='+encodeURIComponent(cur.id)+'&tab=review';
     }
+    // ---- крупная карточка турнира + список турниров над ней ----
+    renderFeatured(cur);
+    renderSeasons(T,cur);
     // «полный рейтинг» → результаты последнего ЗАВЕРШЁННОГО турнира
     if(lastFinished){
       const pl=document.getElementById('podium-link');

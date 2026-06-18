@@ -54,6 +54,8 @@ async function pgTournaments(){
       <div><label>Этапов (группы→плейофф)</label><input id="t-stages" type="number" min="1" value="1"></div>
       <div style="grid-column:1/-1"><label>Ссылка на Challonge</label><input id="t-ch" type="text" placeholder="https://challonge.com/ru/NSPR6"></div>
       <div style="grid-column:1/-1"><label>Ссылка на Шиюй (nanoka, Frontier 4)</label><input id="t-shiyu" type="text" placeholder="https://zzz.nanoka.cc/shiyu/620531"></div>
+      <div style="grid-column:1/-1"><label>Пост-анонс в Telegram <span style="color:var(--sub)">— картинка на главной + кнопка «Подробнее»</span></label><input id="t-tg" type="text" placeholder="https://t.me/nexus_shiyu/1116"></div>
+      <div><label>Призовой фонд (карточка на главной)</label><input id="t-prize" type="text" placeholder="5 000 ₽"></div>
     </div>
     <div style="font-size:11px;color:var(--sub);margin-top:6px">Ротацию подтянем после создания — в «⚙ Настройки» турнира кнопкой «Импорт ротации».</div>
     <button class="btn btn-y" style="margin-top:12px" onclick="addTour()">Добавить</button>
@@ -71,12 +73,21 @@ function tourFormPatch(p){
   const stg=document.getElementById(p+'stages')?.value;
   const ch=document.getElementById(p+'ch')?.value?.trim()||null;
   const shy=document.getElementById(p+'shiyu')?.value?.trim()||null;
-  return{bracket_type:bracket,event_date:d1,event_date_end:d2,expected_players:exp?+exp:null,stages_count:stg?+stg:(fmt2?2:1),challonge_url:ch,shiyu_url:shy};
+  const tg=document.getElementById(p+'tg')?.value?.trim()||null;
+  const prize=document.getElementById(p+'prize')?.value?.trim()||null;
+  return{bracket_type:bracket,event_date:d1,event_date_end:d2,expected_players:exp?+exp:null,stages_count:stg?+stg:(fmt2?2:1),challonge_url:ch,shiyu_url:shy,tg_url:tg,prize_pool:prize};
+}
+// Подтягивает картинку-анонс из поста Telegram в tournaments.announce_image (кэш для главной).
+async function refreshTgImage(id,url){
+  if(!id||!url)return;
+  try{await sb.functions.invoke('tg-image',{body:{url,db_id:id}});}catch(e){}
 }
 async function addTour(){
   const n=v('t-name');if(!n)return toast('Впиши название','err');
-  const{error}=await sb.from('tournaments').insert({name:n,status:'upcoming',...tourFormPatch('t-')});
+  const patch=tourFormPatch('t-');
+  const{data:row,error}=await sb.from('tournaments').insert({name:n,status:'upcoming',...patch}).select('id').single();
   if(dbErr(error,'добавление турнира'))return;
+  await refreshTgImage(row?.id,patch.tg_url);
   toast('Турнир добавлен (статус: Анонс)');await refreshData();pgTournaments();
 }
 // Редактор параметров существующего турнира (формат/даты/участники/этапы/challonge)
@@ -95,6 +106,8 @@ async function openTourSettings(id,name){
       <div><label>Этапов</label><input id="${p}stages" type="number" min="1" value="${t.stages_count??1}"></div>
       <div style="grid-column:1/-1"><label>Ссылка на Challonge</label><input id="${p}ch" type="text" value="${escapeHtml(t.challonge_url||'')}"></div>
       <div style="grid-column:1/-1"><label>Ссылка на Шиюй (nanoka, Frontier 4)</label><input id="${p}shiyu" type="text" value="${escapeHtml(t.shiyu_url||'')}" placeholder="https://zzz.nanoka.cc/shiyu/620531"></div>
+      <div style="grid-column:1/-1"><label>Пост-анонс в Telegram <span style="color:var(--sub)">— картинка на главной + кнопка «Подробнее»</span></label><input id="${p}tg" type="text" value="${escapeHtml(t.tg_url||'')}" placeholder="https://t.me/nexus_shiyu/1116"></div>
+      <div><label>Призовой фонд (карточка на главной)</label><input id="${p}prize" type="text" value="${escapeHtml(t.prize_pool||'')}" placeholder="5 000 ₽"></div>
     </div>
     <button class="btn btn-y" style="margin-top:12px" onclick="saveTourSettings('${id}')">Сохранить</button>
   </div>
@@ -196,8 +209,10 @@ async function clearShiyuRotation(tourId){
 async function saveTourSettings(id){
   const name=document.getElementById('ts-name')?.value?.trim();
   if(!name)return toast('Название не может быть пустым','err');
-  const{error}=await sb.from('tournaments').update({name,...tourFormPatch('ts-')}).eq('id',id);
+  const patch=tourFormPatch('ts-');
+  const{error}=await sb.from('tournaments').update({name,...patch}).eq('id',id);
   if(dbErr(error,'сохранение настроек турнира'))return;
+  await refreshTgImage(id,patch.tg_url);
   toast('Настройки сохранены');await refreshData();go('tournaments');
 }
 // Статус турнира. «live» эксклюзивен — снимаем live с остальных (на главной/в статистике
