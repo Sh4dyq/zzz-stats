@@ -173,21 +173,29 @@ Deno.serve(async (req) => {
       synced.cached = !cw.error;
       synced.cacheError = cw.error ? (cw.error.message || JSON.stringify(cw.error)) : null;
 
-      // 2) синк МЕСТ в tournament_results (граница ручное/авто)
+      // 2) синк МЕСТ + АВТО-ПРИЗОВЫХ по распределению (граница ручное/авто)
       if (model.results.length) {
         const { data: players } = await admin.from("players").select("id,nickname");
         const byNick = new Map((players ?? []).map((p: any) => [String(p.nickname).toLowerCase(), p.id]));
         const { data: existing } = await admin.from("tournament_results").select("player_id,source").eq("tournament_id", db_id);
         const srcByPlayer = new Map((existing ?? []).map((r: any) => [r.player_id, r.source]));
 
+        // распределение призовых турнира → приз по месту проставляется авто
+        const { data: tour } = await admin.from("tournaments").select("prize_distribution").eq("id", db_id).maybeSingle();
+        let dist: any[] = tour?.prize_distribution ?? [];
+        if (typeof dist === "string") { try { dist = JSON.parse(dist); } catch { dist = []; } }
+        const prizeByPlace = new Map<number, number>();
+        for (const x of (Array.isArray(dist) ? dist : [])) {
+          if (x && x.place != null && x.prize != null && x.prize !== "") prizeByPlace.set(+x.place, +x.prize);
+        }
+
         for (const r of model.results) {
           const pid = byNick.get(String(r.name).toLowerCase());
           if (!pid) { synced.unmatched.push(r.name); continue; }
           if (srcByPlayer.get(pid) === "manual") { synced.results_skipped_manual++; continue; } // НЕ перетираем ручное
-          const up = await admin.from("tournament_results").upsert(
-            { tournament_id: db_id, player_id: pid, place: r.place, final_rank: r.place, source: "challonge", synced_at: model.fetched_at },
-            { onConflict: "tournament_id,player_id" },
-          );
+          const row: any = { tournament_id: db_id, player_id: pid, place: r.place, final_rank: r.place, source: "challonge", synced_at: model.fetched_at };
+          if (prizeByPlace.has(r.place)) row.prize = prizeByPlace.get(r.place); // авто-приз по месту
+          const up = await admin.from("tournament_results").upsert(row, { onConflict: "tournament_id,player_id" });
           if (!up.error) synced.results_written++;
         }
       }

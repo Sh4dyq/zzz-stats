@@ -612,6 +612,71 @@ async function syncChallonge(tourId,tourName){
   toast(msg,s.cached?'':'err');
   openBracketEditor(tourId,tourName);
 }
+// ── Распределение призовых по местам (источник авто-привязки) ──────────────
+// Нормализуем prize_distribution турнира в массив {place,prize}. Пусто → 4 места.
+function prizeDist(t){
+  let d=t&&t.prize_distribution;
+  if(typeof d==='string'){try{d=JSON.parse(d);}catch{d=null;}}
+  if(!Array.isArray(d)||!d.length)d=[{place:1},{place:2},{place:3},{place:4}];
+  return d.map(x=>({place:+x.place,prize:x.prize==null||x.prize===''?null:+x.prize})).sort((a,b)=>a.place-b.place);
+}
+// приз за конкретное место по распределению (null = не задан)
+function prizeForPlace(t,place){
+  if(place==null)return null;
+  const hit=prizeDist(t).find(x=>x.place===+place);
+  return hit&&hit.prize!=null?hit.prize:null;
+}
+function prizeDistHTML(tourId){
+  const t=D.tours.find(x=>x.id===tourId)||{};
+  const rows=prizeDist(t).map((x,i)=>`<div class="pd-row" data-i="${i}" style="display:flex;gap:6px;align-items:center;margin-bottom:6px">
+    <span style="font-size:12px;color:var(--sub);width:64px">Место ${x.place}</span>
+    <input class="pd-place" type="number" min="1" value="${x.place}" style="font-size:12px;padding:5px 8px;width:64px">
+    <input class="pd-prize" type="number" min="0" value="${x.prize??''}" placeholder="приз ₽" style="font-size:12px;padding:5px 8px;flex:1">
+    <button class="btn btn-g" style="font-size:12px;padding:4px 9px" onclick="this.closest('.pd-row').remove()">✕</button>
+  </div>`).join('');
+  return`<div class="card" style="margin-bottom:16px">
+    <h3>Распределение призовых</h3>
+    <div style="font-size:11px;color:var(--sub);margin-bottom:10px">Призовой за каждое место. Из него приз игрока ставится <b>автоматически</b> по его месту — и вручную, и при синке с Challonge. Пустое поле = за это место приз не назначается.</div>
+    <div id="pd-list">${rows}</div>
+    <div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap">
+      <button class="btn btn-g" style="font-size:12px;padding:6px 12px" onclick="addPrizePlace()">+ Место</button>
+      <button class="btn btn-y" style="font-size:12px;padding:6px 12px" onclick="savePrizeDist('${tourId}')">Сохранить и применить</button>
+    </div>
+  </div>`;
+}
+function addPrizePlace(){
+  const list=document.getElementById('pd-list');if(!list)return;
+  const next=list.querySelectorAll('.pd-row').length+1;
+  const div=document.createElement('div');div.className='pd-row';
+  div.style.cssText='display:flex;gap:6px;align-items:center;margin-bottom:6px';
+  div.innerHTML=`<span style="font-size:12px;color:var(--sub);width:64px">Место ${next}</span>
+    <input class="pd-place" type="number" min="1" value="${next}" style="font-size:12px;padding:5px 8px;width:64px">
+    <input class="pd-prize" type="number" min="0" placeholder="приз ₽" style="font-size:12px;padding:5px 8px;flex:1">
+    <button class="btn btn-g" style="font-size:12px;padding:4px 9px" onclick="this.closest('.pd-row').remove()">✕</button>`;
+  list.appendChild(div);
+}
+async function savePrizeDist(tourId){
+  const dist=[...document.querySelectorAll('#pd-list .pd-row')].map(r=>({
+    place:+r.querySelector('.pd-place').value||null,
+    prize:r.querySelector('.pd-prize').value===''?null:+r.querySelector('.pd-prize').value,
+  })).filter(x=>x.place!=null).sort((a,b)=>a.place-b.place);
+  const{error}=await sb.from('tournaments').update({prize_distribution:dist}).eq('id',tourId);
+  if(dbErr(error,'сохранение распределения'))return;
+  await refreshData();
+  // применяем к уже проставленным местам (по всем результатам турнира)
+  const t=D.tours.find(x=>x.id===tourId)||{prize_distribution:dist};
+  const{data:res}=await sb.from('tournament_results').select('id,place').eq('tournament_id',tourId);
+  let applied=0;
+  for(const r of(res||[])){
+    if(r.place==null)continue;
+    const pz=prizeForPlace(t,r.place);if(pz==null)continue;
+    const{error:e}=await sb.from('tournament_results').update({prize:pz}).eq('id',r.id);
+    if(!e)applied++;
+  }
+  toast(`Распределение сохранено · призовых проставлено: ${applied}`);
+  openBracketEditor(tourId,t.name||'');
+}
+
 // Ручной редактор мест/призовых. Строки, сохранённые здесь → source='manual' (синк их не трогает).
 async function resultsEditorHTML(tourId){
   const{data:res}=await sb.from('tournament_results').select('*').eq('tournament_id',tourId).order('place',{ascending:true});
@@ -626,9 +691,9 @@ async function resultsEditorHTML(tourId){
     <button class="btn btn-y" style="font-size:12px;padding:5px 10px" onclick="saveResultRow('${tourId}','${r.id}','${r.player_id}')">Сохранить (вручную)</button>
   </div>`).join('');
   const plDatalist=`<datalist id="re-pl-list">${D.players.map(p=>`<option value="${escapeHtml(p.nickname)}"></option>`).join('')}</datalist>`;
-  return`<div class="card" style="margin-bottom:16px">
+  return`${prizeDistHTML(tourId)}<div class="card" style="margin-bottom:16px">
     <h3>Результаты (места / призовые)</h3>
-    <div style="font-size:11px;color:var(--sub);margin-bottom:10px">Места могут прийти авто из Challonge. <b>Призовые — только вручную</b> (в Challonge их нет). Сохранение здесь помечает строку «вручную» — синк её больше не перетирает.</div>
+    <div style="font-size:11px;color:var(--sub);margin-bottom:10px">Места могут прийти авто из Challonge. <b>Приз ставится автоматически по месту</b> из распределения выше — поле приза можно перебить вручную. Сохранение здесь помечает строку «вручную» (синк её больше не перетирает).</div>
     ${plDatalist}
     <div class="grid2" style="margin-bottom:8px">
       <div><label>Игрок</label><input id="re-nick" type="text" list="re-pl-list" placeholder="ник"></div>
@@ -642,21 +707,27 @@ async function resultsEditorHTML(tourId){
   </div>`;
 }
 async function saveResultRow(tourId,id,playerId){
-  const place=document.getElementById('rp-'+id).value,prize=document.getElementById('rz-'+id).value;
-  const{error}=await sb.from('tournament_results').update({place:place?+place:null,prize:prize?+prize:null,source:'manual'}).eq('id',id);
+  const t=D.tours.find(x=>x.id===tourId)||{};
+  const place=document.getElementById('rp-'+id).value,prizeRaw=document.getElementById('rz-'+id).value;
+  // приз пустой → берём из распределения по месту; вписан вручную → уважаем
+  const prize=prizeRaw!==''?+prizeRaw:prizeForPlace(t,place?+place:null);
+  const{error}=await sb.from('tournament_results').update({place:place?+place:null,prize:prize,source:'manual'}).eq('id',id);
   if(dbErr(error,'сохранение результата'))return;
   toast('Результат сохранён (вручную)');
+  openBracketEditor(tourId,t.name||'');
 }
 async function addResultRow(tourId){
-  const nick=v('re-nick'),place=v('re-place'),prize=v('re-prize');
+  const t=D.tours.find(x=>x.id===tourId)||{};
+  const nick=v('re-nick'),place=v('re-place'),prizeRaw=v('re-prize');
   if(!nick)return toast('Впиши ник','err');
   const pid=await resolvePlayerNick(nick);if(!pid)return;
+  const prize=prizeRaw!==''&&prizeRaw!=null?+prizeRaw:prizeForPlace(t,place?+place:null);
   const{error}=await sb.from('tournament_results').upsert(
-    {tournament_id:tourId,player_id:pid,place:place?+place:null,prize:prize?+prize:null,source:'manual'},
+    {tournament_id:tourId,player_id:pid,place:place?+place:null,prize:prize,source:'manual'},
     {onConflict:'tournament_id,player_id'});
   if(dbErr(error,'добавление результата'))return;
   toast('Результат добавлен (вручную)');
-  const t=D.tours.find(x=>x.id===tourId);openBracketEditor(tourId,t?.name||'');
+  openBracketEditor(tourId,t.name||'');
 }
 async function setEncWinner(encId,winnerId){
   const{error}=await sb.from('encounters').update({winner_id:winnerId||null}).eq('id',encId);
