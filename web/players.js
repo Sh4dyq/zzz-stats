@@ -4,31 +4,47 @@ let _RS=[];
 const RC={atk:'#fca5a5',stun:'#93c5fd',rupt:'#fcd34d',sup:'#6ee7b7',def:'#86efac',ano:'#c4b5fd'};
 
 async function pgPlayers(){
-  const list=D.players.map(p=>`<div class="row-item" draggable="true" data-id="${p.id}">
-    <div style="display:flex;align-items:center;gap:10px">
-      <span title="Перетащить для сортировки" style="cursor:grab;color:var(--sub);font-size:15px;user-select:none">⠿</span>
-      <div>
-        <div style="font-weight:600">${p.nickname}</div>
-        <div style="font-size:12px;color:var(--sub)">${p.age||'—'}${p.prize!=null?' · '+p.prize+' ₽':''}${p.highest_place!=null?' · '+p.highest_place+' место':''}</div>
+  const list=D.players.map(p=>{
+    const ini=(p.nickname||'?').trim().slice(0,2).toUpperCase();
+    const meta=[];
+    if(p.age)meta.push(`${p.age} лет`);
+    if(p.highest_place!=null)meta.push(`<b>${p.highest_place} место</b>${p.highest_place_count>1?` ×${p.highest_place_count}`:''}`);
+    if(p.prize!=null)meta.push(`${(+p.prize).toLocaleString('ru-RU')} ₽`);
+    return`<div class="pcard" draggable="true" data-id="${p.id}" data-search="${escapeHtml((p.nickname||'').toLowerCase())}">
+    <span title="Перетащить" style="cursor:grab;color:#44444c;font-size:14px;user-select:none;flex-shrink:0">⠿</span>
+    <span class="pc-av">${escapeHtml(ini)}</span>
+    <div class="pc-body">
+      <div class="pc-nick">${escapeHtml(p.nickname)}</div>
+      <div class="pc-meta">${meta.join('<span style="color:#3a3a42">·</span>')||'<span>нет данных</span>'}</div>
+    </div>
+    <div class="gc-acts">
+      <button class="icon-btn" title="Ростер и призовые" onclick="openRoster('${p.id}','${(p.nickname||'').replace(/'/g,"\\'")}')"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="9" x2="9" y2="20"></line></svg></button>
+      <button class="icon-btn danger" title="Удалить" onclick="delPlayer('${p.id}')">✕</button>
+    </div>
+  </div>`;}).join('');
+  html(`<details class="panel">
+    <summary>Добавить игрока<span class="chev">▾</span></summary>
+    <div class="panel-body">
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
+        <div style="flex:2;min-width:160px"><label>Никнейм</label><input id="p-nick" type="text" placeholder="никнейм"></div>
+        <div style="flex:1;min-width:80px"><label>Возраст</label><input id="p-age" type="number" min="10" max="99" placeholder="—"></div>
+        <div style="flex:1;min-width:100px"><label>Призовые ₽</label><input id="p-prize" type="number" min="0" placeholder="0"></div>
+        <button class="btn btn-y" style="flex-shrink:0" onclick="addPlayer()">Добавить</button>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px">
+        <div style="flex:1;min-width:120px"><label>Наивысшее место</label><input id="p-place" type="number" min="1" placeholder="—"></div>
+        <div style="flex:1;min-width:120px"><label>Раз занято</label><input id="p-place-cnt" type="number" min="1" placeholder="1"></div>
       </div>
     </div>
-    <div style="display:flex;gap:8px">
-      <button class="btn btn-g" style="font-size:12px;padding:5px 12px" onclick="openRoster('${p.id}','${p.nickname.replace(/'/g,"\'")}')">Ростер</button>
-      <button class="btn-r" onclick="delPlayer('${p.id}')">✕</button>
+  </details>
+  <div class="listbar">
+    <div class="search" style="margin:0;flex:1;max-width:360px">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.5" y2="16.5"></line></svg>
+      <input type="search" data-target="player-list" oninput="acFilter(this)" placeholder="Поиск игрока…">
     </div>
-  </div>`).join('');
-  html(`<div class="card" style="margin-bottom:16px">
-    <h3>Добавить игрока</h3>
-    <div class="grid3">
-      <div><label>Никнейм</label><input id="p-nick" type="text"></div>
-      <div><label>Возраст</label><input id="p-age" type="number" min="10" max="99" placeholder="—"></div>
-      <div><label>Наивысшее место</label><input id="p-place" type="number" min="1" placeholder="—"></div>
-      <div><label>Раз занято</label><input id="p-place-cnt" type="number" min="1" placeholder="1"></div>
-      <div><label>Призовые (₽)</label><input id="p-prize" type="number" min="0" placeholder="0"></div>
-    </div>
-    <button class="btn btn-y" style="margin-top:12px" onclick="addPlayer()">Добавить</button>
+    <span class="count-chip">${D.players.length} игр.</span>
   </div>
-  <div class="space-y" id="player-list">${list||'<p style="color:var(--sub);font-size:14px">Игроков ещё нет</p>'}</div>`);
+  <div class="pgrid" id="player-list">${list||''}<p data-empty style="color:var(--sub);font-size:14px;${D.players.length?'display:none':''}">Игроков ещё нет</p></div>`);
   if(typeof enableReorder==='function')enableReorder(document.getElementById('player-list'),'players',pgPlayers);
 }
 async function addPlayer(){const n=v('p-nick');if(!n)return;const{error}=await sb.from('players').insert({nickname:n,age:vn('p-age'),highest_place:vn('p-place'),highest_place_count:vn('p-place-cnt'),prize:vn('p-prize')});if(dbErr(error,'добавление игрока'))return;toast('Игрок добавлен');await refreshData();pgPlayers();}
@@ -72,50 +88,25 @@ async function openRoster(pid,pnick){
       <span style="color:var(--sub);font-size:13px;align-self:center">Ростер пуст</span>
     </div>
 
-    <div id="ms-picker" style="display:none;background:#0d0f18;border:2px solid var(--accent);
-      border-radius:8px;padding:12px;margin-bottom:14px">
-      <div style="font-size:12px;color:var(--sub);margin-bottom:8px">Конста для <b id="ms-cname"></b>:</div>
-      <div style="display:flex;gap:6px;flex-wrap:wrap" id="ms-btns"></div>
-    </div>
-
     <div style="display:flex;flex-wrap:wrap;gap:8px">${charGrid}</div>
   </div>`);
 }
 
 function charPickClick(cid){
   const c=D.chars.find(x=>x.id===cid);if(!c)return;
-  const already=_RS.find(r=>r.character_id===cid);
-  if(already){
-    openMsPicker(cid,c.name);
-    return;
-  }
+  if(_RS.find(r=>r.character_id===cid)){toast('Уже в ростере');return;}
   const defaultMs=c.rarity==='S'?0:6;
   _RS.push({character_id:cid,mindscape:defaultMs});
   renderSelected();
 }
 
-function openMsPicker(cid,cname){
-  document.getElementById('ms-cname').textContent=cname;
-  document.getElementById('ms-btns').innerHTML=[0,1,2,3,4,5,6].map(ms=>
-    `<button class="btn btn-g" style="padding:5px 14px;font-size:13px" onclick="setMindscape('${cid}',${ms})">М${ms}</button>`
-  ).join('');
-  document.getElementById('ms-picker').style.display='block';
-}
-
-function setMindscape(cid,ms){
+function setRosterMs(cid,ms){
   const entry=_RS.find(r=>r.character_id===cid);
-  if(entry)entry.mindscape=ms;
-  document.getElementById('ms-picker').style.display='none';
-  renderSelected();
+  if(entry)entry.mindscape=+ms;
 }
 
 function removeFromRoster(cid){
   _RS=_RS.filter(r=>r.character_id!==cid);
-  if(document.getElementById('ms-picker').style.display!=='none'){
-    const shown=document.getElementById('ms-cname').textContent;
-    const c=D.chars.find(x=>x.id===cid);
-    if(c&&c.name===shown)document.getElementById('ms-picker').style.display='none';
-  }
   renderSelected();
 }
 
@@ -124,12 +115,12 @@ function renderSelected(){
   if(!_RS.length){el.innerHTML='<span style="color:var(--sub);font-size:13px;align-self:center">Ростер пуст</span>';return;}
   el.innerHTML=_RS.map(r=>{
     const c=D.chars.find(x=>x.id===r.character_id);if(!c)return'';
-    return`<div style="display:flex;align-items:center;gap:5px;background:#12141d;border:1px solid var(--border);border-radius:6px;padding:5px 10px;cursor:pointer"
-      onclick="openMsPicker('${r.character_id}','${c.name.replace(/'/g,"\\'")}')">
-      <span style="width:8px;height:8px;border-radius:50%;background:${RC[c.role]||'#7b7f96'}"></span>
+    const msOptsSel=[0,1,2,3,4,5,6].map(ms=>`<option value="${ms}" ${ms===r.mindscape?'selected':''}>М${ms}</option>`).join('');
+    return`<div style="display:flex;align-items:center;gap:6px;background:#12141d;border:1px solid var(--border);border-radius:7px;padding:5px 8px 5px 10px">
+      <span style="width:8px;height:8px;border-radius:50%;background:${RC[c.role]||'#7b7f96'};flex-shrink:0"></span>
       <span style="font-size:13px;font-weight:600">${c.name}</span>
-      <span class="ms-tag">М${r.mindscape}</span>
-      <button onclick="event.stopPropagation();removeFromRoster('${r.character_id}')" style="background:none;border:none;color:#f87171;cursor:pointer;font-size:16px;line-height:1;margin-left:2px;padding:0">×</button>
+      <select class="rms" onchange="setRosterMs('${r.character_id}',this.value)" title="Конста" style="width:auto;padding:2px 4px;font-size:11px;font-family:'JetBrains Mono',monospace;color:var(--gold);background:#241f0e;border:1px solid #4a3d12;border-radius:5px">${msOptsSel}</select>
+      <button onclick="removeFromRoster('${r.character_id}')" title="Убрать" style="background:none;border:none;color:#f87171;cursor:pointer;font-size:16px;line-height:1;padding:0">×</button>
     </div>`;
   }).join('');
 }

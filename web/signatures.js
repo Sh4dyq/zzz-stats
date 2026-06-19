@@ -32,47 +32,54 @@ async function pgSignatures(){
   await ensureSigSchema();
   const list=D.sigs.map(s=>{
     const c=D.chars.find(x=>x.id===s.character_id);
-    const thumb=D.hasSigImg?`<label title="Загрузить картинку амплификатора" style="cursor:pointer;display:inline-flex">
-          ${sigImg(s,28)}
+    const thumb=D.hasSigImg?`<label title="Загрузить картинку амплификатора" style="cursor:pointer;display:inline-flex;flex-shrink:0">
+          ${sigImg(s,30)}
           <input type="file" accept="image/*" style="display:none" onchange="uploadSigImg('${s.id}',this)">
-        </label>`:'';
-    return`<div class="row-item" id="sig-row-${s.id}">
-      <div>
-        <div style="display:flex;align-items:center;gap:8px">
-          ${thumb}
-          <div style="flex:1"><span style="font-weight:600">${s.name}</span><span style="font-size:12px;color:var(--sub);margin-left:8px">→ ${c?.name||'?'}</span></div>
-        </div>
+        </label>`:sigImg(s,30);
+    return`<div class="gcard" id="sig-row-${s.id}" data-search="${escapeHtml(((s.name||'')+' '+(c?.name||'')).toLowerCase())}">
+      <div class="gc-main">
+        ${thumb}
+        <span class="gc-name">${s.name}</span>
+        <span class="gc-sub">→ ${c?.name||'?'}</span>
       </div>
-      <div style="display:flex;gap:8px">
-        <button class="btn-r" onclick="startEditSig('${s.id}')">✎</button>
-        <button class="btn-r" onclick="delSig('${s.id}')">✕</button>
+      <div class="gc-acts">
+        <button class="icon-btn" title="Изменить" onclick="startEditSig('${s.id}')">✎</button>
+        <button class="icon-btn danger" title="Удалить" onclick="delSig('${s.id}')">✕</button>
       </div>
     </div>`;
   }).join('');
 
-  html(`<div class="card" style="margin-bottom:16px">
-    <h3>Добавить амплификатор</h3>
-    <div class="grid2">
-      <div><label>Название</label><input id="s-name" type="text" placeholder="Deep Sea Visitor"></div>
-      <div><label>Персонаж</label>${sel('s-char',D.chars,x=>x.id,x=>x.name)}</div>
+  html(`<details class="panel">
+    <summary>Добавить амплификатор<span class="chev">▾</span></summary>
+    <div class="panel-body">
+      <div class="grid2">
+        <div><label>Название</label><input id="s-name" type="text" placeholder="Deep Sea Visitor"></div>
+        <div><label>Персонаж</label>${sel('s-char',D.chars,x=>x.id,x=>x.name)}</div>
+      </div>
+      <button class="btn btn-y" style="margin-top:14px" onclick="addSig()">Добавить</button>
     </div>
-    <div style="display:flex;gap:8px;margin-top:8px">
-      <button class="btn btn-y" onclick="addSig()">Добавить</button>
-      <button class="btn" onclick="openBulkAdd()">Добавить список</button>
-    </div>
-  </div>
+  </details>
 
-  <div class="card" style="margin-bottom:16px">
-    <h4>Быстрый импорт списка</h4>
-    <p style="color:var(--sub);font-size:13px;margin:4px 0">Каждая строка: <code>Название | Персонаж</code> — поле персонажа можно опустить.</p>
-    <textarea id="s-list" rows="6" style="width:100%" placeholder="Название сигны | Имя персонажа"></textarea>
-    <div style="display:flex;gap:8px;margin-top:8px">
-      <button class="btn btn-y" onclick="addSigsList()">Добавить список</button>
-      <button class="btn" onclick="document.getElementById('s-list').value=''">Очистить</button>
+  <details class="panel">
+    <summary>Быстрый импорт списком<span class="chev">▾</span></summary>
+    <div class="panel-body">
+      <p style="color:var(--sub);font-size:13px;margin:0 0 8px">Каждая строка: <code>Название | Персонаж</code> — поле персонажа можно опустить.</p>
+      <textarea id="s-list" rows="6" style="width:100%" placeholder="Название сигны | Имя персонажа"></textarea>
+      <div style="display:flex;gap:8px;margin-top:10px">
+        <button class="btn btn-y" onclick="addSigsList()">Добавить список</button>
+        <button class="btn btn-g" onclick="document.getElementById('s-list').value=''">Очистить</button>
+      </div>
     </div>
-  </div>
+  </details>
 
-  <div class="space-y">${list||'<p style="color:var(--sub);font-size:14px">Амплификаторов ещё нет</p>'}</div>`);
+  <div class="listbar">
+    <div class="search" style="margin:0;flex:1;max-width:380px">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.5" y2="16.5"></line></svg>
+      <input type="search" data-target="sig-list" oninput="acFilter(this)" placeholder="Поиск амплификатора…">
+    </div>
+    <span class="count-chip">${D.sigs.length} амп.</span>
+  </div>
+  <div class="gcards" id="sig-list">${list||''}<p data-empty style="color:var(--sub);font-size:14px;${D.sigs.length?'display:none':''}">Амплификаторов ещё нет</p></div>`);
 }
 
 async function addSig(){
@@ -121,6 +128,8 @@ async function delSig(id){if(!confirm('Удалить?'))return;
 function startEditSig(id){
   const s=D.sigs.find(x=>x.id===id); if(!s) return;
   const row=document.getElementById(`sig-row-${id}`);
+  row.style.gridColumn='1 / -1';
+  row.style.borderColor='var(--accent)';
   const charSelect=selRaw('edit-char-'+id,D.chars,'id','name',s.character_id);
   row.innerHTML=`<div style="flex:1">
       <div style="display:flex;gap:8px;align-items:center">
@@ -130,7 +139,7 @@ function startEditSig(id){
     </div>
     <div style="display:flex;gap:8px">
       <button class="btn btn-y" onclick="saveEditSig('${id}')">Сохранить</button>
-      <button class="btn" onclick="cancelEditSig('${id}')">Отмена</button>
+      <button class="btn btn-g" onclick="cancelEditSig('${id}')">Отмена</button>
     </div>`;
 }
 

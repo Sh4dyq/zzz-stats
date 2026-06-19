@@ -23,42 +23,52 @@ async function pgTournaments(){
     const statusSel=`<select onchange="setTourStatus('${t.id}',this.value)" title="Статус турнира. «Идёт сейчас» = текущий на главной и во вкладке статистики (только один турнир)" style="font-size:12px;padding:5px 8px">
       ${TOUR_STATUSES.map(([v,l])=>`<option value="${v}" ${st===v?'selected':''}>${l}</option>`).join('')}
     </select>`;
-    return`<div class="row-item" draggable="true" data-id="${t.id}">
-    <div style="display:flex;align-items:center;gap:10px">
-      <span title="Перетащить для сортировки" style="cursor:grab;color:var(--sub);font-size:15px;user-select:none">⠿</span>
-      <div>
-        <div style="font-weight:600">${st==='live'?'<span style="color:var(--red)">●</span> ':''}${t.name}</div>
-        <div style="font-size:12px;color:var(--sub)">${fmtFullName(t.bracket_type)} · ${fmtTourDates(t)} · уч.: ${t.expected_players||'—'}${t.stages_count>1?` · этапов: ${t.stages_count}`:''}</div>
+    const esc=t.name.replace(/'/g,"\\'");
+    return`<div class="tcard" draggable="true" data-id="${t.id}">
+      <div class="tcard-top">
+        <span title="Перетащить для сортировки" style="cursor:grab;color:var(--sub);font-size:16px;user-select:none">⠿</span>
+        <div class="tcard-info">
+          <div class="tcard-name">${st==='live'?'<span style="color:var(--red)">●</span>':''}${escapeHtml(t.name)}</div>
+          <div class="tcard-meta">${fmtFullName(t.bracket_type)} · ${fmtTourDates(t)} · уч.: ${t.expected_players||'—'}${t.stages_count>1?` · этапов: ${t.stages_count}`:''}</div>
+        </div>
+        ${statusSel}
       </div>
+      <div class="tcard-acts">
+        <button class="tbtn" onclick="openTourSettings('${t.id}','${esc}')"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"></circle><path d="M12 3v2.5M12 18.5V21M21 12h-2.5M5.5 12H3M18.4 5.6l-1.8 1.8M7.4 16.6l-1.8 1.8M18.4 18.4l-1.8-1.8M7.4 7.4 5.6 5.6"></path></svg>Настройки</button>
+        <button class="tbtn" onclick="openParticipants('${t.id}','${esc}')"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"></circle><path d="M3.5 19a5.5 5.5 0 0 1 11 0"></path><path d="M16 5.5a3 3 0 0 1 0 5.5M21 19a5.5 5.5 0 0 0-4-5.3"></path></svg>Участники</button>
+        <button class="tbtn" onclick="openBracketEditor('${t.id}','${esc}')"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h4v6h4M4 19h4v-6"></path><path d="M12 11h4M16 8v6"></path><circle cx="19" cy="11" r="1.6"></circle></svg>Сетка</button>
+        <button class="tbtn" onclick="openCosts('${t.id}','${esc}')"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"></circle><path d="M12 7.5v9M14.2 9.3c-.6-.6-1.4-.8-2.2-.8-1.2 0-2.2.7-2.2 1.8 0 2.4 4.4 1.2 4.4 3.6 0 1.1-1 1.8-2.2 1.8-.8 0-1.6-.3-2.2-.9"></path></svg>Косты</button>
+        <button class="icon-btn danger" style="margin-left:auto" title="Удалить турнир" onclick="delTour('${t.id}')">✕</button>
+      </div>
+    </div>`;}).join('');
+  html(`<details class="panel">
+    <summary>Новый турнир<span class="chev">▾</span></summary>
+    <div class="panel-body">
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <div style="flex:2;min-width:200px"><label>Название</label><input id="t-name" type="text" placeholder="Nexus Shiyu Proxy Rush 6"></div>
+        <div style="flex:1;min-width:130px"><label>Формат (этап 1)</label><select id="t-fmt">${BRACKET_TYPES.map(([v,l])=>`<option value="${v}" ${v==='SE'?'selected':''}>${l}</option>`).join('')}</select></div>
+        <div style="flex:1;min-width:130px"><label>Формат этапа 2 (опц.)</label><select id="t-fmt2"><option value="">— один этап —</option>${BRACKET_TYPES.map(([v,l])=>`<option value="${v}">${l}</option>`).join('')}</select></div>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px">
+        <div style="flex:1;min-width:130px"><label>Дата начала</label><input id="t-date" type="date"></div>
+        <div style="flex:1;min-width:130px"><label>Дата конца (опц.)</label><input id="t-date2" type="date"></div>
+        <div style="flex:1;min-width:90px"><label>Участников</label><input id="t-exp" type="number" min="2" placeholder="30"></div>
+        <div style="flex:1;min-width:90px"><label>Этапов</label><input id="t-stages" type="number" min="1" value="1"></div>
+        <div style="flex:1;min-width:110px"><label>Призовой фонд</label><input id="t-prize" type="text" placeholder="5 000 ₽"></div>
+      </div>
+      <h4 style="margin:18px 0 8px">Ссылки</h4>
+      <div class="grid3">
+        <div><label>Challonge</label><input id="t-ch" type="text" placeholder="challonge.com/ru/NSPR6"></div>
+        <div><label>Шиюй (nanoka, Frontier 4)</label><input id="t-shiyu" type="text" placeholder="zzz.nanoka.cc/shiyu/…"></div>
+        <div><label>Пост-анонс в Telegram</label><input id="t-tg" type="text" placeholder="t.me/nexus_shiyu/…"></div>
+      </div>
+      <div style="font-size:11px;color:var(--sub);margin-top:8px">Telegram-пост → картинка на главной + кнопка «Подробнее». Ротацию подтянем в «⚙ Настройки» кнопкой «Импорт ротации».</div>
+      <button class="btn btn-y" style="margin-top:14px" onclick="addTour()">Добавить турнир</button>
     </div>
-    <div style="display:flex;gap:8px;align-items:center">
-      ${statusSel}
-      <button class="btn btn-g" style="font-size:12px;padding:5px 12px" onclick="openTourSettings('${t.id}','${t.name.replace(/'/g,"\\'")}')">⚙ Настройки</button>
-      <button class="btn btn-g" style="font-size:12px;padding:5px 12px" onclick="openParticipants('${t.id}','${t.name.replace(/'/g,"\\'")}')">Участники</button>
-      <button class="btn btn-g" style="font-size:12px;padding:5px 12px" onclick="openBracketEditor('${t.id}','${t.name.replace(/'/g,"\\'")}')">Сетка</button>
-      <button class="btn btn-g" style="font-size:12px;padding:5px 12px" onclick="openCosts('${t.id}','${t.name.replace(/'/g,"\\'")}')">Косты</button>
-      <button class="btn-r" onclick="delTour('${t.id}')">✕</button>
-    </div>
-  </div>`;}).join('');
-  html(`<div class="card" style="margin-bottom:16px;border-left:3px solid var(--accent)">
-    <div style="font-size:13px;line-height:1.5">💡 <b>После турнира:</b> поставь ему статус <b>«✓ Завершён»</b>, а новому — <b>«🔴 Идёт сейчас»</b>. Этого достаточно — на главной и в статистике «текущим» автоматически станет live-турнир, а в блоке «Топ турнира» — последний завершённый. <span style="color:var(--sub)">SQL править больше не нужно.</span></div>
-  </div>
-  <div class="card" style="margin-bottom:16px">
-    <h3>Новый турнир</h3>
-    <div class="grid2">
-      <div><label>Название</label><input id="t-name" type="text" placeholder="Nexus Shiyu Proxy Rush 6"></div>
-      ${fmtSelects('t-','SE')}
-      <div><label>Дата начала</label><input id="t-date" type="date"></div>
-      <div><label>Дата конца (опц.)</label><input id="t-date2" type="date"></div>
-      <div><label>Участников (предполагаемо)</label><input id="t-exp" type="number" min="2" placeholder="30"></div>
-      <div><label>Этапов (группы→плейофф)</label><input id="t-stages" type="number" min="1" value="1"></div>
-      <div style="grid-column:1/-1"><label>Ссылка на Challonge</label><input id="t-ch" type="text" placeholder="https://challonge.com/ru/NSPR6"></div>
-      <div style="grid-column:1/-1"><label>Ссылка на Шиюй (nanoka, Frontier 4)</label><input id="t-shiyu" type="text" placeholder="https://zzz.nanoka.cc/shiyu/620531"></div>
-      <div style="grid-column:1/-1"><label>Пост-анонс в Telegram <span style="color:var(--sub)">— картинка на главной + кнопка «Подробнее»</span></label><input id="t-tg" type="text" placeholder="https://t.me/nexus_shiyu/1116"></div>
-      <div><label>Призовой фонд (карточка на главной)</label><input id="t-prize" type="text" placeholder="5 000 ₽"></div>
-    </div>
-    <div style="font-size:11px;color:var(--sub);margin-top:6px">Ротацию подтянем после создания — в «⚙ Настройки» турнира кнопкой «Импорт ротации».</div>
-    <button class="btn btn-y" style="margin-top:12px" onclick="addTour()">Добавить</button>
+  </details>
+  <div class="listbar">
+    <div style="font-size:12px;color:var(--sub);line-height:1.45;flex:1;min-width:200px">💡 После турнира: поставь ему «✓ Завершён», новому — «🔴 Идёт сейчас». «Текущим» на сайте станет live-турнир автоматически.</div>
+    <span class="count-chip">${D.tours.length} тур.</span>
   </div>
   <div class="space-y" id="tour-list">${list||'<p style="color:var(--sub);font-size:14px">Турниров ещё нет</p>'}</div>`);
   if(typeof enableReorder==='function')enableReorder(document.getElementById('tour-list'),'tournaments',pgTournaments);
@@ -287,19 +297,21 @@ function compactSkeletonHTML(t,seeds,draggable,res){
   const cols=model.rounds.map((r,ri)=>`<div class="sk-r"><div class="sk-rh">${escapeHtml(r.name)}</div>
     ${r.matches.map(m=>`<div class="sk-m"><span class="sk-id">${++id}</span>${seed(m.a,ri===0)}${seed(m.b,ri===0)}</div>`).join('')}</div>`).join('');
   return`<style>
-    .sk-wrap{overflow-x:auto;padding:6px 2px 10px}
-    .sk-b{display:flex;gap:34px;align-items:flex-start;min-width:min-content}
-    .sk-r{display:flex;flex-direction:column;justify-content:space-around;gap:10px;min-width:150px}
-    .sk-rh{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--sub);text-align:center;border-bottom:1px solid var(--border);padding-bottom:5px;margin-bottom:2px}
-    .sk-m{position:relative;background:#11131a;border:1px solid var(--border);border-radius:8px;overflow:hidden}
-    .sk-id{position:absolute;left:-22px;top:50%;transform:translateY(-50%);font-family:monospace;font-size:10px;color:#4d4d55;width:18px;text-align:center}
-    .sk-s{display:flex;align-items:center;gap:7px;padding:6px 9px 6px 0;min-height:30px;font-size:13px}
+    .sk-wrap{overflow-x:auto;padding:8px 2px 12px}
+    .sk-b{display:flex;gap:40px;align-items:stretch;min-width:min-content}
+    .sk-r{display:flex;flex-direction:column;justify-content:space-around;gap:12px;min-width:164px;position:relative}
+    .sk-rh{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;text-transform:uppercase;font-size:11px;letter-spacing:.07em;color:var(--sub);text-align:center;background:var(--panel-2,#1c1c20);border:1px solid var(--border);border-radius:6px;padding:4px 0;margin-bottom:4px}
+    .sk-m{position:relative;background:linear-gradient(180deg,#15171f,#11131a);border:1px solid var(--border);border-radius:9px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.25)}
+    .sk-id{position:absolute;left:-26px;top:50%;transform:translateY(-50%);font-family:'JetBrains Mono',monospace;font-size:10px;color:#4d4d55;width:20px;text-align:center}
+    .sk-r:not(:first-child) .sk-m::before{content:"";position:absolute;left:-20px;top:50%;width:20px;height:2px;background:var(--border)}
+    .sk-r:not(:last-child) .sk-m::after{content:"";position:absolute;right:-20px;top:50%;width:20px;height:2px;background:var(--border)}
+    .sk-s{display:flex;align-items:center;gap:7px;padding:7px 10px 7px 0;min-height:32px;font-size:13px}
     .sk-s+.sk-s{border-top:1px solid var(--border)}
-    .sk-sd{font-family:monospace;font-size:10px;color:#7a7a85;width:22px;text-align:center;flex-shrink:0;align-self:stretch;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.03);border-right:1px solid var(--border);margin-right:4px}
+    .sk-sd{font-family:'JetBrains Mono',monospace;font-size:10px;color:#7a7a85;width:24px;text-align:center;flex-shrink:0;align-self:stretch;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.04);border-right:1px solid var(--border);margin-right:4px}
     .sk-nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
     .sk-tbd .sk-nm{color:#55555e;font-style:italic}
-    .sk-win{background:rgba(255,59,107,.10)}
-    .sk-win .sk-nm{color:#fff;font-weight:600}
+    .sk-win{background:rgba(255,31,68,.12)}
+    .sk-win .sk-nm{color:#fff;font-weight:700}
     .sk-win .sk-sd{color:var(--accent)}
     .sk-bye{justify-content:center;color:#44444c;font-size:11px;font-style:italic}
     .sk-drag{cursor:grab}
@@ -898,6 +910,7 @@ function costsTopControls(tourId,penalties){
       <span style="font-weight:600;font-size:14px">Импорт из ссылки драфта:</span>
       <input id="rs-link" type="text" placeholder="ссылка shiyu.darte.gg…" style="flex:1;min-width:220px;padding:6px 10px;font-size:13px">
       <button class="btn btn-g" style="font-size:13px;padding:6px 14px" onclick="importTourRuleset('${tourId}')">Загрузить косты и штрафы</button>
+      <button class="btn btn-y" style="font-size:13px;padding:6px 16px" onclick="saveAllCosts('${tourId}')">Сохранить всё</button>
     </div>
     <div id="rs-status" style="font-size:12px;color:var(--sub);margin-top:8px"></div>
     <div style="font-size:11px;color:var(--sub);margin-top:4px">Заполнит косты персонажей по минскейпам и штрафы рестартов. Косты амплификаторов — в блоке «Косты амплификаторов». Проверь и нажми «Сохранить».</div>
@@ -910,12 +923,24 @@ function costsTopControls(tourId,penalties){
 }
 
 function toggleCostSection(which){
+  const other=which==='char'?'amp':'char';
   const sec=document.getElementById('cost-sec-'+which);
   const btn=document.getElementById('cost-tg-'+which);
   if(!sec||!btn)return;
-  const show=sec.hidden;sec.hidden=!show;
+  const show=sec.hidden;
+  // аккордеон: открытие одной секции закрывает другую
+  const osec=document.getElementById('cost-sec-'+other),obtn=document.getElementById('cost-tg-'+other);
+  if(show&&osec&&obtn){osec.hidden=true;obtn.classList.remove('btn-y');obtn.textContent='▸'+obtn.textContent.slice(1);}
+  sec.hidden=!show;
   btn.classList.toggle('btn-y',show);
   btn.textContent=(show?'▾':'▸')+btn.textContent.slice(1);
+}
+
+// Сохранить и косты персонажей (+штрафы), и косты амплификаторов одной кнопкой.
+// Обе секции всегда в DOM (одна скрыта) — поля доступны независимо от того, какая открыта.
+async function saveAllCosts(tourId){
+  if(typeof saveCosts==='function')await saveCosts(tourId);
+  if(typeof saveAmpCosts==='function')await saveAmpCosts(tourId);
 }
 
 // Редактор инкрементальных штрафов за рестарт (сек). N полей; пусто = 0.
@@ -975,7 +1000,7 @@ function charCostsSection(tourId,tourName,existing,penalties){
       <tbody>${rows}</tbody>
     </table>
   </div>
-  <button class="btn btn-y" style="margin-top:16px" onclick="saveCosts('${tourId}')">Сохранить все косты</button>`;
+  <div style="font-size:11px;color:var(--sub);margin-top:12px">Сохранение — кнопкой <b>«Сохранить всё»</b> вверху страницы.</div>`;
 }
 
 // Рулсет (косты+штрафы) тянем вживую через Edge Function shiyu-system — она проксирует
@@ -1143,7 +1168,7 @@ function ampCostsSection(tourId,tourName,existing){
       <tbody>${rows||`<tr><td colspan="${RN+3}" style="padding:14px;color:var(--sub)">Сначала добавь амплификаторы в разделе «Амплификаторы»</td></tr>`}</tbody>
     </table>
   </div>
-  <button class="btn btn-y" style="margin-top:16px" onclick="saveAmpCosts('${tourId}')">Сохранить косты амплификаторов</button>`;
+  <div style="font-size:11px;color:var(--sub);margin-top:12px">Сохранение — кнопкой <b>«Сохранить всё»</b> вверху страницы.</div>`;
 }
 
 // Опции персонажей для BIS-селекта (кэш HTML).

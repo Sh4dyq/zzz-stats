@@ -169,8 +169,9 @@ async function pgMatches(){
   }).join('');
 
   const plDatalist=`<datalist id="pl-list">${D.players.map(p=>`<option value="${escapeHtml(p.nickname)}"></option>`).join('')}</datalist>`;
-  html(`<div class="card" style="margin-bottom:16px">
-    <h3>Новая встреча (Bo2)</h3>
+  html(`<details class="panel" open>
+    <summary>Новая встреча (Bo2)<span class="chev">▾</span></summary>
+    <div class="panel-body">
     ${plDatalist}
     <div class="grid2" style="margin-bottom:12px">
       <div><label>Турнир</label>${sel('e-tour',D.tours,x=>x.id,x=>x.name)}</div>
@@ -187,16 +188,20 @@ async function pgMatches(){
       <button class="btn btn-y" onclick="addEnc()">Создать встречу</button>
       <button class="btn btn-g" onclick="addEncWithResults()" title="Создаёт встречу и сразу импортирует матчи из вставленных ссылок">⚡ Создать с результатами</button>
     </div>
-  </div>
-  <div class="card" style="margin-bottom:16px">
-    <h3>⚡ Массовый импорт по ссылкам</h3>
+    </div>
+  </details>
+  <details class="panel">
+    <summary>⚡ Массовый импорт по ссылкам<span class="chev">▾</span></summary>
+    <div class="panel-body">
     <div style="font-size:11px;color:var(--sub);margin-bottom:8px">Вставь ВСЕ ссылки shiyu.darte.gg (по одной на строку, любой порядок). Парами по игрокам соберутся встречи (матч 1 и 2), импортируются результаты И полные ростеры обоих игроков. Существующие встречи переиспользуются (не дублируются).</div>
     <div style="margin-bottom:8px;max-width:340px"><label>Турнир</label>${sel('bulk-tour',D.tours,x=>x.id,x=>x.name)}</div>
-    <textarea id="bulk-links" rows="16" placeholder="https://shiyu.darte.gg/draft?draft_id=...&session_key=...&#10;https://shiyu.darte.gg/draft?draft_id=...&session_key=..." style="width:100%;min-height:120px;padding:8px 10px;font-size:12px;font-family:'JetBrains Mono',monospace;resize:both"></textarea>
+    <textarea id="bulk-links" rows="8" placeholder="https://shiyu.darte.gg/draft?draft_id=...&session_key=...&#10;https://shiyu.darte.gg/draft?draft_id=...&session_key=..." style="width:100%;min-height:120px;padding:8px 10px;font-size:12px;font-family:'JetBrains Mono',monospace;resize:both"></textarea>
     <div id="bulk-status" style="font-size:11px;color:var(--sub);min-height:13px;margin:8px 0"></div>
     <button class="btn btn-g" onclick="bulkImportDrafts()">Импортировать всё</button>
-  </div>
-  <div class="space-y" id="enc-list">${list||'<p style="color:var(--sub);font-size:14px">Встреч ещё нет</p>'}</div>`);
+    </div>
+  </details>
+  <div class="listbar"><span style="font-size:12px;color:var(--sub)">Перетаскивай встречи для сортировки (отражается и на главной)</span><span class="count-chip">${(encs||[]).length} встреч</span></div>
+  <div class="mgrid" id="enc-list">${list||'<p style="color:var(--sub);font-size:14px">Встреч ещё нет</p>'}</div>`);
   // авто-подстановка актуального (live) турнира в селект новой встречи
   const liveT=D.tours.find(t=>t.status==='live');
   if(liveT){['e-tour','bulk-tour'].forEach(id=>{const es=document.getElementById(id);if(es)es.value=liveT.id;});}

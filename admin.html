@@ -9,75 +9,174 @@
 <title>Nexus Stats — Управление</title>
 <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Saira+Condensed:ital,wght@0,800;0,900;1,900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
-  :root{--bg:#0b0b0d;--card:#161618;--border:#26262c;--accent:#ff1f44;--grad:linear-gradient(95deg,#ff1f44,#ec1862);--text:#f3f3f5;--sub:#8a8a93}
-  *{box-sizing:border-box;margin:0;padding:0}
-  body{background:var(--bg);color:var(--text);font-family:'Rajdhani',sans-serif;min-height:100vh;display:flex}
-  input[type=text],input[type=email],input[type=password],input[type=number],input[type=date],input[type=search],input[type=url],select,textarea{
-    background:#0d0f18;border:1px solid var(--border);color:var(--text);border-radius:6px;
-    padding:8px 12px;font-family:'Rajdhani',sans-serif;font-size:14px;width:100%;outline:none;
+  :root{
+    --bg:#0b0b0d;--card:#161618;--panel-2:#1c1c20;--panel-3:#242429;
+    --border:#26262c;--line:rgba(255,255,255,.07);
+    --accent:#ff1f44;--pink:#ec1862;--grad:linear-gradient(95deg,#ff1f44,#ec1862);
+    --gold:#f5c842;--lime:#c4f500;--purple:#a970ff;--red:#ff1f44;--win:#46d369;
+    --text:#f3f3f5;--sub:#8a8a93;
+    --field:#0d0f18;--field-2:#12141d;
+    --r:12px;
   }
-  /* date picker indicator на тёмном фоне */
+  *{box-sizing:border-box;margin:0;padding:0}
+  ::selection{background:rgba(255,31,68,.3);color:#fff}
+  body{background:var(--bg);color:var(--text);font-family:'Rajdhani',sans-serif;min-height:100vh;display:flex;-webkit-font-smoothing:antialiased}
+  body::before{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;
+    background:radial-gradient(620px 420px at 16% -8%,rgba(255,31,68,.10),transparent 60%),
+               radial-gradient(560px 460px at 100% 0%,rgba(169,112,255,.06),transparent 55%)}
+  body>*{position:relative;z-index:1}
+  *::-webkit-scrollbar{width:10px;height:10px}
+  *::-webkit-scrollbar-thumb{background:#2c2c33;border:2px solid var(--bg);border-radius:8px}
+  *::-webkit-scrollbar-thumb:hover{background:#3a3a44}
+  input[type=text],input[type=email],input[type=password],input[type=number],input[type=date],input[type=search],input[type=url],select,textarea{
+    background:var(--field);border:1px solid var(--border);color:var(--text);border-radius:8px;
+    padding:9px 12px;font-family:'Rajdhani',sans-serif;font-size:14px;width:100%;outline:none;transition:border-color .15s,box-shadow .15s;
+  }
   input[type=date]::-webkit-calendar-picker-indicator{filter:invert(.7)}
-  input:focus,select:focus{border-color:#3b4260;}
-  label{font-size:12px;color:var(--sub);display:block;margin-bottom:4px;letter-spacing:.04em}
-  .btn{border:none;border-radius:6px;padding:8px 18px;font-family:'Rajdhani',sans-serif;font-size:14px;font-weight:600;cursor:pointer;letter-spacing:.04em;transition:.15s}
-  .btn-y{background:var(--grad);color:#fff;text-transform:uppercase;letter-spacing:.04em}.btn-y:hover{filter:brightness(1.12)}
-  .btn-g{background:var(--card);color:var(--text);border:1px solid var(--border)}.btn-g:hover{background:#242429;border-color:var(--accent)}
-  .btn-r{background:none;color:#f87171;border:1px solid #4b1c1c;border-radius:4px;padding:4px 8px;font-size:12px;cursor:pointer}.btn-r:hover{background:#4b1c1c}
-  .card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:20px}
-  .nav-a{display:block;padding:8px 12px;border-radius:6px;font-size:14px;color:var(--sub);text-decoration:none;cursor:pointer;font-weight:500;letter-spacing:.03em}
-  .nav-a:hover,.nav-a.on{background:#242429;color:var(--text)}
-  .row-item{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:12px 16px;display:flex;align-items:center;justify-content:space-between}
-  .badge-s{font-size:10px;font-weight:700;padding:1px 6px;border-radius:3px;background:#451a03;color:#fbbf24}
-  .badge-a{font-size:10px;font-weight:700;padding:1px 6px;border-radius:3px;background:#1c1f2e;color:var(--sub)}
-  .pick-row,.ban-row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;background:#0d0f18;border:1px solid var(--border);border-radius:6px;padding:8px 10px}
+  input::placeholder,textarea::placeholder{color:#54545e}
+  input:focus,select:focus,textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(255,31,68,.14)}
+  label{font-size:11px;color:var(--sub);display:block;margin-bottom:5px;letter-spacing:.06em;text-transform:uppercase;font-weight:600}
+  code{font-family:'JetBrains Mono',monospace;font-size:.86em;background:var(--field-2);border:1px solid var(--border);border-radius:5px;padding:1px 6px}
+  .btn{border:none;border-radius:8px;padding:9px 18px;font-family:'Rajdhani',sans-serif;font-size:14px;font-weight:600;cursor:pointer;letter-spacing:.04em;transition:.15s;display:inline-flex;align-items:center;justify-content:center;gap:7px;line-height:1}
+  .btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  .btn-y{background:var(--grad);color:#fff;text-transform:uppercase;letter-spacing:.05em;box-shadow:0 4px 14px rgba(255,31,68,.22)}
+  .btn-y:hover{filter:brightness(1.1);box-shadow:0 6px 20px rgba(255,31,68,.34)}
+  .btn-y:active{transform:translateY(1px)}
+  .btn-g{background:var(--panel-2);color:var(--text);border:1px solid var(--border)}
+  .btn-g:hover{background:var(--panel-3);border-color:#3c3c46}
+  .btn-r{background:none;color:#f87171;border:1px solid #4b1c1c;border-radius:7px;padding:5px 9px;font-size:13px;cursor:pointer;transition:.15s}
+  .btn-r:hover{background:#4b1c1c;color:#fecaca}
+  .card{background:linear-gradient(180deg,#17171a,#141416);border:1px solid var(--border);border-radius:var(--r);padding:20px;box-shadow:0 1px 0 rgba(255,255,255,.03) inset,0 8px 24px rgba(0,0,0,.28)}
+  .nav-a{display:flex;align-items:center;gap:11px;padding:9px 12px;border-radius:9px;font-size:14px;color:var(--sub);text-decoration:none;cursor:pointer;font-weight:600;letter-spacing:.02em;position:relative;transition:.15s}
+  .nav-a svg{width:18px;height:18px;flex-shrink:0;stroke:currentColor;opacity:.9}
+  .nav-a:hover{background:var(--panel-2);color:var(--text)}
+  .nav-a.on{background:linear-gradient(95deg,rgba(255,31,68,.16),rgba(236,24,98,.05));color:#fff}
+  .nav-a.on::before{content:"";position:absolute;left:-8px;top:50%;transform:translateY(-50%);width:3px;height:20px;border-radius:2px;background:var(--grad)}
+  .nav-a.on svg{color:var(--accent);opacity:1}
+  .nav-group{font-size:10px;font-weight:700;letter-spacing:.14em;color:#5a5a63;text-transform:uppercase;padding:6px 12px 4px;margin-top:10px}
+  .row-item{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:11px 14px;display:flex;align-items:center;justify-content:space-between;transition:border-color .15s,background .15s;box-shadow:0 2px 8px rgba(0,0,0,.18)}
+  .row-item:hover{border-color:#3a3a44;background:#1a1a1e}
+  .badge-s{font-family:'Saira Condensed',sans-serif;font-style:italic;font-size:11px;font-weight:900;padding:1px 8px;background:linear-gradient(180deg,#f8d36a,#d99a16);color:#2a1c00;clip-path:polygon(9% 0,100% 0,91% 100%,0 100%)}
+  .badge-a{font-family:'Saira Condensed',sans-serif;font-style:italic;font-size:11px;font-weight:900;padding:1px 8px;background:var(--panel-3);color:var(--sub);clip-path:polygon(9% 0,100% 0,91% 100%,0 100%)}
+  .ms-tag{font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:600;color:var(--gold);background:#241f0e;border:1px solid #4a3d12;border-radius:5px;padding:1px 6px}
+  .pick-row,.ban-row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;background:var(--field);border:1px solid var(--border);border-radius:8px;padding:8px 10px}
   .pick-row select,.ban-row select{flex:1;min-width:140px}
   .sm-sel{min-width:auto!important;width:auto!important;flex:none!important}
   .cb-label{display:flex;align-items:center;gap:5px;font-size:12px;color:var(--sub);cursor:pointer;white-space:nowrap}
   input[type=checkbox]{width:auto;accent-color:var(--accent)}
   .spinner{width:18px;height:18px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;display:inline-block}
   @keyframes spin{to{transform:rotate(360deg)}}
-  .alert{padding:10px 14px;border-radius:6px;font-size:13px;margin-bottom:12px}
+  .alert{padding:10px 14px;border-radius:8px;font-size:13px;margin-bottom:12px}
   .alert-ok{background:#052e16;color:#4ade80;border:1px solid #14532d}
   .alert-err{background:#2b0a0a;color:#f87171;border:1px solid #7f1d1d}
-  h3{font-size:16px;font-weight:600;color:var(--text);margin-bottom:14px;letter-spacing:.04em}
-  h4{font-size:14px;font-weight:600;color:var(--text);margin:16px 0 10px;letter-spacing:.03em}
+  h3{font-size:16px;font-weight:700;color:var(--text);margin-bottom:14px;letter-spacing:.02em;display:flex;align-items:center;gap:10px}
+  h3::before{content:"";width:4px;height:17px;background:var(--grad);border-radius:1px;transform:skewX(-12deg);flex-shrink:0}
+  h4{font-size:12px;font-weight:700;color:var(--sub);margin:16px 0 10px;letter-spacing:.08em;text-transform:uppercase}
   .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
   .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+  @media(max-width:760px){.grid2,.grid3{grid-template-columns:1fr}}
   .space-y>*+*{margin-top:8px}
+  .topbar{display:flex;align-items:center;justify-content:space-between;gap:16px;border-bottom:1px solid var(--border);padding:14px 28px;background:linear-gradient(180deg,rgba(22,22,24,.6),transparent)}
+  .topbar .eyebrow{font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.22em;text-transform:uppercase;color:#5a5a63}
+  .page-title{display:block;font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;text-transform:uppercase;font-size:24px;letter-spacing:.01em;line-height:1.05;margin-top:1px}
+  .dev-pill{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--sub);background:var(--panel-2);border:1px solid var(--border);border-radius:999px;padding:5px 12px;display:inline-flex;align-items:center;gap:7px;white-space:nowrap}
   /* кастомный дропдаун с иконками */
   .icsel{position:relative;width:100%}
-  .icsel-btn{width:100%;display:flex;align-items:center;justify-content:space-between;gap:8px;background:#0f1118;border:1px solid var(--border);color:var(--text);border-radius:5px;padding:6px 10px;font-family:'Rajdhani',sans-serif;font-size:14px;cursor:pointer}
-  .icsel-btn:hover{border-color:var(--sub)}
+  .icsel-btn{width:100%;display:flex;align-items:center;justify-content:space-between;gap:8px;background:var(--field);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:8px 11px;font-family:'Rajdhani',sans-serif;font-size:14px;cursor:pointer;transition:border-color .15s}
+  .icsel-btn:hover{border-color:#3c3c46}
   .icsel-cur{display:flex;align-items:center;gap:8px;min-height:18px}
   .icsel-arr{color:var(--sub);font-size:11px}
-  .icsel-list{position:absolute;z-index:50;top:calc(100% + 4px);left:0;right:0;background:#12141d;border:1px solid var(--border);border-radius:6px;padding:4px;display:none;max-height:260px;overflow:auto;box-shadow:0 8px 24px rgba(0,0,0,.4)}
+  .icsel-list{position:absolute;z-index:50;top:calc(100% + 4px);left:0;right:0;background:var(--field-2);border:1px solid var(--border);border-radius:8px;padding:4px;display:none;max-height:260px;overflow:auto;box-shadow:0 12px 32px rgba(0,0,0,.5)}
   .icsel-list.open{display:block}
-  .icsel-opt{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:4px;cursor:pointer;font-family:'Rajdhani',sans-serif;font-size:14px;color:var(--text)}
-  .icsel-opt:hover{background:#1c1f2e}
-  .icsel-opt.sel{background:#1c1f2e;color:var(--accent)}
+  .icsel-opt{display:flex;align-items:center;gap:8px;padding:7px 8px;border-radius:6px;cursor:pointer;font-family:'Rajdhani',sans-serif;font-size:14px;color:var(--text)}
+  .icsel-opt:hover{background:var(--panel-3)}
+  .icsel-opt.sel{background:rgba(255,31,68,.12);color:var(--accent)}
   .icsel-ic{display:inline-flex;align-items:center}
+
+  /* — collapsible panel — */
+  details.panel{background:linear-gradient(180deg,#17171a,#141416);border:1px solid var(--border);border-radius:var(--r);box-shadow:0 1px 0 rgba(255,255,255,.03) inset,0 8px 24px rgba(0,0,0,.28);margin-bottom:16px;overflow:hidden}
+  details.panel>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:10px;padding:15px 20px;font-weight:700;font-size:15px;letter-spacing:.02em;user-select:none;color:var(--text)}
+  details.panel>summary::-webkit-details-marker{display:none}
+  details.panel>summary::before{content:"";width:4px;height:17px;background:var(--grad);border-radius:1px;transform:skewX(-12deg);flex-shrink:0}
+  details.panel>summary .chev{margin-left:auto;color:var(--sub);transition:transform .2s;font-size:12px}
+  details.panel[open]>summary .chev{transform:rotate(180deg)}
+  details.panel[open]>summary{border-bottom:1px solid var(--border)}
+  details.panel .panel-body{padding:18px 20px 20px}
+
+  /* — search field — */
+  .search{position:relative;margin-bottom:14px;max-width:340px}
+  .search input{padding-left:34px}
+  .search svg{position:absolute;left:11px;top:50%;transform:translateY(-50%);width:15px;height:15px;stroke:var(--sub);pointer-events:none}
+
+  /* — compact card grid (персонажи / амплификаторы) — */
+  .gcards{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px}
+  .gcard{display:flex;align-items:center;gap:9px;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:9px 11px;transition:border-color .15s,background .15s;box-shadow:0 2px 8px rgba(0,0,0,.16)}
+  .gcard:hover{border-color:#3a3a44;background:#1a1a1e}
+  .gc-main{display:flex;align-items:center;gap:7px;min-width:0;flex:1}
+  .gc-name{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0}
+  .gc-sub{font-size:12px;color:var(--sub);white-space:nowrap}
+  .gc-acts{display:flex;gap:5px;flex-shrink:0}
+  .icon-btn{display:inline-flex;align-items:center;justify-content:center;width:29px;height:29px;border-radius:7px;border:1px solid var(--border);background:var(--panel-2);color:var(--sub);cursor:pointer;transition:.15s;font-size:13px;padding:0;line-height:1}
+  .icon-btn:hover{background:var(--panel-3);color:var(--text);border-color:#3c3c46}
+  .icon-btn.danger:hover{background:#4b1c1c;color:#fecaca;border-color:#4b1c1c}
+  .mgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(440px,1fr));gap:12px;align-items:start}
+  .pgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px}
+  .pcard{display:flex;align-items:center;gap:11px;background:var(--card);border:1px solid var(--border);border-radius:11px;padding:11px 13px;transition:border-color .15s,background .15s;box-shadow:0 2px 8px rgba(0,0,0,.18)}
+  .pcard:hover{border-color:#3a3a44;background:#1a1a1e}
+  .pc-av{width:38px;height:38px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;font-size:16px;color:#fff;background:linear-gradient(135deg,#2a2a30,#1a1a1e);border:1px solid var(--border)}
+  .pc-body{flex:1;min-width:0}
+  .pc-nick{font-weight:700;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .pc-meta{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--sub);margin-top:2px;display:flex;gap:8px;flex-wrap:wrap}
+  .pc-meta b{color:var(--gold);font-weight:600}
+
+  /* — content tables (косты) — */
+  #page-content table{border-collapse:collapse;width:100%}
+  #page-content thead th{background:#101015}
+  #page-content tbody tr:hover{background:rgba(255,255,255,.025)}
+
+  /* — count chip / toolbar — */
+  .count-chip{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--sub);background:var(--panel-2);border:1px solid var(--border);border-radius:999px;padding:3px 11px;white-space:nowrap}
+  .listbar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+
+  /* — tournament card — */
+  .tcard{background:linear-gradient(180deg,#17171a,#141416);border:1px solid var(--border);border-radius:var(--r);padding:14px 16px;box-shadow:0 2px 10px rgba(0,0,0,.2);transition:border-color .15s}
+  .tcard:hover{border-color:#3a3a44}
+  .tcard-top{display:flex;align-items:center;gap:11px}
+  .tcard-info{flex:1;min-width:0}
+  .tcard-name{font-weight:700;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .tcard-name span{color:var(--red);margin-right:5px}
+  .tcard-top select{width:auto;max-width:180px;flex-shrink:0;font-size:12px}
+  .tcard-meta{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--sub);margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .tcard-acts{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-top:12px;padding-top:12px;border-top:1px solid var(--border)}
+  .tbtn{display:inline-flex;align-items:center;gap:6px;font-size:13px;padding:6px 12px;border-radius:8px;border:1px solid var(--border);background:var(--panel-2);color:var(--text);cursor:pointer;font-family:'Rajdhani',sans-serif;font-weight:600;transition:.15s}
+  .tbtn:hover{background:var(--panel-3);border-color:#3c3c46}
+  .tbtn svg{width:15px;height:15px;stroke:currentColor;opacity:.85}
 </style>
 </head>
 <body>
 
 <!-- Sidebar -->
-<aside id="sidebar" style="display:none;width:200px;background:#0b0d14;border-right:1px solid var(--border);flex-direction:column;min-height:100vh">
-  <div style="padding:16px;border-bottom:1px solid var(--border)">
-    <div style="font-family:'Saira Condensed',sans-serif;font-style:italic;font-size:19px;font-weight:900;letter-spacing:.02em"><span style="background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent">Nexus</span> <span style="color:#fff">Stats</span></div>
-    <div style="font-size:11px;color:var(--sub);margin-top:2px" id="user-email"></div>
+<aside id="sidebar" style="display:none;width:218px;background:#0a0a0d;border-right:1px solid var(--border);flex-direction:column;min-height:100vh">
+  <div style="padding:18px 16px 14px;border-bottom:1px solid var(--border)">
+    <div style="display:flex;align-items:center;gap:9px">
+      <div style="font-family:'Saira Condensed',sans-serif;font-style:italic;font-size:20px;font-weight:900;letter-spacing:.02em;line-height:1;white-space:nowrap"><span style="background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent;padding-right:.1em">Nexus</span> <span style="color:#fff">Stats</span></div>
+      <span style="font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:.12em;color:var(--accent);border:1px solid rgba(255,31,68,.4);border-radius:4px;padding:1px 5px;text-transform:uppercase;flex-shrink:0">admin</span>
+    </div>
+    <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--sub);margin-top:7px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" id="user-email"></div>
   </div>
-  <nav style="padding:8px;flex:1">
-    <a class="nav-a" data-page="dashboard">📊 Дашборд</a>
-    <a class="nav-a" data-page="tournaments">🏆 Турниры</a>
-    <a class="nav-a" data-page="characters">🎮 Персонажи</a>
-    <a class="nav-a" data-page="signatures">⚙️ Амплификаторы</a>
-    <a class="nav-a" data-page="players">👤 Игроки</a>
-    <a class="nav-a" data-page="matches">⚔️ Матчи</a>
+  <nav style="padding:8px 8px 14px;flex:1;overflow:auto">
+    <a class="nav-a" data-page="dashboard"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="8" rx="1.5"></rect><rect x="14" y="3" width="7" height="5" rx="1.5"></rect><rect x="14" y="12" width="7" height="9" rx="1.5"></rect><rect x="3" y="14" width="7" height="7" rx="1.5"></rect></svg><span>Дашборд</span></a>
+    <div class="nav-group">Справочники</div>
+    <a class="nav-a" data-page="characters"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="11" rx="5.5"></rect><line x1="7" y1="11" x2="7" y2="14"></line><line x1="5.5" y1="12.5" x2="8.5" y2="12.5"></line><circle cx="16" cy="11.5" r="1"></circle><circle cx="18" cy="14" r="1"></circle></svg><span>Персонажи</span></a>
+    <a class="nav-a" data-page="signatures"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="8" x2="20" y2="8"></line><line x1="4" y1="16" x2="20" y2="16"></line><circle cx="9" cy="8" r="2.4" fill="var(--bg)"></circle><circle cx="15" cy="16" r="2.4" fill="var(--bg)"></circle></svg><span>Амплификаторы</span></a>
+    <a class="nav-a" data-page="players"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.5"></circle><path d="M5.5 19.5a6.5 6.5 0 0 1 13 0"></path></svg><span>Игроки</span></a>
+    <div class="nav-group">Соревнования</div>
+    <a class="nav-a" data-page="tournaments"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4h10v4a5 5 0 0 1-10 0V4Z"></path><path d="M7 5.5H4.5V7a2.5 2.5 0 0 0 2.5 2.5"></path><path d="M17 5.5h2.5V7a2.5 2.5 0 0 1-2.5 2.5"></path><path d="M12 13v3"></path><path d="M8.5 20h7l-.7-3.2a1 1 0 0 0-1-.8H10.2a1 1 0 0 0-1 .8Z"></path></svg><span>Турниры</span></a>
+    <a class="nav-a" data-page="matches"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="14.5 17.5 3 6 3 3 6 3 17.5 14.5"></polyline><line x1="13" y1="19" x2="19" y2="13"></line><line x1="16" y1="16" x2="20" y2="20"></line><line x1="19" y1="21" x2="21" y2="19"></line><polyline points="14.5 6.5 18 3 21 3 21 6 17.5 9.5"></polyline><line x1="5" y1="14" x2="9" y2="18"></line><line x1="7" y1="17" x2="4" y2="20"></line><line x1="3" y1="19" x2="5" y2="21"></line></svg><span>Матчи</span></a>
   </nav>
   <div style="padding:12px;border-top:1px solid var(--border)">
-    <button class="btn btn-g" style="width:100%;font-size:12px;padding:6px" onclick="signOut()">Выйти</button>
-    <a href="statistics.html" style="display:block;text-align:center;font-size:11px;color:var(--sub);text-decoration:none;margin-top:8px">← На сайт</a>
+    <button class="btn btn-g" style="width:100%;font-size:13px;padding:8px" onclick="signOut()"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>Выйти</button>
+    <a href="statistics.html" style="display:block;text-align:center;font-size:11px;color:var(--sub);text-decoration:none;margin-top:9px;font-family:'JetBrains Mono',monospace;letter-spacing:.05em">← на сайт</a>
   </div>
 </aside>
 
@@ -85,27 +184,34 @@
 <div style="flex:1;display:flex;flex-direction:column;overflow:hidden">
 
   <!-- Login -->
-  <div id="login-screen" style="flex:1;display:flex;align-items:center;justify-content:center">
-    <div class="card" style="width:340px">
-      <div style="font-family:'Saira Condensed',sans-serif;font-style:italic;font-size:26px;font-weight:900;margin-bottom:20px;letter-spacing:.02em"><span style="background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent">Nexus</span> <span style="color:#fff">Stats</span></div>
+  <div id="login-screen" style="flex:1;display:flex;align-items:center;justify-content:center;padding:24px">
+    <div class="card" style="width:360px;padding:28px">
+      <div style="font-family:'Saira Condensed',sans-serif;font-style:italic;font-size:30px;font-weight:900;letter-spacing:.02em;line-height:1"><span style="background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent;padding-right:.12em">Nexus</span> <span style="color:#fff">Stats</span></div>
+      <div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.22em;text-transform:uppercase;color:#5a5a63;margin:7px 0 22px">Панель управления</div>
       <div id="auth-msg"></div>
       <div style="margin-bottom:12px"><label>Email</label><input id="a-email" type="email" placeholder="your@email.com"></div>
-      <div style="margin-bottom:16px"><label>Пароль</label><input id="a-pass" type="password"></div>
+      <div style="margin-bottom:18px"><label>Пароль</label><input id="a-pass" type="password"></div>
       <div style="display:flex;gap:8px">
         <button class="btn btn-y" style="flex:1" onclick="signIn()">Войти</button>
         <button class="btn btn-g" style="flex:1" onclick="signUp()">Регистрация</button>
       </div>
-      <button class="btn btn-g" style="width:100%;margin-top:10px;font-size:13px" onclick="enableDevPreview()">Dev preview</button>
-      <button class="btn btn-g" style="width:100%;margin-top:8px;font-size:13px" onclick="devDraft()">Dev: драфт матча</button>
+      <div style="display:flex;gap:8px;margin-top:14px;padding-top:14px;border-top:1px solid var(--border)">
+        <button class="btn btn-g" style="flex:1;font-size:12px;padding:7px" onclick="enableDevPreview()">Dev preview</button>
+        <button class="btn btn-g" style="flex:1;font-size:12px;padding:7px" onclick="devDraft()">Dev: драфт</button>
+      </div>
     </div>
   </div>
 
   <!-- Admin area -->
   <div id="admin-area" style="display:none;flex:1;overflow:auto;flex-direction:column">
-    <div style="border-bottom:1px solid var(--border);padding:12px 24px">
-      <span id="page-title" style="font-size:16px;font-weight:600;letter-spacing:.04em">Дашборд</span>
+    <div class="topbar">
+      <div>
+        <div class="eyebrow">Панель управления</div>
+        <span id="page-title" class="page-title">Дашборд</span>
+      </div>
+      <div class="dev-pill"><span style="color:var(--sub)">Nexus&nbsp;Shiyu</span><span style="color:#444">·</span><span style="color:var(--lime)">HornyBox</span></div>
     </div>
-    <div id="page-content" style="padding:24px;width:100%"></div>
+    <div id="page-content" style="padding:26px 28px;width:100%;max-width:1320px;margin:0 auto"></div>
   </div>
 </div>
 

@@ -123,15 +123,40 @@ function sel(id,arr,valF,labelF,blank=''){
 }
 const msOpts=Array.from({length:7},(_,i)=>`<option value="${i}">M${i}</option>`).join('');
 
+// Живой фильтр карточек/строк по подстроке. inp.dataset.target — id контейнера,
+// дети с атрибутом data-search фильтруются по совпадению (lowercase).
+function acFilter(inp){
+  const q=(inp.value||'').trim().toLowerCase();
+  const box=document.getElementById(inp.dataset.target);
+  if(!box)return;
+  let shown=0;
+  box.querySelectorAll('[data-search]').forEach(el=>{
+    const hit=el.dataset.search.includes(q);
+    el.style.display=hit?'':'none';
+    if(hit)shown++;
+  });
+  const empty=box.querySelector('[data-empty]');
+  if(empty)empty.style.display=shown?'none':'';
+}
+
 // --- DASHBOARD ---
 async function pgDashboard(){
-  html(`<div class="grid3" style="margin-bottom:20px">
-    <div class="card"><div style="font-size:12px;color:var(--sub)">Турниры</div><div style="font-size:28px;font-weight:700;color:var(--accent);margin-top:4px">${D.tours.length}</div></div>
-    <div class="card"><div style="font-size:12px;color:var(--sub)">Персонажи</div><div style="font-size:28px;font-weight:700;color:var(--accent);margin-top:4px">${D.chars.length}</div></div>
-    <div class="card"><div style="font-size:12px;color:var(--sub)">Игроки</div><div style="font-size:28px;font-weight:700;color:var(--accent);margin-top:4px">${D.players.length}</div></div>
+  const stat=(label,n,bar)=>`<div class="card" style="padding:17px 18px 15px;position:relative;overflow:hidden">
+      <div style="position:absolute;top:0;left:0;right:0;height:3px;background:${bar}"></div>
+      <div style="font-size:11px;color:var(--sub);text-transform:uppercase;letter-spacing:.08em;font-weight:600">${label}</div>
+      <div style="font-family:'JetBrains Mono',monospace;font-size:34px;font-weight:600;color:#fff;margin-top:6px;line-height:1">${n}</div>
+    </div>`;
+  html(`<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px">
+    ${stat('Турниры',D.tours.length,'var(--grad)')}
+    ${stat('Персонажи',D.chars.length,'var(--purple)')}
+    ${stat('Амплификаторы',D.sigs.length,'var(--gold)')}
+    ${stat('Игроки',D.players.length,'var(--lime)')}
   </div>
   <div class="card" id="auth-diag" style="margin-bottom:16px"><div style="font-size:12px;color:var(--sub)">Статус авторизации</div><div style="margin-top:6px"><span class="spinner"></span></div></div>
-  <p style="color:var(--sub);font-size:14px">Используй меню слева. Порядок заполнения: Персонажи → Амплификаторы → Игроки → Турниры (+ косты + ростеры) → Матчи.</p>`);
+  <div class="card" style="display:flex;align-items:flex-start;gap:11px;color:var(--sub);font-size:14px;line-height:1.55">
+    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="var(--accent)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:1px"><circle cx="12" cy="12" r="9"></circle><line x1="12" y1="11" x2="12" y2="16"></line><circle cx="12" cy="8" r=".6" fill="var(--accent)"></circle></svg>
+    <span>Используй меню слева. Порядок заполнения: <b style="color:var(--text)">Персонажи → Амплификаторы → Игроки → Турниры</b> (+ косты + ростеры) <b style="color:var(--text)">→ Матчи</b>.</span>
+  </div>`);
   const{data:{user}}=await sb.auth.getUser();
   const{data:{session}}=await sb.auth.getSession();
   const role=session?.user?.role||user?.role||'—';
