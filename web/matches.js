@@ -193,9 +193,10 @@ async function pgMatches(){
   <details class="panel">
     <summary>⚡ Массовый импорт по ссылкам<span class="chev">▾</span></summary>
     <div class="panel-body">
-    <div style="font-size:11px;color:var(--sub);margin-bottom:8px">Вставь ВСЕ ссылки shiyu.darte.gg (по одной на строку, любой порядок). Парами по игрокам соберутся встречи (матч 1 и 2), импортируются результаты И полные ростеры обоих игроков. Существующие встречи переиспользуются (не дублируются).</div>
+    <div style="font-size:11px;color:var(--sub);margin-bottom:8px">Вставь ВСЕ ссылки shiyu.darte.gg (по одной на строку, любой порядок). Парами по игрокам соберутся встречи (матч 1 и 2), импортируются результаты И полные ростеры обоих игроков. Существующие встречи переиспользуются (не дублируются). Если пара сыграла больше одного Bo2 — включи «Разрешить рематчи», иначе лишние игры будут пропущены, а не затёрты.</div>
     <div style="margin-bottom:8px;max-width:340px"><label>Турнир</label>${sel('bulk-tour',D.tours,x=>x.id,x=>x.name)}</div>
     <textarea id="bulk-links" rows="8" placeholder="https://shiyu.darte.gg/draft?draft_id=...&session_key=...&#10;https://shiyu.darte.gg/draft?draft_id=...&session_key=..." style="width:100%;min-height:120px;padding:8px 10px;font-size:12px;font-family:'JetBrains Mono',monospace;resize:both"></textarea>
+    <label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--sub);margin:8px 0;cursor:pointer"><input type="checkbox" id="bulk-allow-rematch" style="width:auto;margin:0">Разрешить рематчи (несколько Bo2 на одну пару — создаст доп. встречи)</label>
     <div id="bulk-status" style="font-size:11px;color:var(--sub);min-height:13px;margin:8px 0"></div>
     <button class="btn btn-g" onclick="bulkImportDrafts()">Импортировать всё</button>
     </div>
@@ -339,6 +340,13 @@ async function findOrCreateEncounter(tourId,p1,p2){
   return data;
 }
 
+// Всегда создаёт НОВУЮ встречу для пары (для рематчей — второй+ Bo2 той же пары).
+async function createEncounter(tourId,p1,p2){
+  const{data,error}=await sb.from('encounters').insert({tournament_id:tourId,player1_id:p1,player2_id:p2}).select().single();
+  if(error)throw error;
+  return data;
+}
+
 // Массовый импорт: textarea со ВСЕМИ ссылками → встречи (пары игроков) + матчи
 // + полные ростеры. Каждую ссылку читаем для имён игроков, группируем по паре,
 // затем importMatchFromLink (он же пишет матч/пики/ростеры). Номер матча по тому,
@@ -371,19 +379,33 @@ async function bulkImportDrafts(){
   // 2) группируем по неупорядоченной паре ников
   const groups={};
   metas.forEach(m=>{const k=[m.fp,m.dbl].map(x=>(x||'').toLowerCase()).sort().join('|');(groups[k]||(groups[k]=[])).push(m);});
-  const keys=Object.keys(groups);let ok=0;
+  const allowRematch=!!document.getElementById('bulk-allow-rematch')?.checked;
+  const keys=Object.keys(groups);let ok=0,skipped=0;
   for(let g=0;g<keys.length;g++){
     const grp=groups[keys[g]];
     set(`Импорт встреч… ${g+1}/${keys.length}`);
     try{
       const p1=await resolvePlayerNick(grp[0].fp),p2=await resolvePlayerNick(grp[0].dbl);
       if(!p1||!p2||p1===p2)throw new Error('не сопоставил игроков');
-      const e=await findOrCreateEncounter(t,p1,p2);
+      // Распаковка игр пары по Bo2-встречам: каждая встреча держит максимум один
+      // матч №1 (фп=player1) и один №2 (фп=player2). Если в этом прогоне на тот же
+      // слот приходит вторая игра — это рематч (отдельный Bo2), а не правка.
+      const slots=[];// [{enc, used:Set<num>}]; первый enc переиспользуем, остальные новые
       for(const m of grp){
         const fpId=await resolvePlayerNick(m.fp);
-        const num=fpId===e.player1_id?1:2;
-        await importMatchFromLink(e.id,num,e.player1_id,e.player2_id,m.url,pen);
-        ok++;
+        const num=fpId===p1?1:2;
+        let slot=slots.find(s=>!s.used.has(num));
+        if(!slot){
+          if(slots.length&&!allowRematch){
+            skipped++;
+            errs.push(`пара ${grp[0].fp}/${grp[0].dbl}: повторная игра (матч №${num}) — рематч пропущен, включи «Разрешить рематчи»`);
+            continue;
+          }
+          const enc=slots.length?await createEncounter(t,p1,p2):await findOrCreateEncounter(t,p1,p2);
+          slot={enc,used:new Set()};slots.push(slot);
+        }
+        await importMatchFromLink(slot.enc.id,num,slot.enc.player1_id,slot.enc.player2_id,m.url,pen);
+        slot.used.add(num);ok++;
       }
     }catch(e){errs.push(`пара ${grp[0].fp}/${grp[0].dbl}: ${e.message}`);}
   }
@@ -394,6 +416,7 @@ async function bulkImportDrafts(){
   const audit=await auditTournamentMatches(t);
   const rep=[...audit.errors.map(x=>'⛔ '+x),...audit.warnings.map(x=>'⚠ '+x)];
   const summary=`Готово: ${ok} матч(ей) в ${keys.length} встреч(ах)`
+    +(skipped?` · пропущено рематчей: ${skipped}`:'')
     +(errs.length?` · импорт-ошибки ${errs.length}: ${errs.join('; ')}`:'')
     +(rep.length?` · проверка: ${audit.errors.length} ошибок / ${audit.warnings.length} предупр.`:' · проверка: всё чисто');
   const el=document.getElementById('bulk-status');
