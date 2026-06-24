@@ -437,6 +437,10 @@ const pctT=(n,t)=>t?n/t*100:0;
 const fSec=s=>{if(!s&&s!==0)return'—';return`${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`};
 const avg=a=>a.length?Math.round(a.reduce((x,y)=>x+y,0)/a.length):null;
 const cid=s=>s.replace(/[^A-Za-z0-9]/g,'_');
+// Экранирование для вставки в HTML/атрибуты. Ники и имена приходят из внешнего
+// драфт-импорта (произвольный текст) → без esc возможен stored-XSS (ник вида
+// `x" onerror=...` или `<img onerror>`). Применяем ко всем ${nickname}/${name}.
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
 function pic(name,role){const c=(S.characters||[]).find(x=>x.name===name)||{name,role};return iconChar(c,24);}
 // Любимый персонаж игрока по пикам (все ранги; при ничьей прячем A, иначе случайный).
@@ -447,8 +451,17 @@ function favCharOf(pid){
   const max=Math.max(...ids.map(id=>m[id]));
   let tied=ids.filter(id=>m[id]===max);
   if(tied.length>1){const sOnly=tied.filter(id=>S.charMap[id].rarity!=='A');if(sOnly.length)tied=sOnly;}
-  return tied[Math.floor(Math.random()*tied.length)];
+  // Детерминированный выбор при ничьей (раньше Math.random → аватарка мигала между ре-рендерами/сортировкой).
+  return tied.slice().sort()[0];
 }
+// Детерминированный персонаж по нику (для игроков без пиков/ростера) — стабилен между рендерами.
+function detCharOf(nick){
+  const cs=S.characters||[];if(!cs.length)return null;
+  let h=0;const s=nick||'';for(let i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))>>>0;
+  return cs[h%cs.length].id;
+}
+// Cid аватара: любимый персонаж → иначе детерминированный по нику (никогда не пусто).
+function avatarCidOf(p){return favCharOf(p.id)||detCharOf(p.nickname);}
 // Фото игрока: web/players/<slug>.{webp,png,jpg}; если фото нет — аватар
 // (иконка любимого персонажа, иначе пустой слот) как финальный фолбэк.
 function playerImgErr(img){
@@ -459,44 +472,58 @@ function playerImgErr(img){
   img.remove(); // фото нет — остаётся аватар-перс под фото
 }
 function picP(p,avatarHtml){
-  const cid=favCharOf(p.id);
-  const avatar=avatarHtml!=null?avatarHtml:(cid?iconChar(S.charMap[cid],24):pic(p.nickname,''));
+  const avatar=avatarHtml!=null?avatarHtml:iconChar(S.charMap[avatarCidOf(p)],24);
   const sl=(p.nickname||'').trim().toLowerCase();
   if(!sl)return avatar;
   // фото игрока поверх аватара; при отсутствии всех форматов фото удаляется и виден аватар
-  return `<span class="pphoto">${avatar}<img src="web/players/${sl}.webp" alt="" loading="lazy" onerror="playerImgErr(this)"></span>`;
+  return `<span class="pphoto">${avatar}<img src="web/players/${esc(sl)}.webp" alt="" loading="lazy" onerror="playerImgErr(this)"></span>`;
+}
+
+// PostgREST/Supabase режет любую выдачу на 1000 строк. Тянем постранично по id,
+// пока страница приходит полной. makeQuery должна возвращать СВЕЖИЙ билдер на каждый вызов.
+async function fetchAll(makeQuery){
+  const N=1000;const out=[];let from=0;
+  for(;;){
+    const{data,error}=await makeQuery().order('id',{ascending:true}).range(from,from+N-1);
+    if(error){console.error('fetchAll',error);break;}
+    if(!data||!data.length)break;
+    out.push(...data);
+    if(data.length<N)break;
+    from+=N;
+  }
+  return out;
 }
 
 async function loadAll(){
   document.getElementById('loading').style.display='block';
   document.querySelectorAll('.tab-pane').forEach(t=>t.style.display='none');
 
-  const[{data:chars},{data:pls},{data:sigs},{data:allCosts}]=await Promise.all([
+  const[{data:chars},{data:pls},{data:sigs},allCosts]=await Promise.all([
     sb.from('characters').select('*'),
     sb.from('players').select('*'),
     sb.from('signatures').select('*'),
-    sb.from('tournament_costs').select('*')
+    fetchAll(()=>sb.from('tournament_costs').select('*'))
   ]);
   S.characters=chars||[];S.players=(pls||[]).slice().sort((a,b)=>(a.nickname||'').localeCompare(b.nickname||'','ru',{sensitivity:'base'}));S.sigs=sigs||[];S.allCosts=allCosts||[];
   S.charMap={};S.characters.forEach(c=>S.charMap[c.id]=c);
   S.playerMap={};S.players.forEach(p=>S.playerMap[p.id]=p);
 
-  let encQ=sb.from('encounters').select('*');
-  if(S.tour!==ALL)encQ=encQ.eq('tournament_id',S.tour);
-  const{data:encs}=await encQ;
-  S.encounters=encs||[];
+  const isAllTour=S.tour===ALL;
+  S.encounters=await fetchAll(()=>{const q=sb.from('encounters').select('*');return isAllTour?q:q.eq('tournament_id',S.tour);});
   const encIds=S.encounters.map(e=>e.id);
   S.matchMap={};S.encMap={};
   S.encounters.forEach(e=>S.encMap[e.id]=e);
 
   if(encIds.length){
-    const{data:ms}=await sb.from('matches').select('*').in('encounter_id',encIds);
+    // В режиме «Все турниры» тянем без фильтра .in() (нужны все строки) — иначе список
+    // из сотен id раздувает URL и при росте данных упирается в 414. По турниру — фильтр по id.
+    const ms=await fetchAll(()=>{const q=sb.from('matches').select('*');return isAllTour?q:q.in('encounter_id',encIds);});
     S.matches=ms||[];S.matches.forEach(m=>S.matchMap[m.id]=m);
     const mIds=S.matches.map(m=>m.id);
     if(mIds.length){
-      const[{data:pks},{data:bns}]=await Promise.all([
-        sb.from('match_picks').select('*').in('match_id',mIds),
-        sb.from('match_bans').select('*').in('match_id',mIds)
+      const[pks,bns]=await Promise.all([
+        fetchAll(()=>{const q=sb.from('match_picks').select('*');return isAllTour?q:q.in('match_id',mIds);}),
+        fetchAll(()=>{const q=sb.from('match_bans').select('*');return isAllTour?q:q.in('match_id',mIds);})
       ]);
       S.picks=pks||[];S.bans=bns||[];
     }else{S.picks=[];S.bans=[];}
@@ -504,16 +531,16 @@ async function loadAll(){
 
   S.costs={};S.rosters={};
   if(S.tour!==ALL){
-    const[{data:cs},{data:rs}]=await Promise.all([
-      sb.from('tournament_costs').select('*').eq('tournament_id',S.tour),
-      sb.from('player_rosters').select('*').eq('tournament_id',S.tour)
+    const[cs,rs]=await Promise.all([
+      fetchAll(()=>sb.from('tournament_costs').select('*').eq('tournament_id',S.tour)),
+      fetchAll(()=>sb.from('player_rosters').select('*').eq('tournament_id',S.tour))
     ]);
     (cs||[]).forEach(c=>{if(!S.costs[c.character_id])S.costs[c.character_id]={};S.costs[c.character_id][c.mindscape]=c;});
     (rs||[]).forEach(r=>{if(!S.rosters[r.player_id])S.rosters[r.player_id]=[];S.rosters[r.player_id].push(r);});
   }
 
   // все ростеры по всем турнирам — для вкладки «Ростеры» (среднее по турнирам)
-  const{data:allRs}=await sb.from('player_rosters').select('*');
+  const allRs=await fetchAll(()=>sb.from('player_rosters').select('*'));
   S.rostersRaw=allRs||[];
 
   document.getElementById('loading').style.display='none';
@@ -756,12 +783,12 @@ function renderChars(data){
     const photo=iconChar(c,24);
     const nm=isS
       ?`<div style="display:flex;align-items:center;gap:6px;cursor:pointer" onclick="toggleV('${id}')">`+
-        `${photo}<span>${c.name}</span><span class="chev" id="chev-${id}">▾</span></div>`
-      :`<div style="display:flex;align-items:center;gap:6px">${photo}<span>${c.name}</span></div>`;
+        `${photo}<span>${esc(c.name)}</span><span class="chev" id="chev-${id}">▾</span></div>`
+      :`<div style="display:flex;align-items:center;gap:6px">${photo}<span>${esc(c.name)}</span></div>`;
     const idCols=`<td class="ic">${iconRarity(c.rarity,18)}</td><td class="ic">${iconRole(c.role,18)}</td><td class="ic">${iconElement(c.element,18)}</td>`;
     h+=`<tr><td class="nc">${nm}</td>${idCols}${cellsHTML(item.agg,isAll)}</tr>`;
     if(isS)item.variants.forEach(v=>{
-      h+=`<tr class="vrow" data-parent="${id}" style="display:none"><td class="nc"><span class="ms-tag">M${v.ms}</span> ${c.name}</td><td></td><td></td><td></td>${cellsHTML(v,isAll)}</tr>`;
+      h+=`<tr class="vrow" data-parent="${id}" style="display:none"><td class="nc"><span class="ms-tag">M${v.ms}</span> ${esc(c.name)}</td><td></td><td></td><td></td>${cellsHTML(v,isAll)}</tr>`;
     });
   });
   document.getElementById('chars-body').innerHTML=h;
@@ -811,7 +838,7 @@ function renderPV(vStats,isAll){
     const s=vStats[p.id]||{v:0,w:0,l:0,timers:[]};
     const wrPct=wr(s.w,0,s.v);
     const avgT=fSec(avg(s.timers));
-    return`<tr><td class="nc"><div style="display:flex;align-items:center;gap:6px">${picP(p)}<span>${p.nickname}</span></div></td><td>${s.v}</td><td>${s.w}</td><td>${s.l}</td><td class="${wc(wrPct)}">${f1(wrPct)}</td><td>${avgT}</td></tr>`;
+    return`<tr><td class="nc"><div style="display:flex;align-items:center;gap:6px">${picP(p)}<span>${esc(p.nickname)}</span></div></td><td>${s.v}</td><td>${s.w}</td><td>${s.l}</td><td class="${wc(wrPct)}">${f1(wrPct)}</td><td>${avgT}</td></tr>`;
   });
   document.getElementById('players-area').innerHTML=`<table>${head}<tbody>${rows.join('')}</tbody></table>`;
 }
@@ -824,7 +851,7 @@ function renderPM(mStats,isAll){
     const s=mStats[p.id]||{m:0,w:0,d:0,l:0,fpm:0,fpw:0,fpd:0,dm:0,dw2:0,dd:0,rests:0,wtimers:[],ltimers:[]};
     const wrPct=wr(s.w,s.d,s.m),wrfp=wr(s.fpw,s.fpd,s.fpm),wrdbl=wr(s.dw2,s.dd,s.dm);
     const allT=[...s.wtimers,...s.ltimers];
-    return`<tr><td class="nc"><div style="display:flex;align-items:center;gap:6px">${picP(p)}<span>${p.nickname}</span></div></td><td>${s.m}</td><td>${s.w}</td><td class="m">${s.d}</td><td>${s.l}</td><td class="${wc(wrPct)}">${f1(wrPct)}</td><td class="${wc(wrfp)}">${f1(wrfp)}</td><td class="${wc(wrdbl)}">${f1(wrdbl)}</td><td>${s.rests}</td><td>${s.m?(s.rests/s.m).toFixed(2):'—'}</td><td>${fSec(avg(allT))}</td><td>${fSec(avg(s.wtimers))}</td><td>${fSec(avg(s.ltimers))}</td></tr>`;
+    return`<tr><td class="nc"><div style="display:flex;align-items:center;gap:6px">${picP(p)}<span>${esc(p.nickname)}</span></div></td><td>${s.m}</td><td>${s.w}</td><td class="m">${s.d}</td><td>${s.l}</td><td class="${wc(wrPct)}">${f1(wrPct)}</td><td class="${wc(wrfp)}">${f1(wrfp)}</td><td class="${wc(wrdbl)}">${f1(wrdbl)}</td><td>${s.rests}</td><td>${s.m?(s.rests/s.m).toFixed(2):'—'}</td><td>${fSec(avg(allT))}</td><td>${fSec(avg(s.wtimers))}</td><td>${fSec(avg(s.ltimers))}</td></tr>`;
   });
   document.getElementById('players-area').innerHTML=`<table>${head}<tbody>${rows.join('')}</tbody></table>`;
 }
@@ -893,7 +920,7 @@ function renderRosters(isAll){
   if(!activePl.length){document.getElementById('players-area').innerHTML=`<table>${head}<tbody><tr><td class="empty" colspan="7">Нет данных по ростерам</td></tr></tbody></table>`;return;}
   const rows=activePl.map(p=>{
     const b=data[p.id].buckets;
-    return`<tr><td class="nc"><div style="display:flex;align-items:center;gap:6px">${picP(p)}<span>${p.nickname}</span></div></td>`+
+    return`<tr><td class="nc"><div style="display:flex;align-items:center;gap:6px">${picP(p)}<span>${esc(p.nickname)}</span></div></td>`+
       `${cell(b.atk)}${cell(b.stun)}${cell(b.rupt)}${cell(b.sd)}${cell(b.ano)}`+
       `${isAll?`<td class="ic">${data[p.id].n}</td>`:''}</tr>`;
   });
@@ -906,7 +933,7 @@ function computeMisc(){
   const out={};
   // avatar — фиксируем выбор аватарки один раз (favCharOf использует random),
   // чтобы picP в renderMisc и исключение при ничьей совпадали.
-  S.players.forEach(p=>out[p.id]={fav:null,favN:0,avatar:favCharOf(p.id),matches:0,tours:new Set()});
+  S.players.forEach(p=>out[p.id]={fav:null,favN:0,avatar:avatarCidOf(p),matches:0,tours:new Set()});
   // Σ игр = число матчей (matches), а не встреч (encounters) — чтобы не было
   // расхождения с «любимым персонажем», который считается по пикам (на игру).
   S.matches.forEach(m=>{
@@ -964,10 +991,10 @@ function renderMisc(){
       ? `<span class="fav">${iconChar(S.charMap[d.fav],24)}${d.favN>1?`<span class="cnt">(${d.favN})</span>`:''}</span>`
       : '—';
     // фото игрока приоритетно; финальный фолбэк — зафиксированная аватарка (без рерандома)
-    const avatar=picP(p,d.avatar?iconChar(S.charMap[d.avatar],24):pic(p.nickname,''));
+    const avatar=picP(p,iconChar(S.charMap[d.avatar],24));
     const pr=S.playerMap[p.id]?.prize;
     const prize=pr!=null?`<span class="prize-rub">${String(pr).replace(/\B(?=(\d{3})+(?!\d))/g,' ')} ₽</span>`:'—';
-    return`<tr><td class="nc"><div style="display:flex;align-items:center;gap:6px">${avatar}<span>${p.nickname}</span></div></td>`+
+    return`<tr><td class="nc"><div style="display:flex;align-items:center;gap:6px">${avatar}<span>${esc(p.nickname)}</span></div></td>`+
       `<td>${fav}</td><td>${d.matches}</td><td>${d.tours.size}</td><td>${placeCell(p.highest_place,p.highest_place_count)}</td><td>${prize}</td><td>${p.age??'—'}</td></tr>`;
   });
   document.getElementById('players-area').innerHTML=`<table>${head}<tbody>${rows.join('')}</tbody></table>`;
@@ -1131,12 +1158,12 @@ function renderAmps(data){
     const s=item.sig,id='amp_'+cid(s.name),hasCh=item.chars.length>0;
     const photo=ampImg(s,24);
     const nm=hasCh
-      ?`<div style="display:flex;align-items:center;gap:6px;cursor:pointer" onclick="toggleV('${id}')">${photo}<span>${s.name}</span><span class="chev" id="chev-${id}">▾</span></div>`
-      :`<div style="display:flex;align-items:center;gap:6px">${photo}<span>${s.name}</span></div>`;
+      ?`<div style="display:flex;align-items:center;gap:6px;cursor:pointer" onclick="toggleV('${id}')">${photo}<span>${esc(s.name)}</span><span class="chev" id="chev-${id}">▾</span></div>`
+      :`<div style="display:flex;align-items:center;gap:6px">${photo}<span>${esc(s.name)}</span></div>`;
     h+=`<tr><td class="nc">${nm}</td>${isAll?'':`<td class="gb">${item.cost}</td>`}${ampCells(item)}</tr>`;
     if(hasCh)item.chars.forEach(ch=>{
       const c=ch.char;
-      const cn=c?`<div style="display:flex;align-items:center;gap:6px">${iconChar(c,20)}<span>${c.name}</span></div>`:'—';
+      const cn=c?`<div style="display:flex;align-items:center;gap:6px">${iconChar(c,20)}<span>${esc(c.name)}</span></div>`:'—';
       h+=`<tr class="vrow" data-parent="${id}" style="display:none"><td class="nc">${cn}</td>${isAll?'':`<td class="gb">${ch.cost}</td>`}${ampCells(ch)}</tr>`;
     });
   });
@@ -1216,14 +1243,14 @@ function renderRating(){
   let head,rows;
   if(view==='p'){
     head=`<thead><tr><th onclick="sortR(0)">#</th><th onclick="sortR(1)">Ник</th><th onclick="sortR(2)" title="${RATING_TIP_P}">Рейтинг</th><th class="rk-col" onclick="sortR(3)">Σ матчей</th><th class="rk-col" onclick="sortR(4)">WR%</th><th class="rk-col" onclick="sortR(5)">AVG таймер</th></tr></thead>`;
-    rows=data.map((r,i)=>`<tr><td class="rk-num">${i+1}</td><td><div style="display:flex;align-items:center;gap:6px">${picP(r.ent)}<span>${r.ent.nickname}</span></div></td><td>${rk(r.score)}</td><td class="rk-col">${r.games}</td><td class="rk-col ${wc(r.wr)}">${f1(r.wr)}</td><td class="rk-col">${r.extra}</td></tr>`).join('');
+    rows=data.map((r,i)=>`<tr><td class="rk-num">${i+1}</td><td><div style="display:flex;align-items:center;gap:6px">${picP(r.ent)}<span>${esc(r.ent.nickname)}</span></div></td><td>${rk(r.score)}</td><td class="rk-col">${r.games}</td><td class="rk-col ${wc(r.wr)}">${f1(r.wr)}</td><td class="rk-col">${r.extra}</td></tr>`).join('');
     note.textContent=RATING_TIP_P;
   }else{
     const lbl=view==='c'?'Персонаж':'Амплификатор';
     head=`<thead><tr><th onclick="sortR(0)">#</th><th onclick="sortR(1)">${lbl}</th><th onclick="sortR(2)" title="${RATING_TIP_CP}">Рейтинг</th><th class="rk-col" onclick="sortR(3)">Σ игр</th><th class="rk-col" onclick="sortR(4)">WR%</th><th class="rk-col" onclick="sortR(5)">Пик %T</th></tr></thead>`;
     rows=data.map((r,i)=>{
       const ic=r.isChar?iconChar(r.ent,24):ampImg(r.ent,24);
-      return`<tr><td class="rk-num">${i+1}</td><td><div style="display:flex;align-items:center;gap:6px">${ic}<span>${r.ent.name}</span></div></td><td>${rk(r.score)}</td><td class="rk-col">${r.games}</td><td class="rk-col ${wc(r.wr)}">${f1(r.wr)}</td><td class="rk-col">${f1(r.ppt)}</td></tr>`;
+      return`<tr><td class="rk-num">${i+1}</td><td><div style="display:flex;align-items:center;gap:6px">${ic}<span>${esc(r.ent.name)}</span></div></td><td>${rk(r.score)}</td><td class="rk-col">${r.games}</td><td class="rk-col ${wc(r.wr)}">${f1(r.wr)}</td><td class="rk-col">${f1(r.ppt)}</td></tr>`;
     }).join('');
     note.textContent=RATING_TIP_CP;
   }
@@ -1273,7 +1300,7 @@ const SH_CDN='https://static.nanoka.cc/assets/zzz/';
 function _shMonImg(m){
   if(!m.img)return `<div class="sh-mon-img">${_shPhSvg}</div>`;
   const u=SH_CDN+m.img+'.webp';
-  return `<div class="sh-mon-img"><img src="${u}" alt="${m.name}" loading="lazy" onerror="this.parentNode.innerHTML='${_shPhSvg.replace(/'/g,"\\'")}'"></div>`;
+  return `<div class="sh-mon-img"><img src="${u}" alt="${esc(m.name)}" loading="lazy" onerror="this.parentNode.innerHTML='${_shPhSvg.replace(/'/g,"\\'")}'"></div>`;
 }
 function renderShiyu(){
   // источник = ротация выбранного турнира (shiyu_data из админ-импорта); фолбэк — статичный срез
@@ -1287,7 +1314,7 @@ function renderShiyu(){
         <div class="sh-mon-top">
           ${_shMonImg(m)}
           <div>
-            <div class="sh-mon-name">${m.name}</div>
+            <div class="sh-mon-name">${esc(m.name)}</div>
             <div class="sh-mon-stats">HP ${_shNum(m.hp)}<span class="s-sep">·</span>ATK ${_shNum(m.atk)}<span class="s-sep">·</span>DEF ${_shNum(m.def)}<br>Stun ${_shNum(m.stun)}<span class="s-sep">·</span>Anomaly ${_shNum(m.anomaly)}</div>
           </div>
         </div>
@@ -1351,7 +1378,7 @@ async function init(){
   const pastTours=TOURS.filter(t=>t.status!=='upcoming');
   menu.innerHTML=`<div class="tm-head">Прошедшие турниры</div>`+
     (pastTours.length
-      ? pastTours.map(t=>`<div class="tm-item" data-id="${t.id}">${t.name}</div>`).join('')
+      ? pastTours.map(t=>`<div class="tm-item" data-id="${t.id}">${esc(t.name)}</div>`).join('')
       : `<div class="tm-empty">Нет сохранённых</div>`);
 
   menu.onclick=e=>{
