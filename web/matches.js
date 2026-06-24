@@ -260,7 +260,7 @@ async function renamePlayer(pid){
 // player_id) (ростеры/участники/результаты) у дубля просто удаляются — ростер dst
 // при необходимости пересоберётся из пиков. Несуществующие таблицы (миграции не
 // применены) игнорируются молча.
-async function mergePlayerInto(src,dst){
+async function mergePlayerInto(src,dst,opts={}){
   const reassign=async(table,col)=>{
     const{error}=await sb.from(table).update({[col]:dst}).eq(col,src);
     if(error&&!/does not exist|relation|schema cache/i.test(error.message||''))throw error;
@@ -278,11 +278,17 @@ async function mergePlayerInto(src,dst){
     await dropSrc('player_rosters');
     await dropSrc('tournament_participants');
     await dropSrc('tournament_results');
+    // Перенос профильных полей на выжившего (если переданы) перед удалением дубля.
+    if(opts.patch&&Object.keys(opts.patch).length){
+      const{error:pErr}=await sb.from('players').update(opts.patch).eq('id',dst);
+      if(pErr)throw pErr;
+    }
     const{error}=await sb.from('players').delete().eq('id',src);
     if(error)throw error;
   }catch(e){dbErr(e,'слияние игроков');return;}
   await refreshData();
-  toast('Игры переприсвоены, дубль удалён');pgMatches();
+  toast(opts.toast||'Игры переприсвоены, дубль удалён');
+  (opts.after||pgMatches)();
 }
 
 async function addEnc(){

@@ -152,6 +152,17 @@ async function saveProfile(pid){
   const nick=document.getElementById('r-nick')?.value?.trim();
   const cur=D.players.find(p=>p.id===pid);
   if(nick&&nick!==cur?.nickname)patch.nickname=nick;
+  // Ник совпал с другим существующим игроком → не падаем на unique-ключе, а сливаем:
+  // переприсваиваем все игры/пики/результаты pid → существующему и удаляем дубль.
+  if(patch.nickname){
+    const clash=D.players.find(p=>p.id!==pid&&p.nickname.toLowerCase()===patch.nickname.toLowerCase());
+    if(clash){
+      if(!confirm(`Игрок «${clash.nickname}» уже есть.\n\nСлить «${cur?.nickname}» с ним: переприсвоить все игры и удалить дубль? Профильные поля применятся к «${clash.nickname}».`))return;
+      delete patch.nickname; // ник выжившего не трогаем, остальные поля переносим
+      await mergePlayerInto(pid,clash.id,{patch,after:pgPlayers,toast:'Игроки слиты, дубль удалён'});
+      return;
+    }
+  }
   const{error}=await sb.from('players').update(patch).eq('id',pid);
   if(dbErr(error,'сохранение профиля'))return;
   await refreshData();
