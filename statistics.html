@@ -355,16 +355,16 @@
         <thead>
           <tr>
             <th colspan="5" class="th-g">Драфты</th>
-            <th colspan="3" class="th-g">Таймер</th>
+            <th colspan="4" class="th-g">Таймер</th>
             <th colspan="4" class="th-g">Рестарты</th>
           </tr>
           <tr>
             <th>Σ игр</th><th>W fp</th><th>WR fp</th><th>W double</th><th>WR double</th>
-            <th>AVG</th><th>AVG W</th><th>AVG L</th>
+            <th>AVG</th><th>AVG W</th><th>AVG L</th><th>Σ штраф</th>
             <th>Σ</th><th>AVG / игра</th><th>AVG W</th><th>AVG L</th>
           </tr>
         </thead>
-        <tbody id="ext-body"><tr><td class="empty" colspan="12">Нет данных</td></tr></tbody>
+        <tbody id="ext-body"><tr><td class="empty" colspan="13">Нет данных</td></tr></tbody>
       </table>
     </div>
   </div>
@@ -801,15 +801,21 @@ function toggleV(id){
 }
 function sortC(k){S.cSort.asc=S.cSort.k===k?!S.cSort.asc:false;S.cSort.k=k;renderAll();}
 
+// Штраф (сек) за платные рестарты: restart_penalties турнира — массив инкрементов,
+// эффективный штраф за N рестартов = сумма первых N элементов.
+function penMapFor(tid){const t=(typeof TOURS!=='undefined'?TOURS:[]).find(t=>t.id===tid);return t?.restart_penalties||[];}
+function restartPenalty(tid,rests){const pen=penMapFor(tid);let s=0;for(let i=0;i<(rests||0)&&i<pen.length;i++)s+=(+pen[i]||0);return s;}
+
 function computePlayers(){
   const mStats={},vStats={};
   S.matches.forEach(m=>{
     const enc=S.encMap[m.encounter_id];if(!enc)return;
     [[enc.player1_id,m.player1_timer_sec,m.player1_restarts],[enc.player2_id,m.player2_timer_sec,m.player2_restarts]].forEach(([pid,timer,rests])=>{
-      if(!mStats[pid])mStats[pid]={m:0,w:0,d:0,l:0,fpm:0,fpw:0,fpd:0,dm:0,dw2:0,dd:0,rests:0,wtimers:[],ltimers:[]};
+      if(!mStats[pid])mStats[pid]={m:0,w:0,d:0,l:0,fpm:0,fpw:0,fpd:0,dm:0,dw2:0,dd:0,rests:0,penalty:0,wtimers:[],ltimers:[]};
       const s=mStats[pid];s.m++;
       if(m.is_draw)s.d++;else if(m.winner_id===pid)s.w++;else s.l++;
       s.rests+=rests||0;
+      s.penalty+=restartPenalty(enc.tournament_id,rests);
       const won=m.winner_id===pid;
       if(timer){if(won)s.wtimers.push(timer);else if(!m.is_draw)s.ltimers.push(timer);}
       if(m.fp_player_id===pid){s.fpm++;if(m.is_draw)s.fpd++;else if(won)s.fpw++;}
@@ -844,14 +850,14 @@ function renderPV(vStats,isAll){
 }
 
 function renderPM(mStats,isAll){
-  const head=`<thead><tr><th class="nc">Ник</th><th onclick="sortP(1)">Σ матч</th><th onclick="sortP(2)">W</th><th>D</th><th onclick="sortP(4)">L</th><th onclick="sortP(5)">WR%</th><th onclick="sortP(6)">WR фп%</th><th onclick="sortP(7)">WR дабл%</th><th onclick="sortP(8)">Σ рест</th><th onclick="sortP(9)">AVG рест</th><th onclick="sortP(10)">AVG таймер</th><th onclick="sortP(11)">AVG таймер W</th><th onclick="sortP(12)">AVG таймер L</th></tr></thead>`;
+  const head=`<thead><tr><th class="nc">Ник</th><th onclick="sortP(1)">Σ матч</th><th onclick="sortP(2)">W</th><th>D</th><th onclick="sortP(4)">L</th><th onclick="sortP(5)">WR%</th><th onclick="sortP(6)">WR фп%</th><th onclick="sortP(7)">WR дабл%</th><th onclick="sortP(8)">Σ рест</th><th onclick="sortP(9)">Σ штраф</th><th onclick="sortP(10)">AVG рест</th><th onclick="sortP(11)">AVG таймер</th><th onclick="sortP(12)">AVG таймер W</th><th onclick="sortP(13)">AVG таймер L</th></tr></thead>`;
   const activePl=S.players.filter(p=>mStats[p.id]);
-  if(!activePl.length){document.getElementById('players-area').innerHTML=`<table><tbody><tr><td class="empty" colspan="13">Нет данных</td></tr></tbody></table>`;return;}
+  if(!activePl.length){document.getElementById('players-area').innerHTML=`<table><tbody><tr><td class="empty" colspan="14">Нет данных</td></tr></tbody></table>`;return;}
   const rows=activePl.map(p=>{
-    const s=mStats[p.id]||{m:0,w:0,d:0,l:0,fpm:0,fpw:0,fpd:0,dm:0,dw2:0,dd:0,rests:0,wtimers:[],ltimers:[]};
+    const s=mStats[p.id]||{m:0,w:0,d:0,l:0,fpm:0,fpw:0,fpd:0,dm:0,dw2:0,dd:0,rests:0,penalty:0,wtimers:[],ltimers:[]};
     const wrPct=wr(s.w,s.d,s.m),wrfp=wr(s.fpw,s.fpd,s.fpm),wrdbl=wr(s.dw2,s.dd,s.dm);
     const allT=[...s.wtimers,...s.ltimers];
-    return`<tr><td class="nc"><div style="display:flex;align-items:center;gap:6px">${picP(p)}<span>${esc(p.nickname)}</span></div></td><td>${s.m}</td><td>${s.w}</td><td class="m">${s.d}</td><td>${s.l}</td><td class="${wc(wrPct)}">${f1(wrPct)}</td><td class="${wc(wrfp)}">${f1(wrfp)}</td><td class="${wc(wrdbl)}">${f1(wrdbl)}</td><td>${s.rests}</td><td>${s.m?(s.rests/s.m).toFixed(2):'—'}</td><td>${fSec(avg(allT))}</td><td>${fSec(avg(s.wtimers))}</td><td>${fSec(avg(s.ltimers))}</td></tr>`;
+    return`<tr><td class="nc"><div style="display:flex;align-items:center;gap:6px">${picP(p)}<span>${esc(p.nickname)}</span></div></td><td>${s.m}</td><td>${s.w}</td><td class="m">${s.d}</td><td>${s.l}</td><td class="${wc(wrPct)}">${f1(wrPct)}</td><td class="${wc(wrfp)}">${f1(wrfp)}</td><td class="${wc(wrdbl)}">${f1(wrdbl)}</td><td>${s.rests}</td><td>${s.penalty?fSec(s.penalty):'—'}</td><td>${s.m?(s.rests/s.m).toFixed(2):'—'}</td><td>${fSec(avg(allT))}</td><td>${fSec(avg(s.wtimers))}</td><td>${fSec(avg(s.ltimers))}</td></tr>`;
   });
   document.getElementById('players-area').innerHTML=`<table>${head}<tbody>${rows.join('')}</tbody></table>`;
 }
@@ -1030,9 +1036,10 @@ function sortP(idx){
 
 function computeExt(){
   if(!S.matches.length)return null;
-  let tot=0,fpW=0,fpD=0,dblW=0,dblD=0,wT=[],lT=[],rests=0,wR=0,lR=0,wN=0,lN=0;
+  let tot=0,fpW=0,fpD=0,dblW=0,dblD=0,wT=[],lT=[],rests=0,wR=0,lR=0,wN=0,lN=0,penalty=0;
   S.matches.forEach(m=>{
     tot++;const enc=S.encMap[m.encounter_id];if(!enc)return;
+    penalty+=restartPenalty(enc.tournament_id,m.player1_restarts)+restartPenalty(enc.tournament_id,m.player2_restarts);
     // Победа стороны фп/дабл считается ПО ТАЙМЕРУ (меньше = выиграл игру), а не по winner_id —
     // так каждый матч встречи плюсуется именно той стороне, что выиграла, и метрика не зависит
     // от того, проставлен ли winner_id. Ничья / нет таймера / равные таймеры → пол-очка обеим.
@@ -1052,15 +1059,15 @@ function computeExt(){
     if(!m.is_draw){if(wTimer){wT.push(wTimer);wR+=wRst;wN++;}if(lTimer){lT.push(lTimer);lR+=lRst;lN++;}}
   });
   return{tot,fpW,fpWR:wr(fpW,fpD,tot),dblW,dblWR:wr(dblW,dblD,tot),
-    avgT:fSec(avg([...wT,...lT])),avgTW:fSec(avg(wT)),avgTL:fSec(avg(lT)),
+    avgT:fSec(avg([...wT,...lT])),avgTW:fSec(avg(wT)),avgTL:fSec(avg(lT)),penalty:penalty?fSec(penalty):'—',
     rests,avgR:tot?(rests/tot).toFixed(2):'—',avgRW:wN?(wR/wN).toFixed(2):'—',avgRL:lN?(lR/lN).toFixed(2):'—'};
 }
 
 function renderExt(d){
-  if(!d){document.getElementById('ext-body').innerHTML=`<tr><td class="empty" colspan="12">Нет данных</td></tr>`;return;}
+  if(!d){document.getElementById('ext-body').innerHTML=`<tr><td class="empty" colspan="13">Нет данных</td></tr>`;return;}
   document.getElementById('ext-body').innerHTML=`<tr>
     <td class="hl-cell">${d.tot}</td><td>${d.fpW}</td><td class="${wc(d.fpWR)}">${f1(d.fpWR)}</td><td>${d.dblW}</td><td class="${wc(d.dblWR)}">${f1(d.dblWR)}</td>
-    <td>${d.avgT}</td><td>${d.avgTW}</td><td>${d.avgTL}</td>
+    <td>${d.avgT}</td><td>${d.avgTW}</td><td>${d.avgTL}</td><td>${d.penalty}</td>
     <td>${d.rests}</td><td>${d.avgR}</td><td>${d.avgRW}</td><td>${d.avgRL}</td>
   </tr>`;
 }
