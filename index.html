@@ -898,17 +898,26 @@
   function renderPodium(E,P,msByEnc,tour,resByTour){
     const wrap=document.getElementById('podium');if(!wrap)return;
     if(!tour){wrap.innerHTML='';return;}
-    // выбор топ-3 по результатам ЭТОГО турнира (победы во встречах)
-    const tally={};
-    E.filter(e=>e.tournament_id===tour.id).forEach(e=>{
-      [e.player1_id,e.player2_id].forEach(pid=>{tally[pid]=tally[pid]||{pid,w:0,l:0};});
-      if(e.winner_id){tally[e.winner_id]&&tally[e.winner_id].w++;
-        const loser=e.winner_id===e.player1_id?e.player2_id:e.player1_id;
-        if(tally[loser])tally[loser].l++;}
-    });
-    const top=Object.values(tally)
-      .sort((a,b)=>b.w-a.w||wrp(b.w,b.l)-wrp(a.w,a.l)||a.l-b.l)
-      .slice(0,3);
+    const res=resByTour&&resByTour[tour.id]||{};
+    // Топ-3 по ФАКТИЧЕСКОМУ месту (tournament_results.place), если оно есть,
+    // иначе фолбэк — по победам во встречах этого турнира.
+    const placed=Object.values(res).filter(r=>r.player_id&&r.place!=null)
+      .sort((a,b)=>a.place-b.place).slice(0,3);
+    let top;
+    if(placed.length){
+      top=placed.map(r=>({pid:r.player_id}));
+    }else{
+      const tally={};
+      E.filter(e=>e.tournament_id===tour.id).forEach(e=>{
+        [e.player1_id,e.player2_id].forEach(pid=>{tally[pid]=tally[pid]||{pid,w:0,l:0};});
+        if(e.winner_id){tally[e.winner_id]&&tally[e.winner_id].w++;
+          const loser=e.winner_id===e.player1_id?e.player2_id:e.player1_id;
+          if(tally[loser])tally[loser].l++;}
+      });
+      top=Object.values(tally)
+        .sort((a,b)=>b.w-a.w||wrp(b.w,b.l)-wrp(a.w,a.l)||a.l-b.l)
+        .slice(0,3);
+    }
     if(!top.length){wrap.innerHTML='<p style="color:var(--sub);font-size:14px">Нет результатов по этому турниру</p>';return;}
     // статистика/винрейт — по ВСЕЙ статистике (все турниры)
     const allTally={};
@@ -919,7 +928,6 @@
         allTally[loser]=allTally[loser]||{w:0,l:0};allTally[loser].l++;
       }
     });
-    const res=resByTour&&resByTour[tour.id]||{};
     wrap.innerHTML='';
     [1,0,2].forEach(i=>{ // визуальный порядок: серебро · золото · бронза
       const s=top[i];if(!s)return;
