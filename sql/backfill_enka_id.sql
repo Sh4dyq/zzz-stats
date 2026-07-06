@@ -1,5 +1,5 @@
--- enka_id backfill — generated from shiyu API (
--- run AFTER add_enka_id.sql
+-- enka_id backfill (значения из shiyu API).
+-- Выполнять после add_enka_id.sql.
 
 -- characters
 UPDATE characters SET enka_id='1401' WHERE id='65c9e245-232f-4c64-8223-c338c281b6e1'; -- Alice

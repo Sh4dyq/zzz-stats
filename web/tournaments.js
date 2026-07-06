@@ -336,7 +336,7 @@ async function openBracketEditor(tourId,tourName){
   const seeds=(parts||[]).map(pt=>plMap[pt.player_id]?.nickname).filter(Boolean);
   const t=D.tours.find(x=>x.id===tourId)||{};
   const isCh=!!t.challonge_url; // у Challonge посев/продвижение тянет синк — drag отключаем
-  // своя сетка (Фаза 2) — независимый движок
+  // своя сетка — независимый движок
   const{data:brk}=await sb.from('brackets').select('*').eq('tournament_id',tourId).maybeSingle();
   let ownNodes=[];
   if(brk){const{data:nd}=await sb.from('bracket_nodes').select('*').eq('bracket_id',brk.id);ownNodes=nd||[];}
@@ -436,7 +436,7 @@ function enableSeedDrag(tourId,tourName,parts){
     });
   });
 }
-// ===== СОБСТВЕННЫЙ ДВИЖОК СЕТОК (Фаза 2, независимо от Challonge) =====
+// ===== Собственный движок сеток (независимо от Challonge) =====
 // Генерирует сетку из участников турнира, продвигает игроков по рёбрам при выборе
 // победителя. Полностью своя — не зависит от challonge_url, drag/правки доступны всегда.
 async function genOwnBracket(tourId,tourName){
@@ -503,10 +503,8 @@ async function createEncFromNode(nodeId,p1,p2,tourId,tourName){
   openBracketEditor(tourId,tourName);
 }
 // Рендер узлов своей сетки: колонки по (part,round), карточка матча с выбором победителя.
-// ПОМЕТКА НА БУДУЩЕЕ (НЕ здесь, в админке): результат матча будет открываться в
-// ПУБЛИЧНЫХ сетках — окном внутри bracket.html по клику на узел, либо по отдельной
-// ссылке (deep-link), если сайт разобьём на много мелких URL. Привязка encounter_id
-// к узлу (ниже) — её источник данных.
+// TODO: показывать результат матча и в публичной bracket.html (по клику на узел
+// или deep-link); источник данных — привязка encounter_id к узлу ниже.
 function ownBracketHTML(brk,nodes,plMap,tourId,tourName,encs){
   const tn=tourName.replace(/'/g,"\\'");
   const model=BracketView.nodesToModel(nodes,pid=>plMap[pid]?.nickname);

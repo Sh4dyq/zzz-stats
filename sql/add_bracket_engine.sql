@@ -1,4 +1,4 @@
--- Фаза 2: собственный движок турнирных сеток (независимо от Challonge).
+-- Собственный движок турнирных сеток (независимо от Challonge).
 -- brackets — одна сетка на турнир (SE/DE); bracket_nodes — узлы (матчи) с рёбрами
 -- продвижения. Победитель ноды автоматически толкается в next_win_node[slot],
 -- проигравший (для DE) — в next_lose_node[slot]. Узел может ссылаться на encounter
@@ -39,8 +39,8 @@ create index if not exists bracket_nodes_bracket_idx on bracket_nodes(bracket_id
 alter table brackets      enable row level security;
 alter table bracket_nodes enable row level security;
 
--- ВАЖНО: RLS-политик недостаточно — нужны табличные GRANT'ы, иначе PostgREST
--- отдаёт 42501 «permission denied» даже авторизованному (см. supabase-grants-gotcha).
+-- RLS-политик недостаточно — нужны табличные GRANT'ы, иначе PostgREST
+-- отдаёт 42501 «permission denied» даже авторизованному.
 grant select on brackets, bracket_nodes to anon, authenticated;
 grant insert, update, delete on brackets, bracket_nodes to authenticated;
 

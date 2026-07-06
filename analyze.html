@@ -830,9 +830,9 @@ async function saveData(){
 }
 
 // =====================================================================
-// LOCAL ENGINE (Tesseract OCR + zone cropping) — Этап 1
+// LOCAL ENGINE (Tesseract OCR + zone cropping)
 // Produces a {left_player,...,left_picks,...} object consumed by
-// renderResults/saveData. Bans are left empty here (Этап 2 = pHash icons).
+// renderResults/saveData. Bans are left empty here (их закрывает pHash-движок ниже).
 // =====================================================================
 let calibOn=false;
 
@@ -879,7 +879,7 @@ const DEFAULT_ZONES={
   left_timer: {x:0.44713793103448274,y:0.108,w:0.019770114942528734,h:0.034},
   right_timer:{x:0.5331954022988505,y:0.108,w:0.020919540229885056,h:0.034},
   // pick footers — TIGHT on the name + "Lv.60 Mx" TEXT only (NO amplifier icon:
-  // that gets its own zone + pHash in Этап 2). L/R groups, T1 row then T2 row.
+  // that gets its own zone + pHash below). L/R groups, T1 row then T2 row.
   L_T1_0:{x:0.1628735632183908,y:0.6715531677454325,w:0.052114942528735636,h:0.05195937888594841},
   L_T1_1:{x:0.27827586206896554,y:0.6715531677454325,w:0.04981609195402299,h:0.04991875777189682},
   L_T1_2:{x:0.39137931034482754,y:0.6715531677454325,w:0.04866666666666667,h:0.04787813665784523},
@@ -896,7 +896,7 @@ const DEFAULT_ZONES={
   // переносит их на безтулбарную раскладку (UI уезжает вверх). Считаем число НЕ-серых плашек.
   L_RESTART_PLATES:{x:0.283,y:0.950,w:0.067,h:0.042},
   R_RESTART_PLATES:{x:0.689,y:0.950,w:0.067,h:0.042},
-  // ИКОНКИ драфт-сетки (Этап 2, pHash) — все 18 слотов по фикс-раскладке. Ключ G<slot> = № хода.
+  // Иконки драфт-сетки (pHash) — все 18 слотов по фикс-раскладке. Ключ G<slot> = № хода.
   // Координаты СТАРТОВЫЕ (под ~финальный драфт shiyu) — откалибруйте через «⚙ Калибровка зон».
   // Левая сторона (fp):   ряд1 8 5 4 1 / ряд2 16 13 12 9 / ряд3 17
   // Правая сторона (dbl):  ряд1 2 3 6 7 / ряд2 10 11 14 15 / ряд3 18
@@ -1165,7 +1165,7 @@ async function ocrZone(img,zoneKey,whitelist,psm){
   return txt;
 }
 
-// --- pHash icon engine (Этап 2 foundation) ---
+// --- pHash icon engine ---
 // aHash 16x16 = 256-bit perceptual hash, returned as 64-char hex.
 // Same-source icons (draft grid crops) compare with very small Hamming distance.
 function hashIcon(img,z){
@@ -1246,7 +1246,7 @@ function parsePick(raw){
   return {name,mindscape:ms};
 }
 
-// === Этап 2: распознавание ВСЕЙ драфт-сетки по pHash ===
+// === Распознавание всей драфт-сетки по pHash ===
 // Эталоны = иконки из репо (web/icons/characters/<name>.webp) + накопленные реальные кропы из
 // подтверждённых сохранений (icon_hashes). aHash яркостный → один эталон годится и для цветных
 // пиков, и для десатурированных (ч/б) банов: цвет отбрасывается, паттерн яркости сохраняется.
@@ -1296,7 +1296,7 @@ function recognizeGrid(img,refs){
   return {picks,bans};
 }
 
-// === Этап 2b: распознавание сетки через эмбеддинги (DINOv2-small, all-gray bank, cosine) ===
+// === Распознавание сетки через эмбеддинги (DINOv2-small, all-gray bank, cosine) ===
 // Решение из бенчмарка (calib/embed_bench.html): bans 96%, picks 86%, total 88% на 8 играх.
 // Заменяет aHash-распознавание; aHash остаётся фолбэком, если transformers.js не загрузился.
 const EMB_LOW_CONF=0.80;       // ниже — флаг на ручную проверку (не хард-реджект)

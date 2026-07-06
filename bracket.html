@@ -494,7 +494,7 @@ async function boot(){
   (rs.data||[]).forEach(r=>{(S.results[r.tournament_id]=S.results[r.tournament_id]||[]).push(r)});
   (pa.data||[]).forEach(p=>{(S.parts[p.tournament_id]=S.parts[p.tournament_id]||[]).push(p)});
   (bc.data||[]).forEach(c=>{S.cache[c.tournament_id]=c.json});
-  // своя сетка (Фаза 2): bracket_nodes по турниру через brackets(id→tournament_id)
+  // своя сетка: bracket_nodes по турниру через brackets(id→tournament_id)
   S.nodes={};const brTour={};(br.data||[]).forEach(b=>brTour[b.id]=b.tournament_id);
   (bn.data||[]).forEach(n=>{const tid=brTour[n.bracket_id];if(!tid)return;(S.nodes[tid]=S.nodes[tid]||[]).push(n);});
   S.charMap={};(ch.data||[]).forEach(c=>S.charMap[c.id]=c);
