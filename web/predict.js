@@ -92,7 +92,11 @@
   // --- Монте-Карло: своя сетка (bracket_nodes) ---
   // nodes из БД (уже с продвинутыми игроками и winner_id сыгранных). Несыгранные ноды
   // с двумя игроками сэмплируются по Elo. Возврат: pid → {champ,final} (вероятности 0..1).
-  function simulateBracket(nodes,ratings,iters){
+  // Ключ пары игроков (не зависит от порядка) — для фиксации исходов «кто кого бьёт».
+  const pairKey=(a,b)=>String(a)<String(b)?a+'|'+b:b+'|'+a;
+  // forced: {pairKey: winnerId} — если эти двое встретились, победитель фиксирован
+  // (ручной выбор в конструкторе). Действует в ЛЮБОМ раунде, где пара реально сошлась.
+  function simulateBracket(nodes,ratings,iters,forced){
     iters=iters||5000;
     const ordP={W:0,L:1,GF:2};
     const order=nodes.slice().sort((a,b)=>(ordP[a.part]??3)-(ordP[b.part]??3)||a.round-b.round||a.slot-b.slot);
@@ -105,7 +109,7 @@
       order.forEach(n=>{
         let a=p1[n.id],b=p2[n.id],w=win[n.id];
         if(!w){
-          if(a&&b)w=Math.random()<pElo(get(a),get(b))?a:b;
+          if(a&&b){const f=forced&&forced[pairKey(a,b)];w=f!=null?f:(Math.random()<pElo(get(a),get(b))?a:b);}
           else if(n.is_bye)w=a||b;                    // BYE — авто-проход
           if(!w)return;
           win[n.id]=w;
@@ -213,6 +217,6 @@
     return out;
   }
 
-  g.Predict={ELO_START,pElo,buildRatings,headToHead,charStats,draftWinProb,simulateBracket,simulateRoundRobin,simulateElimination,bayes};
+  g.Predict={ELO_START,pElo,pairKey,buildRatings,headToHead,charStats,draftWinProb,simulateBracket,simulateRoundRobin,simulateElimination,bayes};
   if(typeof module!=='undefined'&&module.exports)module.exports=g.Predict;
 })(typeof window!=='undefined'?window:globalThis);

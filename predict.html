@@ -163,6 +163,37 @@
   .ct-mrow .p{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--sub);flex-shrink:0}
   .ct-mrow.fav .n,.ct-mrow.fav .p{color:#ff7587}
   .ct-tbd{color:var(--sub);font-size:12.5px;font-style:italic}
+  /* реальная схема сетки (колонки-раунды, выравнивание по фидерам) */
+  .br-wrap{overflow-x:auto;padding:2px 0 8px}
+  .br-cols{display:flex;gap:22px;align-items:stretch;min-width:min-content}
+  .br-col{display:flex;flex-direction:column;min-width:172px}
+  .br-crh{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;font-size:12px;letter-spacing:.04em;color:var(--sub);margin-bottom:8px;text-align:center;flex:none}
+  .br-colb{flex:1;display:flex;flex-direction:column;justify-content:space-around;gap:8px}
+  .br-m{border:1px solid var(--border);border-radius:8px;background:var(--card);overflow:hidden;flex:none}
+  .br-s{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 10px;font-size:13.5px;cursor:pointer;transition:background .12s}
+  .br-s+.br-s{border-top:1px solid var(--line)}
+  .br-s:hover{background:var(--panel-2)}
+  .br-s .bn{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600;color:var(--sub)}
+  .br-s .bp{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--sub);flex-shrink:0}
+  .br-s.win{background:rgba(255,31,68,.09)}
+  .br-s.win .bn{color:#fff;font-weight:700}
+  .br-s.win .bp{color:#ff7587}
+  .br-s.pinned{background:rgba(245,200,66,.12)}
+  .br-s.pinned .bn{color:var(--gold)}
+  /* сворачиваемые секции */
+  .sect{border:1px solid var(--border);border-radius:12px;background:var(--card);margin-bottom:14px;overflow:hidden}
+  .sect>summary{cursor:pointer;padding:13px 18px;font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;font-size:16px;letter-spacing:.02em;color:var(--text);list-style:none;display:flex;align-items:center;gap:10px}
+  .sect>summary::-webkit-details-marker{display:none}
+  .sect>summary::before{content:"▸";color:var(--red);font-size:13px;transition:transform .15s;display:inline-block}
+  .sect[open]>summary::before{transform:rotate(90deg)}
+  .sect[open]>summary{border-bottom:1px solid var(--border)}
+  .sect-b{padding:16px 18px}
+  /* сортировка списка игроков */
+  .sortbar{display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap}
+  .sortbar .sb-lbl{color:var(--sub);font-size:12.5px;font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:700;text-transform:uppercase;letter-spacing:.04em}
+  .sb-btn{border:1px solid var(--border);background:var(--panel-2);color:var(--sub);border-radius:7px;padding:5px 13px;font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;font-size:13px;letter-spacing:.02em;cursor:pointer;transition:.14s}
+  .sb-btn:hover{color:var(--text);border-color:var(--sub)}
+  .sb-btn.on{background:var(--grad);border-color:transparent;color:#fff}
   /* footer (sync) */
   footer{border-top:1px solid var(--border);background:#08080a;position:relative;z-index:1;margin-top:48px}
   .foot{max-width:1280px;margin:0 auto;padding:24px 40px 18px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;text-align:center}
@@ -266,10 +297,18 @@
     </div>
   </div>
   <div class="res-panel" id="pvp-res"><div class="res-empty">Выбери двух игроков</div></div>
-  <div class="chwrap">
-    <div class="ch-h">Elo-рейтинг игроков</div>
-    <div class="chtbl" id="elo-tbl"></div>
-  </div>
+  <details class="sect" id="elo-sect" style="margin-top:18px">
+    <summary>Рейтинг всех игроков</summary>
+    <div class="sect-b">
+      <div class="sortbar">
+        <span class="sb-lbl">Сортировка:</span>
+        <button class="sb-btn" data-k="elo" onclick="setEloSort('elo')">Elo</button>
+        <button class="sb-btn" data-k="games" onclick="setEloSort('games')">Игры</button>
+        <button class="sb-btn" data-k="nick" onclick="setEloSort('nick')">Ник</button>
+      </div>
+      <div class="chtbl" id="elo-tbl"></div>
+    </div>
+  </details>
 </div>
 
 <!-- ДРАФТ / ДРАФТ+ИГРОКИ -->
@@ -349,20 +388,16 @@
   <details class="method">
     <summary>Как и почему это считается</summary>
     <div class="m-body">
-      <h4>Elo-рейтинг игроков</h4>
-      <p>Каждый игрок стартует с 1000. Все игры всей истории турниров проходятся в хронологическом порядке (турниры по дате, встречи в порядке сетки — он подтягивается из синхронизированных с Challonge сеток по раундам, игры по номеру). После каждой игры рейтинг обновляется: <code>R' = R + K·(S − E)</code>, где K = 40, S — результат (победа 1, ничья ½, поражение 0), а E — ожидаемый результат <code>E = 1 / (1 + 10^((Rb−Ra)/400))</code>. Смысл: победа над сильным соперником даёт много очков, над слабым — почти ничего; поражение от сильного почти не наказывается. Поэтому Elo честнее простого винрейта — он учитывает, <i>с кем</i> ты играл, и автоматически отражает текущую форму: свежие результаты сдвигают рейтинг, старые уже «впитаны». K=40 выбран по проверке на наших данных (он точнее предсказывает исходы, чем 30/32, и хорошо стареет с ростом числа игр). Шанс победы во встрече A против B — та же формула E от разницы их рейтингов (ничьих во встречах не бывает, проценты дают в сумме 100).</p>
-      <p><b>Стягивание для показа.</b> У игрока с 1–2 играми рейтинг ещё случаен, поэтому <i>показываемое</i> значение стягивается к 1000 тем сильнее, чем меньше игр: <code>показ = 1000 + (R − 1000)·n/(n + 8)</code>. Так лаки-стрик из пары игр не выкидывает новичка в топ. Важно: сами вероятности победы считаются по <i>сырому</i> рейтингу — стягивать прогноз означало бы гасить уверенность и предсказывать хуже (проверено).</p>
-      <h4>Винрейты персонажей (сила драфта)</h4>
-      <p>Для каждого персонажа берутся все его пики в сыгранных драфтах: побеждал ли игрок, взявший его (ничья = ½). Чтобы 1–2 удачные игры не делали персонажа «имбой», применяется байесовская поправка: к статистике добавляется 6 виртуальных игр с винрейтом 50% — редкие пики стягиваются к середине, у популярных поправка почти незаметна. Сила состава = средний такой винрейт его персонажей. Шанс драфта против драфта — формула log5 (Билл Джеймс): <code>P = a(1−b) / (a(1−b) + b(1−a))</code> — стандартный способ получить вероятность из двух «сил».</p>
-      <h4>Поправки: Шиюй, майндскейпы, первый пик, игроки</h4>
-      <p>· <b>Шиюй</b> — привязка к ротации (турниры группируются по ней): винрейты пересчитываются по матчам этой ротации, с прайором к общей истории — мало данных → тянет к базовому значению.<br>
-      · <b>Майндскейп</b> — статистика пика уточняется по конкретному M (прайор 4 игры к базовому винрейту персонажа): выше M реально выигрывал чаще → оценка растёт. A-ранги по умолчанию M6 (их дёшево прокачивают), S-ранги M0 — можно переопределить кликом.<br>
-      · <b>Первый пик</b> — глобальный винрейт fp-стороны по всем играм, добавляется как сдвиг.<br>
-      · <b>Игроки</b> — их Elo, плюс лёгкая (вес ×0.5) поправка на личный винрейт каждого именно с выбранными персонажами.<br>
-      Все компоненты складываются в лог-шансах (log-odds): <code>P = σ(logit(p₁) + logit(p₂) + …)</code> — так независимые свидетельства корректно усиливают или гасят друг друга, и итог всегда остаётся в пределах 0–100%.</p>
-      <h4>Шансы на турнир (Монте-Карло)</h4>
-      <p>Турнир «проигрывается» 10 000 раз: сыгранные матчи фиксированы как есть, каждый несыгранный разыгрывается случайно с вероятностью по Elo, победители продвигаются по структуре сетки (или набирают очки в группе). Доля симуляций, где игрок дошёл до финала или выиграл турнир, и есть его шанс. Почему симуляция, а не формула: в сетке важно, <i>кто с кем встретится</i>, а это зависит от исходов ранних матчей — аналитически такое дерево не сворачивается, а 10 000 прогонов дают точность порядка ±1%. После каждого внесённого результата ветка фиксируется, и вероятности автоматически перераспределяются между оставшимися.</p>
-      <p class="m-note">Ограничения: выборка маленькая (десятки игр на игрока), поэтому все оценки — ориентир, а не истина; синергии составов и контрпики модель пока не знает — только индивидуальные винрейты.</p>
+      <h4>Elo игроков</h4>
+      <p>Старт 1000. После каждой игры: <code>R' = R + 40·(S − E)</code>, где S — исход (1/½/0), <code>E = 1/(1 + 10^((Rb−Ra)/400))</code>. Победа над сильным даёт больше, чем над слабым. K=40 подобран по точности прогноза на наших данных. Шанс во встрече = E от разницы рейтингов.</p>
+      <p>Для показа рейтинг с малым числом игр стянут к 1000: <code>1000 + (R−1000)·n/(n+8)</code>. Вероятности считаются по сырому рейтингу.</p>
+      <h4>Сила драфта</h4>
+      <p>Винрейт персонажа по всем его пикам (ничья ½) с байес-поправкой (+6 игр по 50%, гасит редкие пики). Сила состава — средний винрейт. Шанс драфт vs драфт — log5: <code>P = a(1−b)/(a(1−b)+b(1−a))</code>.</p>
+      <h4>Поправки</h4>
+      <p><b>Шиюй</b> — винрейты по матчам выбранной ротации. <b>Майндскейп</b> — уточнение по конкретному M. <b>Первый пик</b> — сдвиг по винрейту fp-стороны. <b>Игроки</b> — Elo + личный винрейт с этими персонажами. Складываются в log-odds: <code>σ(Σ logit)</code>.</p>
+      <h4>Шансы на турнир</h4>
+      <p>10 000 симуляций: сыгранное фиксировано, остальное разыгрывается по Elo. Доля симуляций с выходом в финал/победой = шанс.</p>
+      <p class="m-note">Выборка малая — оценки ориентировочны; синергии и контрпики пока не учитываются.</p>
     </div>
   </details>
 </div>
@@ -638,14 +673,21 @@ function updatePvp(){
   res.innerHTML=resBar(na,p,nb)+
     `<div class="res-break"><span>Личные встречи (игры): <b>${h.w}–${h.d}–${h.l}</b>${h.w+h.d+h.l?'':' — не играли'}</span></div>`;
 }
+let ELO_SORT={k:'elo',asc:false};
+function setEloSort(k){
+  if(ELO_SORT.k===k)ELO_SORT.asc=!ELO_SORT.asc;
+  else ELO_SORT={k,asc:k==='nick'};   // Elo/Игры по умолчанию по убыванию, Ник — по возрастанию
+  renderEloTable();
+}
 function renderEloTable(){
-  const rows=playedPlayers()
-    .map(p=>({p,elo:eloShown(p.id),g:D.elo.games[p.id]||0}))
-    .sort((a,b)=>b.elo-a.elo);
-  const mx=Math.max(...rows.map(r=>r.elo),1100);
-  const mn=Math.min(...rows.map(r=>r.elo),900);
+  const rows=playedPlayers().map(p=>({p,elo:eloShown(p.id),g:D.elo.games[p.id]||0}));
+  const{k,asc}=ELO_SORT,sign=asc?1:-1;
+  rows.sort((a,b)=>k==='nick'?sign*(a.p.nickname||'').localeCompare(b.p.nickname||'','ru'):sign*((k==='games'?a.g-b.g:a.elo-b.elo)));
+  const mx=Math.max(...rows.map(r=>r.elo),1100),mn=Math.min(...rows.map(r=>r.elo),900);
   const cols='40px 1fr 90px 160px';
-  $('elo-tbl').innerHTML=`<div class="chrow hd" style="grid-template-columns:${cols}"><div>#</div><div>Игрок</div><div>Elo</div><div>Σ игр</div></div>`+
+  const arrow=key=>ELO_SORT.k===key?(ELO_SORT.asc?' ↑':' ↓'):'';
+  document.querySelectorAll('#elo-sect .sb-btn').forEach(b=>b.classList.toggle('on',b.dataset.k===k));
+  $('elo-tbl').innerHTML=`<div class="chrow hd" style="grid-template-columns:${cols}"><div>#</div><div>Игрок${arrow('nick')}</div><div>Elo${arrow('elo')}</div><div>Σ игр${arrow('games')}</div></div>`+
     rows.map((r,i)=>`<div class="chrow" style="grid-template-columns:${cols}">
       <div class="num">${i+1}</div><div class="nm">${esc(r.p.nickname)}</div>
       <div><span class="chpct">${Math.round(r.elo)}</span><div class="chbar"><i style="width:${((r.elo-mn)/(mx-mn)*100).toFixed(1)}%"></i></div></div>
@@ -850,64 +892,113 @@ function ctDrop(e,zone){
   }
   ctRender();
 }
+const _ctPct=p=>p>=.0005?(p*100).toFixed(1)+'%':'—';
+const _ctCell=p=>`<div><span class="chpct">${_ctPct(p)}</span><div class="chbar"><i style="width:${Math.min(100,p*100)}%"></i></div></div>`;
+const _ctNm=pid=>esc(D.playerMap[pid]?.nickname||'—');
 function ctSimulate(){
-  const R=D.elo.ratings,out=$('ct-out');
-  const pct=p=>p>=.0005?(p*100).toFixed(1)+'%':'—';
-  const cell=p=>`<div><span class="chpct">${pct(p)}</span><div class="chbar"><i style="width:${Math.min(100,p*100)}%"></i></div></div>`;
-  const nm=pid=>esc(D.playerMap[pid]?.nickname||'—');
-  const pairRow=(p1,p2)=>{ // строка матча с вероятностями
-    if(!p1&&!p2)return`<div class="ct-tbd">по итогам предыдущих</div>`;
-    if(!p1||!p2)return`<div class="ct-mrow"><span class="n">${nm(p1||p2)}</span><span class="p">BYE</span></div>`;
-    const p=Predict.pElo(R[p1]??1000,R[p2]??1000);
-    return`<div class="ct-mrow${p>=.5?' fav':''}"><span class="n">${nm(p1)}</span><span class="p">${(p*100).toFixed(1)}%</span></div>
-      <div class="ct-mrow${p<.5?' fav':''}"><span class="n">${nm(p2)}</span><span class="p">${((1-p)*100).toFixed(1)}%</span></div>`;
-  };
-  if(CT.fmt==='RR'){
-    const groups=CT.zones.map((g,i)=>({i,g})).filter(x=>x.g.length>=2);
-    if(!groups.length){out.innerHTML='<div class="panel"><h3>Мало игроков</h3><p>В группе должно быть минимум два игрока.</p></div>';return;}
-    out.innerHTML=groups.map(({i,g})=>{
-      const sim=Predict.simulateRoundRobin(g,[],R,10000);
-      const top=(pid,k)=>sim[pid].placeP.slice(0,k).reduce((a,b)=>a+b,0);
-      const rows=g.map(pid=>({pid,elo:eloShown(pid),exp:sim[pid].expPlace,p1:top(pid,1),p2:top(pid,2)})).sort((a,b)=>a.exp-b.exp);
-      const cols='40px 1fr 70px 90px 120px 120px';
-      let pairs='';
-      for(let x=0;x<g.length;x++)for(let y=x+1;y<g.length;y++)pairs+=`<div class="ct-match">${pairRow(g[x],g[y])}</div>`;
-      return`<div class="ch-h" style="margin-top:16px">Группа ${String.fromCharCode(65+i)}</div>
-      <div class="chtbl">
-        <div class="chrow hd" style="grid-template-columns:${cols}"><div>#</div><div>Игрок</div><div>Elo</div><div>Ожид. место</div><div>1 место</div><div>Топ-2</div></div>
-        ${rows.map((r,k)=>`<div class="chrow" style="grid-template-columns:${cols}"><div class="num">${k+1}</div><div class="nm">${nm(r.pid)}</div><div class="mut">${Math.round(r.elo)}</div><div class="chpct">${r.exp.toFixed(1)}</div>${cell(r.p1)}${cell(r.p2)}</div>`).join('')}
-      </div>
-      <div class="ct-rh" style="margin:12px 0 8px">Матчи группы</div>
-      <div class="ct-rounds"><div class="ct-round" style="min-width:0;display:flex;flex-wrap:wrap;gap:8px">${pairs}</div></div>`;
-    }).join('')+'<div class="chnote">Монте-Карло 10 000 симуляций на Elo · один круг, тайбрейк — жребий.</div>';
-    return;
-  }
-  // SE / DE
+  const out=$('ct-out');
+  if(CT.fmt==='RR'){CT.sim=null;ctRenderRR(out);return;}
   const parts=CT.zones[0];
   if(parts.length<2){out.innerHTML='<div class="panel"><h3>Мало игроков</h3><p>Перетащи в сетку минимум двух игроков.</p></div>';return;}
-  const size=BracketEngine.nextPow2(parts.length);
-  const nodes=BracketEngine.generate(CT.fmt,size);
+  CT.forced={};                                  // ручные победители пар (pairKey→pid)
+  CT.sim={fmt:CT.fmt,parts:parts.slice()};
+  ctRenderSim();
+}
+// свежая сетка из текущего состава (сеяние = порядок), byes авто-разрешены seed()
+function ctBuildNodes(){
+  const parts=CT.sim.parts,size=BracketEngine.nextPow2(parts.length);
+  const nodes=BracketEngine.generate(CT.sim.fmt,size);
   BracketEngine.seed(nodes,parts.map((pid,i)=>({player_id:pid,seed:i+1})),size);
-  const sim=Predict.simulateBracket(nodes,R,10000);
-  // раунды с матчами и вероятностями
+  return nodes;
+}
+// детерминированный прогноз: заполняем сетку до конца, победитель = ручной (forced) либо
+// более вероятный по Elo. Возвращает ноды с players+winner_id во всех матчах.
+function ctPredict(nodes){
+  const R=D.elo.ratings,by={};nodes.forEach(n=>by[n.id]=n);
   const ordP={W:0,L:1,GF:2};
-  const byRound={};
-  nodes.forEach(n=>{const k=n.part+'|'+n.round;(byRound[k]=byRound[k]||[]).push(n);});
-  const keys=Object.keys(byRound).sort((a,b)=>{const[pa,ra]=a.split('|'),[pb,rb]=b.split('|');return ordP[pa]-ordP[pb]||(+ra-+rb);});
-  const rname=k=>{const[p,r]=k.split('|');return p==='GF'?'Гранд-финал':(p==='L'?'Нижняя · Раунд '+r:(CT.fmt==='DE'?'Верхняя · ':'')+'Раунд '+r);};
-  const roundsHtml=keys.map(k=>`<div class="ct-round"><div class="ct-rh">${rname(k)}</div>${
-    byRound[k].sort((a,b)=>a.slot-b.slot).map(n=>`<div class="ct-match">${n.is_bye?`<div class="ct-mrow"><span class="n">${nm(n.player1_id||n.player2_id)}</span><span class="p">BYE</span></div>`:pairRow(n.player1_id,n.player2_id)}</div>`).join('')
-  }</div>`).join('');
-  const pids=new Set();nodes.forEach(n=>{if(n.player1_id)pids.add(n.player1_id);if(n.player2_id)pids.add(n.player2_id);});
+  nodes.slice().sort((a,b)=>(ordP[a.part]??3)-(ordP[b.part]??3)||a.round-b.round||a.slot-b.slot).forEach(n=>{
+    if(n.winner_id)return;                        // bye уже разрешён
+    const a=n.player1_id,b=n.player2_id;if(!a||!b)return;
+    const f=CT.forced[Predict.pairKey(a,b)];
+    const w=(f===a||f===b)?f:(Predict.pElo(R[a]??1000,R[b]??1000)>=0.5?a:b);
+    BracketEngine.applyWinner(by,n,w);
+  });
+  return nodes;
+}
+// клик по игроку в матче — зафиксировать/снять его как победителя пары, пересимулировать
+function ctPick(nodeId,slot){
+  const n=CT.byId&&CT.byId[nodeId];if(!n)return;
+  const a=n.player1_id,b=n.player2_id;if(!a||!b)return;
+  const pid=slot===1?a:b,fk=Predict.pairKey(a,b);
+  if(CT.forced[fk]===pid)delete CT.forced[fk];else CT.forced[fk]=pid;
+  ctRenderSim();
+}
+function ctRenderSim(){
+  const R=D.elo.ratings,out=$('ct-out');
+  const pred=ctPredict(ctBuildNodes());          // детерминированный прогноз (с forced)
+  CT.byId={};pred.forEach(n=>CT.byId[n.id]=n);
+  const sim=Predict.simulateBracket(ctBuildNodes(),R,10000,CT.forced); // шансы (forced учтён)
+  // ---- реальная схема сетки: колонки-раунды, точки выравнены по фидерам ----
+  const rname=k=>{const[p,r]=k.split('|');return p==='GF'?'Гранд-финал':(p==='L'?'Нижняя · Раунд '+r:(CT.sim.fmt==='DE'?'Верхняя · ':'')+'Раунд '+r);};
+  const groups={};pred.forEach(n=>{const k=n.part+'|'+n.round;(groups[k]=groups[k]||[]).push(n);});
+  const seat=(n,slot)=>{
+    const a=n.player1_id,b=n.player2_id,pid=slot===1?a:b;
+    if(!pid)return`<div class="br-s"><span class="bn ct-tbd">—</span><span class="bp"></span></div>`;
+    let pp='';if(a&&b){const p=Predict.pElo(R[a]??1000,R[b]??1000);pp=Math.round((slot===1?p:1-p)*100)+'%';}
+    const win=n.winner_id===pid,forced=a&&b&&CT.forced[Predict.pairKey(a,b)]===pid;
+    const clk=a&&b?`onclick="ctPick('${n.id}',${slot})"`:'';
+    return`<div class="br-s${win?' win':''}${forced?' pinned':''}" ${clk} title="${a&&b?'Клик — назначить победителем':''}"><span class="bn">${_ctNm(pid)}</span><span class="bp">${forced?'📌':''}${pp}</span></div>`;
+  };
+  const matchHtml=n=>`<div class="br-m">${seat(n,1)}${seat(n,2)}</div>`;
+  const section=(keys,title)=>{
+    if(!keys.length)return'';
+    const cols=keys.map(k=>`<div class="br-col"><div class="br-crh">${rname(k)}</div><div class="br-colb">${groups[k].slice().sort((a,b)=>a.slot-b.slot).map(matchHtml).join('')}</div></div>`).join('');
+    return`${title?`<div class="ct-rh" style="margin:10px 0 6px">${title}</div>`:''}<div class="br-wrap"><div class="br-cols">${cols}</div></div>`;
+  };
+  const keys=Object.keys(groups);
+  const wKeys=keys.filter(k=>k[0]==='W').sort((a,b)=>+a.split('|')[1]-+b.split('|')[1]);
+  const lKeys=keys.filter(k=>k[0]==='L').sort((a,b)=>+a.split('|')[1]-+b.split('|')[1]);
+  const gKeys=keys.filter(k=>k[0]==='G');
+  const upper=CT.sim.fmt==='DE'?section(wKeys.concat(gKeys),'Верхняя сетка'):section(wKeys.concat(gKeys),'');
+  const lower=section(lKeys,'Нижняя сетка');
+  // ---- таблица шансов ----
+  const pids=new Set();pred.forEach(n=>{if(n.player1_id)pids.add(n.player1_id);if(n.player2_id)pids.add(n.player2_id);});
   const rows=[...pids].map(pid=>({pid,elo:eloShown(pid),champ:sim[pid]?.champ||0,fin:sim[pid]?.final||0})).sort((a,b)=>b.champ-a.champ||b.fin-a.fin);
   const cols='40px 1fr 70px 140px 140px';
-  out.innerHTML=`<div class="ct-rounds">${roundsHtml}</div>
-    <div class="ch-h" style="margin-top:10px">Шансы</div>
-    <div class="chtbl">
-      <div class="chrow hd" style="grid-template-columns:${cols}"><div>#</div><div>Игрок</div><div>Elo</div><div>${CT.fmt==='DE'?'Гранд-финал':'Финал'}</div><div>Победа</div></div>
-      ${rows.map((r,i)=>`<div class="chrow" style="grid-template-columns:${cols}"><div class="num">${i+1}</div><div class="nm">${nm(r.pid)}</div><div class="mut">${Math.round(r.elo)}</div>${cell(r.fin)}${cell(r.champ)}</div>`).join('')}
-    </div>
-    <div class="chnote">Монте-Карло 10 000 симуляций на Elo · проценты у матчей — вероятность победы в паре; поздние раунды зависят от исходов ранних.</div>`;
+  const oddsTbl=`<div class="chtbl">
+    <div class="chrow hd" style="grid-template-columns:${cols}"><div>#</div><div>Игрок</div><div>Elo</div><div>${CT.sim.fmt==='DE'?'Гранд-финал':'Финал'}</div><div>Победа</div></div>
+    ${rows.map((r,i)=>`<div class="chrow" style="grid-template-columns:${cols}"><div class="num">${i+1}</div><div class="nm">${_ctNm(r.pid)}</div><div class="mut">${Math.round(r.elo)}</div>${_ctCell(r.fin)}${_ctCell(r.champ)}</div>`).join('')}
+  </div>`;
+  const forcedN=Object.keys(CT.forced).length;
+  out.innerHTML=`<details class="sect" open><summary>Схема сетки${forcedN?` · зафиксировано пар: ${forcedN}`:''}</summary>
+      <div class="sect-b"><div class="chnote" style="margin:0 0 10px;text-align:left">Показан наиболее вероятный путь (в каждой паре ведёт фаворит по Elo). Кликни по игроку — назначь его победителем 📌, сетка пересчитается до конца.</div>${upper}${lower}</div>
+    </details>
+    <details class="sect" open><summary>Шансы на титул</summary>
+      <div class="sect-b">${oddsTbl}<div class="chnote">Монте-Карло 10 000 симуляций на Elo; зафиксированные пары учтены (эти двое всегда играют по назначенному исходу).</div></div>
+    </details>`;
+}
+function ctRenderRR(out){
+  const R=D.elo.ratings;
+  const groups=CT.zones.map((g,i)=>({i,g})).filter(x=>x.g.length>=2);
+  if(!groups.length){out.innerHTML='<div class="panel"><h3>Мало игроков</h3><p>В группе должно быть минимум два игрока.</p></div>';return;}
+  const pairRow=(p1,p2)=>{const p=Predict.pElo(R[p1]??1000,R[p2]??1000);
+    return`<div class="ct-mrow${p>=.5?' fav':''}"><span class="n">${_ctNm(p1)}</span><span class="p">${(p*100).toFixed(1)}%</span></div>
+      <div class="ct-mrow${p<.5?' fav':''}"><span class="n">${_ctNm(p2)}</span><span class="p">${((1-p)*100).toFixed(1)}%</span></div>`;};
+  out.innerHTML=groups.map(({i,g})=>{
+    const sim=Predict.simulateRoundRobin(g,[],R,10000);
+    const top=(pid,k)=>sim[pid].placeP.slice(0,k).reduce((a,b)=>a+b,0);
+    const rows=g.map(pid=>({pid,elo:eloShown(pid),exp:sim[pid].expPlace,p1:top(pid,1),p2:top(pid,2)})).sort((a,b)=>a.exp-b.exp);
+    const cols='40px 1fr 70px 90px 120px 120px';
+    let pairs='';for(let x=0;x<g.length;x++)for(let y=x+1;y<g.length;y++)pairs+=`<div class="ct-match">${pairRow(g[x],g[y])}</div>`;
+    return`<details class="sect" open><summary>Группа ${String.fromCharCode(65+i)}</summary><div class="sect-b">
+      <div class="chtbl">
+        <div class="chrow hd" style="grid-template-columns:${cols}"><div>#</div><div>Игрок</div><div>Elo</div><div>Ожид. место</div><div>1 место</div><div>Топ-2</div></div>
+        ${rows.map((r,k)=>`<div class="chrow" style="grid-template-columns:${cols}"><div class="num">${k+1}</div><div class="nm">${_ctNm(r.pid)}</div><div class="mut">${Math.round(r.elo)}</div><div class="chpct">${r.exp.toFixed(1)}</div>${_ctCell(r.p1)}${_ctCell(r.p2)}</div>`).join('')}
+      </div>
+      <div class="ct-rh" style="margin:12px 0 8px">Матчи группы</div>
+      <div class="ct-rounds"><div class="ct-round" style="min-width:0;display:flex;flex-wrap:wrap;gap:8px">${pairs}</div></div>
+    </div></details>`;
+  }).join('')+'<div class="chnote">Монте-Карло 10 000 симуляций на Elo · один круг, тайбрейк — жребий.</div>';
 }
 
 // ---- турнир ----

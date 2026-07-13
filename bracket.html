@@ -452,7 +452,13 @@ const tourProgress=tid=>{
   const ch=S.cache[tid];
   if(ch&&Array.isArray(ch.rounds)&&ch.rounds.length){
     let total=0,done=0;
-    ch.rounds.forEach(r=>(r.matches||[]).forEach(m=>{total++;if(m.played)done++;}));
+    ch.rounds.forEach(r=>{
+      const isGF=/гранд|grand/i.test(r.name||'');
+      (r.matches||[]).forEach((m,i)=>{
+        if(isGF&&i>0&&!m.played)return;   // несыгранный reset гранд-финала — не считаем
+        total++;if(m.played)done++;
+      });
+    });
     if(total)return prg(done,total);
   }
   const e=S.encounters.filter(x=>x.tournament_id==tid);
