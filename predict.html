@@ -1,0 +1,1004 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<title>Nexus Stats — Аналитика</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Saira+Condensed:ital,wght@0,700;0,800;0,900;1,800;1,900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0b0b0d;--card:#161618;--panel-2:#1c1c20;--panel-3:#242429;
+    --border:#26262c;--line:rgba(255,255,255,.07);
+    --red:#ff1f44;--pink:#ec1862;--grad:linear-gradient(95deg,#ff1f44,#ec1862);
+    --accent:#ff1f44;--gold:#f5c842;--cyan:#3dd9d6;
+    --lime:#c4f500;--purple:#a970ff;
+    --text:#f3f3f5;--sub:#8a8a93;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font-family:'Rajdhani',sans-serif;min-height:100vh}
+  .facets{position:fixed;inset:0;width:100%;height:100%;z-index:0;pointer-events:none}
+  .topstripe{height:4px;background:var(--grad);position:sticky;top:0;z-index:50}
+  body>*:not(.facets){position:relative;z-index:1}
+  ::-webkit-scrollbar{width:6px;height:6px}
+  ::-webkit-scrollbar-track{background:var(--card)}
+  ::-webkit-scrollbar-thumb{background:#34343b;border-radius:3px}
+  ::-webkit-scrollbar-thumb:hover{background:var(--red)}
+  .spinner{width:22px;height:22px;border:2px solid var(--border);border-top-color:var(--red);border-radius:50%;animation:spin .7s linear infinite;margin:0 auto}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  select,input[type=text]{background:var(--panel-2);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:8px 12px;font-family:'Rajdhani',sans-serif;font-weight:600;font-size:14px;transition:.15s}
+  select{cursor:pointer}
+  select:focus,input:focus{outline:none;border-color:var(--red)}
+  /* header (sync со statistics/bracket) */
+  .hdr{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:16px 28px;border-bottom:1px solid var(--border);background:rgba(11,11,13,.72);backdrop-filter:blur(12px)}
+  .hdr>div{flex-shrink:0}
+  .brand{display:flex;align-items:center;gap:11px;flex-shrink:0}
+  .brand .wm,.brand .suf{white-space:nowrap}
+  .brand .mk{height:42px;width:auto;display:block}
+  .brand .wm{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;font-size:25px;letter-spacing:.02em;text-transform:uppercase;background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent;padding-right:.16em}
+  .brand .suf{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;font-size:25px;color:#fff;text-transform:uppercase;margin-left:-4px}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(255,31,68,.5)}70%{box-shadow:0 0 0 7px rgba(255,31,68,0)}100%{box-shadow:0 0 0 0 rgba(255,31,68,0)}}
+  .livetw{display:flex;align-items:center;gap:10px;padding:9px 16px;border-radius:10px;background:rgba(145,70,255,.12);border:1px solid rgba(145,70,255,.4);font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;font-size:15px;letter-spacing:.04em;color:#fff;transition:.15s;text-decoration:none}
+  .livetw:hover{background:rgba(145,70,255,.22)}
+  .livetw .dot{width:9px;height:9px;border-radius:50%;background:var(--red);flex-shrink:0;box-shadow:0 0 0 0 rgba(255,31,68,.6);animation:pulse 1.8s infinite}
+  .livetw .lv{color:#fff}
+  .livetw .vbar{width:1px;height:18px;background:rgba(255,255,255,.18)}
+  .livetw svg{width:17px;height:17px;fill:var(--purple)}
+  .livetw .tw{color:var(--purple)}
+  .livetw:hover .tw{color:#c4a6ff}
+  .livetw.offline .dot{background:#5e5e66;box-shadow:none;animation:none}
+  .livetw.offline .lv{color:var(--sub)}
+  .hbbtn{display:flex;align-items:center;justify-content:center;padding:10px 16px;border-radius:10px;background:var(--panel-2);border:1px solid var(--border);transition:.15s;flex-shrink:0}
+  .hbbtn:hover{border-color:var(--lime)}
+  .hbbtn img{height:20px;width:auto;display:block;mix-blend-mode:lighten;flex-shrink:0}
+  .nav{display:flex;align-items:center;gap:2px;flex-shrink:0}
+  @media (max-width:980px){.nav{display:none}}
+  .nav a{position:relative;font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;font-size:17px;letter-spacing:.02em;color:var(--sub);padding:8px 15px;transition:.15s;text-decoration:none}
+  .nav a:hover{color:var(--text)}
+  .nav a.active{color:#fff}
+  .nav a.active::after{content:"";position:absolute;left:15px;right:15px;bottom:-2px;height:3px;border-radius:3px;background:var(--grad)}
+  /* режимы */
+  .modes{border-bottom:1px solid var(--border);padding:0 22px;display:flex;align-items:stretch;background:rgba(11,11,13,.4);overflow-x:auto}
+  .mode-btn{border:none;background:none;position:relative;padding:14px 22px;font-family:'Saira Condensed',sans-serif;font-style:italic;font-size:19px;font-weight:800;text-transform:uppercase;color:var(--sub);cursor:pointer;transition:.15s;letter-spacing:.02em;white-space:nowrap}
+  .mode-btn:hover{color:var(--text)}
+  .mode-btn.active{color:#fff}
+  .mode-btn.active::after{content:"";position:absolute;left:14px;right:14px;bottom:-1px;height:3px;border-radius:3px 3px 0 0;background:var(--grad)}
+  /* контент */
+  .pane{max-width:1100px;margin:26px auto 0;padding:0 24px}
+  .note{color:var(--sub);font-size:13px;line-height:1.6}
+  .pane>.note{margin-bottom:18px}
+  .vs-grid{display:grid;grid-template-columns:1fr 150px 1fr;gap:18px;align-items:stretch}
+  @media(max-width:860px){.vs-grid{grid-template-columns:1fr;gap:12px}.vs-mid{order:3}}
+  .side-card{border:1px solid var(--border);border-radius:14px;background:var(--card);padding:18px;display:flex;flex-direction:column;gap:12px}
+  .side-card.sa{border-top:3px solid var(--red)}
+  .side-card.sb{border-top:3px solid var(--cyan)}
+  .side-lbl{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;font-size:13px;letter-spacing:.06em;color:var(--sub)}
+  .vs-mid{display:flex;align-items:center;justify-content:center}
+  .vs-word{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;font-size:42px;color:#2e2e35;user-select:none}
+  .pl-wrap{position:relative;width:112px;height:112px;border-radius:14px;overflow:hidden;background:var(--panel-3);align-self:center}
+  .pl-init{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;font-size:34px;color:var(--sub)}
+  .pl-wrap img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:1}
+  .pl-stats{font-family:'JetBrains Mono',monospace;font-size:12.5px;color:var(--sub);line-height:1.8;text-align:center}
+  .pl-stats b{color:var(--text);font-weight:600}
+  /* результат */
+  .res-panel{margin-top:18px;border:1px solid var(--border);border-radius:14px;background:var(--card);padding:20px 22px}
+  .res-nums{display:flex;justify-content:space-between;align-items:baseline;font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;font-size:46px;line-height:1}
+  .res-nums .na{color:#ff5c75}
+  .res-nums .nb{color:var(--cyan)}
+  .res-nums .rn-nick{font-size:17px;color:var(--sub);margin:0 10px;font-weight:800}
+  .res-bar{height:14px;border-radius:7px;overflow:hidden;display:flex;background:var(--panel-3);margin:12px 0 10px}
+  .res-bar .fa{background:var(--grad);transition:width .4s}
+  .res-bar .fb{background:linear-gradient(90deg,#22b8b5,#3dd9d6);flex:1}
+  .res-empty{text-align:center;color:var(--sub);font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;font-size:15px;letter-spacing:.04em;padding:8px 0}
+  /* драфт */
+  .slots{display:grid;grid-template-columns:repeat(3,46px);gap:6px;justify-content:center}
+  .slot{position:relative;width:46px;height:46px;border:1px dashed #34343b;border-radius:9px;display:flex;align-items:center;justify-content:center;cursor:pointer;background:var(--panel-2);transition:.12s}
+  .ms-b{position:absolute;right:-6px;bottom:-6px;z-index:2;font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:600;line-height:1;padding:2px 3px;border-radius:5px;background:var(--panel-3);border:1px solid var(--border);color:var(--sub);cursor:pointer}
+  .ms-b:hover{color:var(--text);border-color:var(--sub)}
+  .ms-b.hot{background:rgba(245,200,66,.15);border-color:rgba(245,200,66,.5);color:var(--gold)}
+  .slot:hover{border-color:var(--sub)}
+  .slot.filled{border-style:solid;border-color:#3f3f48}
+  .pal-search{width:100%}
+  .palette{display:flex;flex-wrap:wrap;gap:5px;max-height:216px;overflow-y:auto;padding:7px;border:1px solid var(--border);border-radius:10px;background:var(--panel-2)}
+  .pal-it{width:40px;height:40px;border-radius:8px;display:flex;align-items:center;justify-content:center;cursor:pointer;border:1px solid transparent;opacity:.82;transition:.1s}
+  .pal-it:hover{border-color:var(--sub);opacity:1}
+  .pal-it.on{border-color:var(--red);background:rgba(255,31,68,.14);opacity:1}
+  .sb .pal-it.on,.pal-it.onb{border-color:var(--cyan);background:rgba(61,217,214,.12);opacity:1}
+  .pal-it.hide{display:none}
+  .combo-row{margin-top:2px}
+  .res-break{display:flex;gap:22px;flex-wrap:wrap;justify-content:center;margin-top:8px;font-family:'JetBrains Mono',monospace;font-size:12.5px;color:var(--sub)}
+  .res-break b{color:var(--text);font-weight:600}
+  /* таблицы (Elo / шансы) */
+  .chwrap{margin-top:26px}
+  .ch-h{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;font-size:19px;letter-spacing:.02em;margin-bottom:10px}
+  .chtbl{border:1px solid var(--border);border-radius:12px;overflow:hidden;background:var(--card)}
+  .chrow{display:grid;align-items:center;gap:12px;padding:11px 20px}
+  .chrow+.chrow{border-top:1px solid var(--line)}
+  .chrow.hd{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--sub);font-weight:700;padding:10px 20px;font-family:'Rajdhani',sans-serif}
+  .chrow .num{color:var(--sub);font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;font-size:19px}
+  .chrow .nm{font-weight:600;font-size:16.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .chrow .mut{color:var(--sub);font-family:'JetBrains Mono',monospace;font-size:13px}
+  .chpct{font-weight:700;font-variant-numeric:tabular-nums;font-family:'JetBrains Mono',monospace;font-size:13px}
+  .chbar{position:relative;height:6px;border-radius:3px;background:var(--panel-3);overflow:hidden;margin-top:5px}
+  .chbar i{position:absolute;top:0;bottom:0;left:0;background:var(--grad);border-radius:3px}
+  .chnote{margin:12px 0 0;color:var(--sub);font-size:12.5px;text-align:center;line-height:1.6}
+  .panel{border:1px solid var(--border);border-radius:14px;background:var(--card);padding:26px;text-align:center;margin-top:10px}
+  .panel h3{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;font-size:19px;margin-bottom:8px}
+  .panel p{color:var(--sub);font-size:14px}
+  .tour-pickrow{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:16px}
+  .tour-pickrow select{min-width:280px}
+  /* сегменты и конструктор */
+  .segrow{display:flex;gap:2px;border:1px solid var(--border);border-radius:6px;overflow:hidden;width:fit-content;margin-bottom:14px}
+  .seg-btn{border:none;background:none;padding:8px 18px;font-size:14px;font-family:'Saira Condensed',sans-serif;font-weight:800;text-transform:uppercase;letter-spacing:.02em;color:var(--sub);cursor:pointer;transition:.15s}
+  .seg-btn.on{background:var(--grad);color:#fff}
+  .ct-btn{border:1px solid var(--border);background:var(--panel-2);color:var(--text);border-radius:8px;padding:8px 16px;font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;font-size:14px;letter-spacing:.03em;cursor:pointer;transition:.15s}
+  .ct-btn:hover{border-color:var(--sub)}
+  .ct-btn.primary{background:var(--grad);border-color:transparent;color:#fff}
+  .ct-cols{display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap;margin-bottom:18px}
+  .ct-panel{border:1px solid var(--border);border-radius:12px;background:var(--card);padding:14px;min-width:260px}
+  .ct-h{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;font-size:13px;letter-spacing:.05em;color:var(--sub);margin-bottom:10px}
+  .ct-pool{display:flex;flex-wrap:wrap;gap:6px;min-height:44px;max-width:340px}
+  .chip{display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border:1px solid var(--border);border-radius:8px;background:var(--panel-2);font-weight:600;font-size:13.5px;cursor:grab;user-select:none;transition:.12s}
+  .chip:hover{border-color:var(--sub)}
+  .chip .celo{font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--sub)}
+  .chip.drag{opacity:.4}
+  .ct-drop.over{outline:2px dashed var(--red);outline-offset:2px;border-radius:8px}
+  .ct-seedlist{display:flex;flex-direction:column;gap:6px;min-height:60px}
+  .ct-seedlist .chip{cursor:grab}
+  .ct-seed-n{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;color:var(--sub);width:22px;text-align:right}
+  .ct-group{border:1px solid var(--border);border-radius:10px;padding:10px;margin-bottom:10px;background:var(--panel-2)}
+  .ct-group .gh{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;font-size:13px;color:var(--sub)}
+  .ct-group .gh button{border:none;background:none;color:var(--sub);cursor:pointer;font-size:15px}
+  .ct-group .gbody{display:flex;flex-wrap:wrap;gap:6px;min-height:36px}
+  /* результат симуляции: раунды и матчи */
+  .ct-rounds{display:flex;gap:14px;overflow-x:auto;padding:4px 0 10px;align-items:flex-start}
+  .ct-round{min-width:230px;flex-shrink:0}
+  .ct-rh{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;font-size:13px;letter-spacing:.04em;color:var(--sub);margin-bottom:8px}
+  .ct-match{border:1px solid var(--border);border-radius:10px;background:var(--card);padding:8px 12px;margin-bottom:8px}
+  .ct-mrow{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:2px 0}
+  .ct-mrow .n{font-weight:600;font-size:14.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .ct-mrow .p{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--sub);flex-shrink:0}
+  .ct-mrow.fav .n,.ct-mrow.fav .p{color:#ff7587}
+  .ct-tbd{color:var(--sub);font-size:12.5px;font-style:italic}
+  /* footer (sync) */
+  footer{border-top:1px solid var(--border);background:#08080a;position:relative;z-index:1;margin-top:48px}
+  .foot{max-width:1280px;margin:0 auto;padding:24px 40px 18px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;text-align:center}
+  .lockup{display:inline-flex;align-items:center;gap:22px;background:#121215;padding:14px 28px;clip-path:polygon(16px 0,100% 0,100% calc(100% - 16px),calc(100% - 16px) 100%,0 100%,0 16px)}
+  .lockup .mk{height:42px;width:auto;display:block}
+  .lockup .hbmk{height:26px;width:auto;display:block;mix-blend-mode:lighten}
+  .lockup .spark{width:20px;height:20px;fill:#fff;flex-shrink:0;opacity:.9}
+  .fnav{display:flex;gap:6px;flex-wrap:wrap;justify-content:center}
+  .fnav a{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;font-size:15px;letter-spacing:.03em;color:var(--sub);padding:6px 12px;transition:.15s;text-decoration:none}
+  .fnav a:hover{color:#fff}
+  .fcopy{max-width:1280px;margin:0 auto;padding:14px 40px 20px;border-top:1px solid var(--border);font-family:'JetBrains Mono',monospace;font-size:11px;color:#5e5e66;letter-spacing:.03em;text-align:center}
+  .fcopy a{color:#5e5e66;text-decoration:none;transition:.15s}
+  .fcopy a:hover{color:var(--sub)}
+  .pic{width:24px;height:24px;border-radius:5px;display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;flex-shrink:0;font-family:'Rajdhani',sans-serif}
+  /* методология */
+  .method{border:1px solid var(--border);border-radius:14px;background:var(--card);margin-top:34px}
+  .method summary{cursor:pointer;padding:16px 20px;font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;font-size:17px;letter-spacing:.03em;color:var(--text);list-style:none;display:flex;align-items:center;gap:10px}
+  .method summary::before{content:"?";display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:var(--grad);color:#fff;font-size:14px;flex-shrink:0;font-style:normal}
+  .method[open] summary{border-bottom:1px solid var(--border)}
+  .m-body{padding:18px 22px 22px;font-size:14.5px;line-height:1.65;color:var(--text)}
+  .m-body h4{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;font-size:15px;margin:16px 0 6px;color:#fff}
+  .m-body h4:first-child{margin-top:0}
+  .m-body p{margin:0 0 10px}
+  .m-body code{font-family:'JetBrains Mono',monospace;font-size:12.5px;background:var(--panel-2);border:1px solid var(--border);border-radius:5px;padding:1px 6px;white-space:nowrap}
+  .m-body b{color:#fff}
+  .m-note{color:var(--sub);font-size:13px}
+</style>
+</head>
+<body>
+
+<!-- brand faceted background -->
+<svg class="facets" preserveAspectRatio="xMidYMid slice" viewBox="0 0 1440 900">
+  <defs>
+    <pattern id="poly" width="240" height="210" patternUnits="userSpaceOnUse">
+      <rect width="240" height="210" fill="#0b0b0d"/>
+      <polygon points="0,0 130,55 0,120" fill="#0e0e11"/>
+      <polygon points="130,55 240,0 240,110 150,140" fill="#0d0d10"/>
+      <polygon points="0,120 150,140 70,210 0,210" fill="#101014"/>
+      <polygon points="150,140 240,110 240,210 130,210" fill="#0c0c0f"/>
+      <polygon points="70,210 130,210 150,140" fill="#0f0f13"/>
+    </pattern>
+  </defs>
+  <rect width="1440" height="900" fill="url(#poly)"/>
+</svg>
+
+<div class="topstripe"></div>
+
+<!-- Header -->
+<div class="hdr">
+  <div style="display:flex;align-items:center;gap:18px">
+    <div class="brand">
+      <img class="mk" src="nexus-logo.png" alt="NEXUS">
+      <span class="wm">Nexus</span><span class="suf">Stats</span>
+    </div>
+    <nav class="nav">
+      <a href="index.html">Главная</a>
+      <a href="statistics.html">Статистика</a>
+      <a href="bracket.html">Турнирная сетка</a>
+      <a href="#" class="active">Аналитика</a>
+    </nav>
+  </div>
+  <div style="display:flex;align-items:center;gap:14px">
+    <a href="https://hornybox.ru/?r=Nexus_Shiyu" target="_blank" rel="noopener noreferrer" class="hbbtn">
+      <img src="hornybox-logo.png" alt="HornyBox">
+    </a>
+    <a href="https://twitch.tv/Nexus_Shiyu" target="_blank" class="livetw">
+      <svg viewBox="0 0 24 24"><path d="M4 2 2 6v14h5v3l3-3h4l6-6V2H4zm16 11-3 3h-4l-3 3v-3H6V4h14v9z"/><path d="M15 7h2v5h-2zM10 7h2v5h-2z"/></svg>
+      <span class="tw">Twitch</span>
+      <span class="vbar"></span>
+      <span class="lv">Live</span>
+      <span class="dot"></span>
+    </a>
+  </div>
+</div>
+
+<!-- Режимы прогноза -->
+<div class="modes">
+  <button class="mode-btn active" data-mode="pvp">Игрок vs Игрок</button>
+  <button class="mode-btn" data-mode="draft">Драфт vs Драфт</button>
+  <button class="mode-btn" data-mode="tour">Турнир</button>
+</div>
+
+<div id="loading" style="padding:60px 0;text-align:center"><div class="spinner"></div></div>
+
+<!-- ИГРОК VS ИГРОК -->
+<div class="pane" id="pane-pvp" style="display:none">
+  <div class="note">Шанс победы во встрече по Elo-рейтингу (ничьих во встречах не бывает — проценты в сумме дают 100). Рейтинг считается по играм всей истории турниров, ничья в игре = ½ очка; победа над сильным соперником даёт больше рейтинга, чем над слабым.</div>
+  <div class="vs-grid">
+    <div class="side-card sa">
+      <span class="side-lbl">Игрок 1</span>
+      <select id="pv-a" onchange="updatePvp()"></select>
+      <div class="pl-wrap" id="pvph-a"><div class="pl-init">?</div></div>
+      <div class="pl-stats" id="pvst-a">—</div>
+    </div>
+    <div class="vs-mid"><span class="vs-word">VS</span></div>
+    <div class="side-card sb">
+      <span class="side-lbl">Игрок 2</span>
+      <select id="pv-b" onchange="updatePvp()"></select>
+      <div class="pl-wrap" id="pvph-b"><div class="pl-init">?</div></div>
+      <div class="pl-stats" id="pvst-b">—</div>
+    </div>
+  </div>
+  <div class="res-panel" id="pvp-res"><div class="res-empty">Выбери двух игроков</div></div>
+  <div class="chwrap">
+    <div class="ch-h">Elo-рейтинг игроков</div>
+    <div class="chtbl" id="elo-tbl"></div>
+  </div>
+</div>
+
+<!-- ДРАФТ / ДРАФТ+ИГРОКИ -->
+<div class="pane" id="pane-draft" style="display:none">
+  <div class="note" id="draft-note"></div>
+  <div class="tour-pickrow">
+    <span class="side-lbl">Первый пик</span>
+    <select id="dr-fp" onchange="updateDraft()">
+      <option value="">не учитывать</option>
+      <option value="a">Драфт 1</option>
+      <option value="b">Драфт 2</option>
+    </select>
+    <span class="side-lbl">Шиюй</span>
+    <select id="dr-tour" onchange="updateDraft()"></select>
+  </div>
+  <div class="vs-grid">
+    <div class="side-card sa">
+      <span class="side-lbl">Драфт 1</span>
+      <div class="combo-row"><select id="cb-a" onchange="updateDraft()"></select></div>
+      <div class="slots" id="sl-a"></div>
+      <input type="text" class="pal-search" id="ps-a" placeholder="Поиск персонажа…" oninput="filterPal('a')">
+      <div class="palette" id="pal-a"></div>
+    </div>
+    <div class="vs-mid"><span class="vs-word">VS</span></div>
+    <div class="side-card sb">
+      <span class="side-lbl">Драфт 2</span>
+      <div class="combo-row"><select id="cb-b" onchange="updateDraft()"></select></div>
+      <div class="slots" id="sl-b"></div>
+      <input type="text" class="pal-search" id="ps-b" placeholder="Поиск персонажа…" oninput="filterPal('b')">
+      <div class="palette" id="pal-b"></div>
+    </div>
+  </div>
+  <div class="res-panel" id="draft-res"><div class="res-empty">Выбери персонажей обеих сторон</div></div>
+</div>
+
+<!-- ТУРНИР -->
+<div class="pane" id="pane-tour" style="display:none">
+  <div class="segrow">
+    <button id="tseg-data" class="seg-btn on" onclick="setTourView('data')">Турниры</button>
+    <button id="tseg-ctor" class="seg-btn" onclick="setTourView('ctor')">Конструктор</button>
+  </div>
+  <div id="tour-data">
+    <div class="note">Монте-Карло 10 000 симуляций: сыгранные матчи учтены как есть, несыгранные разыгрываются по Elo. Таблица пересчитывается автоматически по мере внесения результатов.</div>
+    <div class="tour-pickrow">
+      <select id="tour-sel" onchange="renderTour()"></select>
+    </div>
+    <div id="tour-out"></div>
+  </div>
+  <div id="tour-ctor" style="display:none">
+    <div class="note">Собери свой турнир: перетащи игроков в сетку или группы и нажми «Симулировать» — Монте-Карло по Elo покажет шансы каждого и вероятность победы в каждом матче.</div>
+    <div class="tour-pickrow">
+      <select id="ct-fmt" onchange="ctFmt()">
+        <option value="SE">Сетка · Single Elimination</option>
+        <option value="DE">Сетка · Double Elimination</option>
+        <option value="RR">Группы · Round Robin</option>
+      </select>
+      <button class="ct-btn" id="ct-addg" onclick="ctAddGroup()" style="display:none">+ Группа</button>
+      <button class="ct-btn primary" onclick="ctSimulate()">Симулировать</button>
+      <button class="ct-btn" onclick="ctReset()">Сброс</button>
+    </div>
+    <div class="ct-cols">
+      <div class="ct-panel">
+        <div class="ct-h">Игроки — тяни в сетку/группу</div>
+        <div class="ct-pool ct-drop" id="ct-pool" data-zone="pool"></div>
+      </div>
+      <div class="ct-panel" style="flex:1">
+        <div class="ct-h" id="ct-zh">Участники (порядок = сеяние)</div>
+        <div id="ct-zones"></div>
+      </div>
+    </div>
+    <div id="ct-out"></div>
+  </div>
+</div>
+
+<!-- Методология -->
+<div class="pane">
+  <details class="method">
+    <summary>Как и почему это считается</summary>
+    <div class="m-body">
+      <h4>Elo-рейтинг игроков</h4>
+      <p>Каждый игрок стартует с 1000. Все игры всей истории турниров проходятся в хронологическом порядке (турниры по дате, встречи в порядке сетки — он подтягивается из синхронизированных с Challonge сеток по раундам, игры по номеру). После каждой игры рейтинг обновляется: <code>R' = R + K·(S − E)</code>, где K = 40, S — результат (победа 1, ничья ½, поражение 0), а E — ожидаемый результат <code>E = 1 / (1 + 10^((Rb−Ra)/400))</code>. Смысл: победа над сильным соперником даёт много очков, над слабым — почти ничего; поражение от сильного почти не наказывается. Поэтому Elo честнее простого винрейта — он учитывает, <i>с кем</i> ты играл, и автоматически отражает текущую форму: свежие результаты сдвигают рейтинг, старые уже «впитаны». K=40 выбран по проверке на наших данных (он точнее предсказывает исходы, чем 30/32, и хорошо стареет с ростом числа игр). Шанс победы во встрече A против B — та же формула E от разницы их рейтингов (ничьих во встречах не бывает, проценты дают в сумме 100).</p>
+      <p><b>Стягивание для показа.</b> У игрока с 1–2 играми рейтинг ещё случаен, поэтому <i>показываемое</i> значение стягивается к 1000 тем сильнее, чем меньше игр: <code>показ = 1000 + (R − 1000)·n/(n + 8)</code>. Так лаки-стрик из пары игр не выкидывает новичка в топ. Важно: сами вероятности победы считаются по <i>сырому</i> рейтингу — стягивать прогноз означало бы гасить уверенность и предсказывать хуже (проверено).</p>
+      <h4>Винрейты персонажей (сила драфта)</h4>
+      <p>Для каждого персонажа берутся все его пики в сыгранных драфтах: побеждал ли игрок, взявший его (ничья = ½). Чтобы 1–2 удачные игры не делали персонажа «имбой», применяется байесовская поправка: к статистике добавляется 6 виртуальных игр с винрейтом 50% — редкие пики стягиваются к середине, у популярных поправка почти незаметна. Сила состава = средний такой винрейт его персонажей. Шанс драфта против драфта — формула log5 (Билл Джеймс): <code>P = a(1−b) / (a(1−b) + b(1−a))</code> — стандартный способ получить вероятность из двух «сил».</p>
+      <h4>Поправки: Шиюй, майндскейпы, первый пик, игроки</h4>
+      <p>· <b>Шиюй</b> — привязка к ротации (турниры группируются по ней): винрейты пересчитываются по матчам этой ротации, с прайором к общей истории — мало данных → тянет к базовому значению.<br>
+      · <b>Майндскейп</b> — статистика пика уточняется по конкретному M (прайор 4 игры к базовому винрейту персонажа): выше M реально выигрывал чаще → оценка растёт. A-ранги по умолчанию M6 (их дёшево прокачивают), S-ранги M0 — можно переопределить кликом.<br>
+      · <b>Первый пик</b> — глобальный винрейт fp-стороны по всем играм, добавляется как сдвиг.<br>
+      · <b>Игроки</b> — их Elo, плюс лёгкая (вес ×0.5) поправка на личный винрейт каждого именно с выбранными персонажами.<br>
+      Все компоненты складываются в лог-шансах (log-odds): <code>P = σ(logit(p₁) + logit(p₂) + …)</code> — так независимые свидетельства корректно усиливают или гасят друг друга, и итог всегда остаётся в пределах 0–100%.</p>
+      <h4>Шансы на турнир (Монте-Карло)</h4>
+      <p>Турнир «проигрывается» 10 000 раз: сыгранные матчи фиксированы как есть, каждый несыгранный разыгрывается случайно с вероятностью по Elo, победители продвигаются по структуре сетки (или набирают очки в группе). Доля симуляций, где игрок дошёл до финала или выиграл турнир, и есть его шанс. Почему симуляция, а не формула: в сетке важно, <i>кто с кем встретится</i>, а это зависит от исходов ранних матчей — аналитически такое дерево не сворачивается, а 10 000 прогонов дают точность порядка ±1%. После каждого внесённого результата ветка фиксируется, и вероятности автоматически перераспределяются между оставшимися.</p>
+      <p class="m-note">Ограничения: выборка маленькая (десятки игр на игрока), поэтому все оценки — ориентир, а не истина; синергии составов и контрпики модель пока не знает — только индивидуальные винрейты.</p>
+    </div>
+  </details>
+</div>
+
+<!-- Footer -->
+<footer>
+  <div class="foot">
+    <div class="lockup">
+      <img class="mk" src="nexus-logo.png" alt="NEXUS">
+      <svg class="spark" viewBox="0 0 24 24"><path d="M12 0c.6 6 5.4 10.8 12 12-6.6 1.2-11.4 6-12 12-.6-6-5.4-10.8-12-12C6.6 10.8 11.4 6 12 0z"></path></svg>
+      <a href="https://hornybox.ru/?r=Nexus_Shiyu" target="_blank" rel="noopener noreferrer">
+        <img class="hbmk" src="hornybox-logo.png" alt="HornyBox">
+      </a>
+    </div>
+    <nav class="fnav">
+      <a href="index.html">Главная</a>
+      <a href="statistics.html#chars">Персонажи</a>
+      <a href="statistics.html#players">Игроки</a>
+      <a href="bracket.html">Турнирная сетка</a>
+      <a href="predict.html">Аналитика</a>
+      <a href="https://twitch.tv/Nexus_Shiyu" target="_blank">Twitch</a>
+    </nav>
+  </div>
+  <div class="fcopy">NEXUS SHIYU © 2026 · Турнирный организатор по Zenless Zone Zero<br>
+    <a href="https://twitch.tv/Nexus_Shiyu" target="_blank" rel="noopener noreferrer">Twitch</a> ·
+    <a href="https://t.me/nexus_shiyu" target="_blank" rel="noopener noreferrer">Telegram</a> ·
+    <a href="https://discord.gg/6nKP7kWR78" target="_blank" rel="noopener noreferrer">Discord</a>
+  </div>
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>document.write('<script src="web/icons.js?v='+Date.now()+'"><\/script>');</script>
+<script>document.write('<script src="web/predict.js?v='+Date.now()+'"><\/script>');</script>
+<script>document.write('<script src="web/bracket-engine.js?v='+Date.now()+'"><\/script>');</script>
+<script>
+const SB_URL='https://zoavnckfbfiejxfjakue.supabase.co';
+const SB_KEY='sb_publishable_37RZBsmdp3O1i795EuEfeg_vFpdPTFZ';
+const sb=supabase.createClient(SB_URL,SB_KEY);
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+// Twitch live-статус (как на остальных страницах)
+(function(){
+  const pill=document.querySelector('.livetw'),lv=pill&&pill.querySelector('.lv');
+  if(!pill)return;
+  const apply=on=>{pill.classList.toggle('offline',!on);if(lv)lv.textContent=on?'Live':'Offline';};
+  apply(false);
+  fetch('https://decapi.me/twitch/uptime/Nexus_Shiyu',{cache:'no-store'})
+    .then(r=>r.ok?r.text():Promise.reject())
+    .then(t=>apply(!/offline|not found|error|unable/i.test(t)))
+    .catch(()=>{});
+})();
+
+// PostgREST режет выдачу на 1000 строк — большие таблицы тянем постранично.
+async function fetchAll(makeQuery){
+  const N=1000;const out=[];let from=0;
+  for(;;){
+    const{data,error}=await makeQuery().order('id',{ascending:true}).range(from,from+N-1);
+    if(error){console.error('fetchAll',error);break;}
+    if(!data||!data.length)break;
+    out.push(...data);
+    if(data.length<N)break;
+    from+=N;
+  }
+  return out;
+}
+
+// ---- порядок игр для Elo (из синканых сеток) ----
+// Транслит Cyrillic→Latin + нормализация: ники в наших данных и в Challonge
+// расходятся (4_poker_↔4покер, Denchik↔Денчик, kykan↔kykan_velikana).
+const _CY={а:'a',б:'b',в:'v',г:'g',д:'d',е:'e',ё:'e',ж:'zh',з:'z',и:'i',й:'i',к:'k',л:'l',м:'m',н:'n',о:'o',п:'p',р:'r',с:'s',т:'t',у:'u',ф:'f',х:'h',ц:'c',ч:'ch',ш:'sh',щ:'sch',ъ:'',ы:'y',ь:'',э:'e',ю:'yu',я:'ya'};
+const _norm=s=>(s||'').toLowerCase().replace(/[а-яё]/g,c=>_CY[c]??c).replace(/[^a-z0-9]/g,'');
+function _eqName(x,y){x=_norm(x);y=_norm(y);if(!x||!y)return false;if(x===y)return true;
+  const s=Math.min(x.length,y.length);if(s>=4&&(x.startsWith(y)||y.startsWith(x)))return true;
+  if(s>=5&&(x.includes(y)||y.includes(x)))return true;return false;}
+const _eqPair=(a1,a2,b1,b2)=>(_eqName(a1,b1)&&_eqName(a2,b2))||(_eqName(a1,b2)&&_eqName(a2,b1));
+
+// Упорядоченные пары матчей своей сетки (bracket_nodes, по player_id) — точный порядок.
+function _matchesFromNodes(nodes){
+  const ordP={W:0,L:1,GF:2};
+  return nodes.slice().filter(n=>n.player1_id&&n.player2_id)
+    .sort((a,b)=>(ordP[a.part]??3)-(ordP[b.part]??3)||a.round-b.round||a.slot-b.slot)
+    .map(n=>({p1:n.player1_id,p2:n.player2_id,byId:true}));
+}
+// Упорядоченные пары матчей из bracket_cache (Challonge). Если участник Challonge
+// связан с нашим player_id (tournament_participants.challonge_pid, заполняется синком) —
+// матчим точно по id; иначе по имени (фаззи). play_order (если есть) даёт точный
+// порядок игры, в т.ч. чередование верхней/нижней сетки в Double Elimination.
+function _matchesFromCache(cache,pidToPlayer){
+  const out=[];
+  (cache.rounds||[]).forEach(r=>(r.matches||[]).forEach(m=>{
+    const sa=m.a,sb=m.b;if(!sa||!sb)return;
+    const na=sa.name,nb=sb.name;
+    if(!na||!nb||na==='BYE'||nb==='BYE'||na==='—'||nb==='—')return;
+    const pa=pidToPlayer&&sa.pid!=null?pidToPlayer[String(sa.pid)]:null;
+    const pb=pidToPlayer&&sb.pid!=null?pidToPlayer[String(sb.pid)]:null;
+    const ord=m.play_order!=null?+m.play_order:null;
+    if(pa&&pb)out.push({p1:pa,p2:pb,byId:true,ord});
+    else out.push({n1:na,n2:nb,byId:false,ord});
+  }));
+  if(out.length&&out.every(m=>m.ord!=null))out.sort((x,y)=>x.ord-y.ord); // точный порядок игры
+  return out;
+}
+// enc.id → индекс порядка игры (0..1). Для турнира со связанной сеткой покрываем ВСЕ
+// встречи: сматченные — позицией в сетке, несматченные — их относительным sort_order,
+// обе шкалы нормируем в [0,1], чтобы порядок был согласован (иначе Elo мешал бы шкалы).
+function playOrderMap(){
+  const map={};
+  D.tours.forEach(t=>{
+    const encs=D.encs.filter(e=>e.tournament_id===t.id);
+    if(encs.length<2)return;
+    const nodes=D.nodes[t.id],cache=D.cache[t.id];
+    let seq=null;
+    if(nodes&&nodes.length)seq=_matchesFromNodes(nodes);
+    else if(cache){
+      // карта challonge_pid → наш player_id из синканых участников (точная привязка)
+      const pidToPlayer={};(D.parts[t.id]||[]).forEach(p=>{if(p.challonge_pid!=null)pidToPlayer[String(p.challonge_pid)]=p.player_id;});
+      seq=_matchesFromCache(cache,pidToPlayer);
+    }
+    if(!seq||!seq.length)return; // нет сетки — оставляем sort_order (в map не пишем)
+    const matched=new Map();const used=new Array(seq.length).fill(false);
+    encs.forEach(e=>{
+      const n1=D.playerMap[e.player1_id]?.nickname,n2=D.playerMap[e.player2_id]?.nickname;
+      for(let i=0;i<seq.length;i++){
+        if(used[i])continue;const s=seq[i];
+        const ok=s.byId?((s.p1===e.player1_id&&s.p2===e.player2_id)||(s.p1===e.player2_id&&s.p2===e.player1_id))
+                       :_eqPair(n1,n2,s.n1,s.n2);
+        if(ok){used[i]=true;matched.set(e.id,i);break;}
+      }
+    });
+    if(!matched.size)return;
+    const M=seq.length,N=encs.length;
+    const bySort=encs.slice().sort((a,b)=>(a.sort_order??1e9)-(b.sort_order??1e9));
+    bySort.forEach((e,i)=>{
+      map[e.id]=matched.has(e.id)?matched.get(e.id)/M:i/N; // обе в [0,1)
+    });
+  });
+  return map;
+}
+
+// ---- данные (вся история, грузится один раз) ----
+const D={};
+async function boot(){
+  const[ts,ps,cs,encs,ms,pks,pa,br,bn,rs,bc]=await Promise.all([
+    sb.from('tournaments').select('*').then(r=>r.data||[]),
+    sb.from('players').select('*').then(r=>r.data||[]),
+    sb.from('characters').select('*').then(r=>r.data||[]),
+    fetchAll(()=>sb.from('encounters').select('*')),
+    fetchAll(()=>sb.from('matches').select('*')),
+    fetchAll(()=>sb.from('match_picks').select('*')),
+    sb.from('tournament_participants').select('*').then(r=>r.data||[],()=>[]),
+    sb.from('brackets').select('*').then(r=>r.data||[],()=>[]),
+    sb.from('bracket_nodes').select('*').then(r=>r.data||[],()=>[]),
+    sb.from('tournament_results').select('*').then(r=>r.data||[],()=>[]),
+    sb.from('bracket_cache').select('*').then(r=>r.data||[],()=>[])
+  ]);
+  D.tours=ts.slice().sort((a,b)=>(a.sort_order??1e9)-(b.sort_order??1e9));
+  D.players=ps.slice().sort((a,b)=>(a.nickname||'').localeCompare(b.nickname||'','ru',{sensitivity:'base'}));
+  D.playerMap={};D.players.forEach(p=>D.playerMap[p.id]=p);
+  D.chars=cs.slice().sort((a,b)=>(a.name||'').localeCompare(b.name||''));
+  D.charMap={};D.chars.forEach(c=>D.charMap[c.id]=c);
+  D.encs=encs;
+  D.mbe={};const mmap={};ms.forEach(m=>{(D.mbe[m.encounter_id]=D.mbe[m.encounter_id]||[]).push(m);mmap[m.id]=m;});
+  D.parts={};pa.forEach(p=>{(D.parts[p.tournament_id]=D.parts[p.tournament_id]||[]).push(p);});
+  D.nodes={};const brTour={};br.forEach(b=>brTour[b.id]=b.tournament_id);
+  bn.forEach(n=>{const tid=brTour[n.bracket_id];if(tid)(D.nodes[tid]=D.nodes[tid]||[]).push(n);});
+  D.results={};rs.forEach(r=>{(D.results[r.tournament_id]=D.results[r.tournament_id]||[]).push(r);});
+  D.cache={};bc.forEach(c=>{D.cache[c.tournament_id]=c.json;});
+  // порядок встреч для Elo — из синканых сеток (Challonge/своя), иначе sort_order
+  D.playOrder=playOrderMap();
+  D.elo=Predict.buildRatings(D.tours,encs,D.mbe,D.playOrder);
+  // Отображаемый рейтинг стянут к 1000 по числу игр (n₀=8): игрок с 2 играми не висит
+  // в топе. ВАЖНО: вероятности/симуляции считаются по СЫРОМУ рейтингу (стягивание
+  // прогноза ухудшает его — проверено), поэтому eloRaw для математики, eloShown для показа.
+  D.N0=8;
+  D.picks=pks;D.mmap=mmap;
+  D.encTour={};encs.forEach(e=>D.encTour[e.id]=e.tournament_id);
+  D.cstats=Predict.charStats(pks,mmap);
+  // преимущество первого пика: доля побед fp-стороны по всем играм (ничья = ½)
+  {let w=0,n=0;ms.forEach(m=>{
+    if(!m.fp_player_id||(!m.winner_id&&!m.is_draw))return;
+    w+=m.is_draw?0.5:(m.winner_id===m.fp_player_id?1:0);n++;
+  });D.fpwr=n?w/n:0.5;}
+  // статистика пиков в разрезе майндскейпа (cid:ms) и лично игрока с персонажем (pid→cid)
+  D.msStats={};D.pcStats={};
+  pks.forEach(pk=>{
+    const m=mmap[pk.match_id];if(!m)return;
+    if(!m.winner_id&&!m.is_draw)return;
+    const wEq=m.is_draw?0.5:(m.winner_id===pk.player_id?1:0);
+    const k=pk.character_id+':'+(pk.mindscape||0);
+    const s=D.msStats[k]||(D.msStats[k]={games:0,wEq:0});s.games++;s.wEq+=wEq;
+    const pm=D.pcStats[pk.player_id]||(D.pcStats[pk.player_id]={});
+    const s2=pm[pk.character_id]||(pm[pk.character_id]={games:0,wEq:0});s2.games++;s2.wEq+=wEq;
+  });
+  // W/L по играм для карточек PvP
+  D.pstats={};
+  encs.forEach(e=>{
+    const games=(D.mbe[e.id]||[]);
+    games.forEach(m=>{
+      [e.player1_id,e.player2_id].forEach(pid=>{
+        if(!pid)return;const s=D.pstats[pid]||(D.pstats[pid]={w:0,d:0,l:0});
+        if(m.is_draw)s.d++;else if(m.winner_id===pid)s.w++;else if(m.winner_id)s.l++;
+      });
+    });
+  });
+  $('loading').style.display='none';
+  initPvp();initDraft();initTour();
+  const h=(location.hash||'').replace('#','')
+    .replace('combo','draft'); // старый deep-link «Драфт + Игроки» → объединённый режим
+  setMode(['pvp','draft','tour'].includes(h)?h:'pvp');
+}
+
+// ---- режимы ----
+let MODE='pvp';
+function setMode(m){
+  MODE=m;
+  document.querySelectorAll('.mode-btn').forEach(b=>b.classList.toggle('active',b.dataset.mode===m));
+  $('pane-pvp').style.display=m==='pvp'?'block':'none';
+  $('pane-draft').style.display=m==='draft'?'block':'none';
+  $('pane-tour').style.display=m==='tour'?'block':'none';
+  $('draft-note').textContent='Сила состава = винрейты персонажей в сыгранных драфтах (байес-поправка стягивает редких к 50%), до 6 пиков на сторону. Опции: чей первый пик, Шиюй (винрейты по матчам выбранного турнира с поправкой на общую историю) и игроки (Elo). Все оценки складываются в шансах (log-odds).';
+  if(m==='draft')updateDraft();
+  history.replaceState(null,'','#'+m);
+}
+document.querySelectorAll('.mode-btn').forEach(b=>b.onclick=()=>setMode(b.dataset.mode));
+
+const fPct=p=>(p*100).toFixed(1)+'%';
+// Сырой рейтинг — для всей математики (вероятности, Монте-Карло). Стянутый — только показ.
+const eloRaw=pid=>D.elo.ratings[pid]??1000;
+const eloShown=pid=>{const n=D.elo.games[pid]||0;return 1000+(eloRaw(pid)-1000)*n/(n+D.N0);};
+function resBar(nickA,pA,nickB){
+  const pa=(pA*100).toFixed(1),pb=((1-pA)*100).toFixed(1);
+  return`<div class="res-nums"><span><span class="na">${pa}%</span><span class="rn-nick">${esc(nickA)}</span></span><span><span class="rn-nick">${esc(nickB)}</span><span class="nb">${pb}%</span></span></div>
+  <div class="res-bar"><div class="fa" style="width:${pa}%"></div><div class="fb"></div></div>`;
+}
+
+// ---- игрок vs игрок ----
+function playedPlayers(){return D.players.filter(p=>(D.elo.games[p.id]||0)>0);}
+function playerOpts(ph){return`<option value="">${ph}</option>`+playedPlayers().map(p=>`<option value="${p.id}">${esc(p.nickname)}</option>`).join('');}
+function photoHtml(p){
+  const init=(p.nickname||'?').replace(/[^A-Za-zА-Яа-я0-9$]/g,'').slice(0,2).toUpperCase()||'—';
+  const sl=(p.nickname||'').trim().toLowerCase();
+  return`<div class="pl-init">${esc(init)}</div>`+(sl?`<img src="web/players/${esc(sl)}.webp" alt="" onerror="photoErr(this)">`:'');
+}
+function photoErr(img){
+  const ex=['webp','png','jpg'];
+  const cur=(img.src.split('.').pop()||'').toLowerCase();
+  const i=ex.indexOf(cur);
+  if(i>=0&&i<ex.length-1){img.src=img.src.replace(/\.[^.]+$/,'.'+ex[i+1]);return;}
+  img.remove();
+}
+function initPvp(){
+  $('pv-a').innerHTML=playerOpts('— игрок 1 —');
+  $('pv-b').innerHTML=playerOpts('— игрок 2 —');
+  renderEloTable();
+}
+function sideStats(pid,el,ph){
+  const p=D.playerMap[pid];
+  if(!p){ph.innerHTML='<div class="pl-init">?</div>';el.textContent='—';return;}
+  ph.innerHTML=photoHtml(p);
+  const s=D.pstats[pid]||{w:0,d:0,l:0};
+  const g=s.w+s.d+s.l,wr=g?((s.w+0.5*s.d)/g*100).toFixed(1):'0.0';
+  el.innerHTML=`Elo <b>${Math.round(eloShown(pid))}</b> · игр <b>${g}</b><br>W-D-L <b>${s.w}-${s.d}-${s.l}</b> · WR <b>${wr}%</b>`;
+}
+function updatePvp(){
+  const a=$('pv-a').value,b=$('pv-b').value,res=$('pvp-res');
+  sideStats(a,$('pvst-a'),$('pvph-a'));
+  sideStats(b,$('pvst-b'),$('pvph-b'));
+  if(!a||!b||a===b){res.innerHTML='<div class="res-empty">Выбери двух разных игроков</div>';return;}
+  const p=Predict.pElo(D.elo.ratings[a]??1000,D.elo.ratings[b]??1000);
+  const h=Predict.headToHead(a,b,D.encs,D.mbe);
+  const na=D.playerMap[a]?.nickname||'?',nb=D.playerMap[b]?.nickname||'?';
+  res.innerHTML=resBar(na,p,nb)+
+    `<div class="res-break"><span>Личные встречи (игры): <b>${h.w}–${h.d}–${h.l}</b>${h.w+h.d+h.l?'':' — не играли'}</span></div>`;
+}
+function renderEloTable(){
+  const rows=playedPlayers()
+    .map(p=>({p,elo:eloShown(p.id),g:D.elo.games[p.id]||0}))
+    .sort((a,b)=>b.elo-a.elo);
+  const mx=Math.max(...rows.map(r=>r.elo),1100);
+  const mn=Math.min(...rows.map(r=>r.elo),900);
+  const cols='40px 1fr 90px 160px';
+  $('elo-tbl').innerHTML=`<div class="chrow hd" style="grid-template-columns:${cols}"><div>#</div><div>Игрок</div><div>Elo</div><div>Σ игр</div></div>`+
+    rows.map((r,i)=>`<div class="chrow" style="grid-template-columns:${cols}">
+      <div class="num">${i+1}</div><div class="nm">${esc(r.p.nickname)}</div>
+      <div><span class="chpct">${Math.round(r.elo)}</span><div class="chbar"><i style="width:${((r.elo-mn)/(mx-mn)*100).toFixed(1)}%"></i></div></div>
+      <div class="mut">${r.g}</div></div>`).join('');
+}
+
+// ---- драфт ----
+const DR={a:[],b:[]};
+// Ротации Шиюй: на одну ротацию часто выпадает несколько турниров, поэтому группируем
+// турниры по shiyu_url (id ротации); без url турнир образует свою группу.
+function rotations(){
+  if(D.rots)return D.rots;
+  const by={};
+  D.tours.filter(t=>t.status!=='upcoming').forEach(t=>{
+    const key=t.shiyu_url||('t:'+t.id);
+    (by[key]=by[key]||{key,tids:[],names:[]}).tids.push(t.id);
+    by[key].names.push(t.name);
+  });
+  return D.rots=Object.values(by).map(r=>{
+    const num=(String(r.key).match(/shiyu\/(\d+)/)||[])[1];
+    r.label=(num?'Шиюй '+num+' · ':'')+r.names.join(' + ');
+    return r;
+  });
+}
+// Винрейты персонажей в разрезе ротации Шиюй: только матчи её турниров,
+// с байес-прайором к общему винрейту персонажа (мало игр → тянет к истории).
+const CSTATS_R={};
+function cstatsFor(rotKey){
+  if(!rotKey)return D.cstats;
+  if(CSTATS_R[rotKey])return CSTATS_R[rotKey];
+  const rot=rotations().find(r=>r.key===rotKey);
+  const tids=new Set(rot?rot.tids:[]);
+  const st={};
+  D.picks.forEach(pk=>{
+    const m=D.mmap[pk.match_id];if(!m)return;
+    if(!tids.has(D.encTour[m.encounter_id]))return;
+    if(!m.winner_id&&!m.is_draw)return;
+    const s=st[pk.character_id]||(st[pk.character_id]={games:0,wEq:0});
+    s.games++;s.wEq+=m.is_draw?0.5:(m.winner_id===pk.player_id?1:0);
+  });
+  const PRIOR=6;
+  Object.keys(st).forEach(cid=>{
+    const s=st[cid],g=(D.cstats[cid]&&D.cstats[cid].bwr)||0.5;
+    s.bwr=(s.wEq+PRIOR*g)/(s.games+PRIOR);
+  });
+  // персонажи без игр на этой ротации — общий байес-винрейт
+  Object.keys(D.cstats).forEach(cid=>{if(!st[cid])st[cid]={games:0,wEq:0,bwr:D.cstats[cid].bwr};});
+  return CSTATS_R[rotKey]=st;
+}
+function initDraft(){
+  $('dr-tour').innerHTML='<option value="">вся история</option>'+
+    rotations().map(r=>`<option value="${esc(r.key)}">${esc(r.label)}</option>`).join('');
+  ['a','b'].forEach(side=>{
+    $('pal-'+side).innerHTML=D.chars.map(c=>
+      `<div class="pal-it" data-cid="${c.id}" data-name="${esc((c.name||'').toLowerCase())}" title="${esc(c.name)}" onclick="togglePick('${side}','${c.id}')">${iconChar(c,32)}</div>`).join('');
+    renderSlots(side);
+  });
+  $('cb-a').innerHTML=playerOpts('— игрок (опц.) —');
+  $('cb-b').innerHTML=playerOpts('— игрок (опц.) —');
+}
+// A-ранги в турнирах почти всегда идут на M6 (дёшево прокачиваются) → дефолт M6,
+// S-ранги — M0. Пользователь может переопределить кликом по бейджу.
+const defaultMs=cid=>(D.charMap[cid]&&D.charMap[cid].rarity==='A')?6:0;
+function togglePick(side,cid){
+  const arr=DR[side],i=arr.findIndex(p=>p.cid===cid);
+  if(i>=0)arr.splice(i,1);
+  else{if(arr.length>=6)return;arr.push({cid,ms:defaultMs(cid)});}
+  renderSlots(side);updateDraft();
+}
+// клик по бейджу M — циклит майндскейп M0..M6
+function cycleMs(ev,side,idx){
+  ev.stopPropagation();
+  const p=DR[side][idx];if(!p)return;
+  p.ms=(p.ms+1)%7;
+  renderSlots(side);updateDraft();
+}
+function renderSlots(side){
+  const arr=DR[side];
+  $('sl-'+side).innerHTML=Array.from({length:6},(_,i)=>{
+    const p=arr[i];
+    return p?`<div class="slot filled" title="Клик — убрать" onclick="togglePick('${side}','${p.cid}')">${iconChar(D.charMap[p.cid],34)}<span class="ms-b${p.ms?' hot':''}" title="Майндскейп — клик меняет" onclick="cycleMs(event,'${side}',${i})">M${p.ms}</span></div>`
+      :`<div class="slot"></div>`;
+  }).join('');
+  document.querySelectorAll('#pal-'+side+' .pal-it').forEach(el=>{
+    el.classList.toggle(side==='a'?'on':'onb',arr.some(p=>p.cid===el.dataset.cid));
+  });
+}
+function filterPal(side){
+  const q=($('ps-'+side).value||'').toLowerCase().trim();
+  document.querySelectorAll('#pal-'+side+' .pal-it').forEach(el=>{
+    el.classList.toggle('hide',!!q&&!el.dataset.name.includes(q));
+  });
+}
+const logit=p=>Math.log(Math.min(1-1e-6,Math.max(1e-6,p))/(1-Math.min(1-1e-6,Math.max(1e-6,p))));
+const sigm=x=>1/(1+Math.exp(-x));
+// Винрейт пика с учётом майндскейпа: статистика (cid, M) с прайором к винрейту
+// персонажа (мало игр на конкретном M → тянет к базовому).
+const MS_PRIOR=4,PC_PRIOR=4,PC_W=0.5;
+function effBwr(p,stats){
+  const base=(stats[p.cid]&&stats[p.cid].bwr)||0.5;
+  const s=D.msStats[p.cid+':'+p.ms];
+  if(!s||!s.games)return base;
+  return(s.wEq+MS_PRIOR*base)/(s.games+MS_PRIOR);
+}
+const sideStrength=(arr,stats)=>{const v=arr.map(p=>effBwr(p,stats));return v.length?v.reduce((a,b)=>a+b,0)/v.length:0.5;};
+// Личный винрейт игрока на выбранных персонажах (прайор — винрейт персонажа).
+function pcBwr(pid,arr,stats){
+  const v=arr.map(p=>{
+    const base=(stats[p.cid]&&stats[p.cid].bwr)||0.5;
+    const s=D.pcStats[pid]&&D.pcStats[pid][p.cid];
+    return s&&s.games?(s.wEq+PC_PRIOR*base)/(s.games+PC_PRIOR):base;
+  });
+  return v.length?v.reduce((a,b)=>a+b,0)/v.length:0.5;
+}
+function updateDraft(){
+  const res=$('draft-res');
+  if(!DR.a.length||!DR.b.length){res.innerHTML='<div class="res-empty">Выбери персонажей обеих сторон</div>';return;}
+  const tid=$('dr-tour').value;
+  const stats=cstatsFor(tid);
+  const sa=sideStrength(DR.a,stats),sb=sideStrength(DR.b,stats);
+  const num=sa*(1-sb),pd=num/(num+sb*(1-sa)); // log5
+  let L=logit(pd);
+  const parts=[`<span>Сила составов (байес-WR${tid?', эта Шиюй':''}, с учётом M): <b>${fPct(sa)}</b> vs <b>${fPct(sb)}</b></span>`];
+  const fp=$('dr-fp').value;
+  if(fp){
+    L+=(fp==='a'?1:-1)*logit(D.fpwr);
+    parts.push(`<span>Первый пик (${fp==='a'?'Драфт 1':'Драфт 2'}): WR fp-стороны <b>${fPct(D.fpwr)}</b></span>`);
+  }
+  let na='Драфт 1',nb='Драфт 2';
+  // игроки — опционально: если выбраны оба, добавляем их Elo + лёгкую поправку
+  // на личный винрейт каждого с выбранными персонажами (вес ×0.5)
+  const a=$('cb-a').value,b=$('cb-b').value;
+  if(a&&b&&a!==b){
+    const pe=Predict.pElo(D.elo.ratings[a]??1000,D.elo.ratings[b]??1000);
+    L+=logit(pe);
+    const pca=pcBwr(a,DR.a,stats),pcb=pcBwr(b,DR.b,stats);
+    L+=PC_W*(logit(pca)-logit(pcb));
+    na=D.playerMap[a]?.nickname||na;nb=D.playerMap[b]?.nickname||nb;
+    parts.push(`<span>По игрокам (Elo): <b>${fPct(pe)}</b></span>`);
+    parts.push(`<span>Опыт на этих персонажах: <b>${fPct(pca)}</b> vs <b>${fPct(pcb)}</b> (вес ×${PC_W})</span>`);
+  }
+  const p=sigm(L);
+  if(parts.length>1)parts.push(`<span>Суммарно: <b>${fPct(p)}</b></span>`);
+  res.innerHTML=resBar(na,p,nb)+`<div class="res-break">${parts.join('')}</div>`;
+}
+
+// ---- конструктор турнира ----
+// CT.zones: для SE/DE одна зона (порядок = сеяние 1..N); для RR — группы.
+const CT={fmt:'SE',zones:[[]]};
+function setTourView(v){
+  $('tseg-data').classList.toggle('on',v==='data');
+  $('tseg-ctor').classList.toggle('on',v==='ctor');
+  $('tour-data').style.display=v==='data'?'block':'none';
+  $('tour-ctor').style.display=v==='ctor'?'block':'none';
+  if(v==='ctor')ctRender();
+}
+function ctFmt(){
+  CT.fmt=$('ct-fmt').value;
+  // сетка ← группы: все расставленные сливаются в один список сеяния; сетка → группы: в пул
+  CT.zones=CT.fmt==='RR'?[[],[]]:[CT.zones.flat()];
+  $('ct-addg').style.display=CT.fmt==='RR'?'inline-block':'none';
+  $('ct-zh').textContent=CT.fmt==='RR'?'Группы — тяни игроков внутрь':'Участники (порядок = сеяние)';
+  $('ct-out').innerHTML='';
+  ctRender();
+}
+function ctAddGroup(){CT.zones.push([]);ctRender();}
+function ctDelGroup(i){CT.zones.splice(i,1);if(!CT.zones.length)CT.zones=[[]];ctRender();}
+function ctReset(){CT.zones=CT.fmt==='RR'?[[],[]]:[[]];$('ct-out').innerHTML='';ctRender();}
+function ctChip(pid,draggable=true){
+  const p=D.playerMap[pid];if(!p)return'';
+  return`<div class="chip" draggable="${draggable}" data-pid="${pid}" ondragstart="ctDragStart(event)" ondragend="ctDragEnd(event)">${esc(p.nickname)}<span class="celo">${Math.round(eloShown(pid))}</span></div>`;
+}
+function ctRender(){
+  const used=new Set(CT.zones.flat());
+  $('ct-pool').innerHTML=playedPlayers().filter(p=>!used.has(p.id)).map(p=>ctChip(p.id)).join('')||'<span class="ct-tbd">все игроки расставлены</span>';
+  if(CT.fmt==='RR'){
+    $('ct-zones').innerHTML=CT.zones.map((g,i)=>`<div class="ct-group">
+      <div class="gh"><span>Группа ${String.fromCharCode(65+i)}</span><button title="Удалить группу" onclick="ctDelGroup(${i})">✕</button></div>
+      <div class="gbody ct-drop" data-zone="${i}">${g.map(pid=>ctChip(pid)).join('')}</div>
+    </div>`).join('');
+  }else{
+    $('ct-zones').innerHTML=`<div class="ct-seedlist ct-drop" data-zone="0">${CT.zones[0].map((pid,i)=>`<div style="display:flex;align-items:center;gap:8px"><span class="ct-seed-n">${i+1}</span>${ctChip(pid)}</div>`).join('')||'<span class="ct-tbd">перетащи сюда игроков</span>'}</div>`;
+  }
+  document.querySelectorAll('.ct-drop').forEach(z=>{
+    z.ondragover=e=>{e.preventDefault();z.classList.add('over');};
+    z.ondragleave=()=>z.classList.remove('over');
+    z.ondrop=e=>{e.preventDefault();z.classList.remove('over');ctDrop(e,z.dataset.zone);};
+  });
+}
+let CT_DRAG=null;
+function ctDragStart(e){CT_DRAG=e.target.dataset.pid;e.target.classList.add('drag');e.dataTransfer.effectAllowed='move';}
+function ctDragEnd(e){e.target.classList.remove('drag');}
+function ctDrop(e,zone){
+  const pid=CT_DRAG;if(!pid)return;CT_DRAG=null;
+  CT.zones.forEach(z=>{const i=z.indexOf(pid);if(i>=0)z.splice(i,1);}); // убрать откуда был
+  if(zone!=='pool'){
+    const z=CT.zones[+zone];if(!z)return ctRender();
+    // если бросили на конкретный чип — вставить перед ним (для порядка сеяния)
+    const tgt=e.target.closest('.chip');
+    const at=tgt?z.indexOf(tgt.dataset.pid):-1;
+    if(at>=0)z.splice(at,0,pid);else z.push(pid);
+  }
+  ctRender();
+}
+function ctSimulate(){
+  const R=D.elo.ratings,out=$('ct-out');
+  const pct=p=>p>=.0005?(p*100).toFixed(1)+'%':'—';
+  const cell=p=>`<div><span class="chpct">${pct(p)}</span><div class="chbar"><i style="width:${Math.min(100,p*100)}%"></i></div></div>`;
+  const nm=pid=>esc(D.playerMap[pid]?.nickname||'—');
+  const pairRow=(p1,p2)=>{ // строка матча с вероятностями
+    if(!p1&&!p2)return`<div class="ct-tbd">по итогам предыдущих</div>`;
+    if(!p1||!p2)return`<div class="ct-mrow"><span class="n">${nm(p1||p2)}</span><span class="p">BYE</span></div>`;
+    const p=Predict.pElo(R[p1]??1000,R[p2]??1000);
+    return`<div class="ct-mrow${p>=.5?' fav':''}"><span class="n">${nm(p1)}</span><span class="p">${(p*100).toFixed(1)}%</span></div>
+      <div class="ct-mrow${p<.5?' fav':''}"><span class="n">${nm(p2)}</span><span class="p">${((1-p)*100).toFixed(1)}%</span></div>`;
+  };
+  if(CT.fmt==='RR'){
+    const groups=CT.zones.map((g,i)=>({i,g})).filter(x=>x.g.length>=2);
+    if(!groups.length){out.innerHTML='<div class="panel"><h3>Мало игроков</h3><p>В группе должно быть минимум два игрока.</p></div>';return;}
+    out.innerHTML=groups.map(({i,g})=>{
+      const sim=Predict.simulateRoundRobin(g,[],R,10000);
+      const top=(pid,k)=>sim[pid].placeP.slice(0,k).reduce((a,b)=>a+b,0);
+      const rows=g.map(pid=>({pid,elo:eloShown(pid),exp:sim[pid].expPlace,p1:top(pid,1),p2:top(pid,2)})).sort((a,b)=>a.exp-b.exp);
+      const cols='40px 1fr 70px 90px 120px 120px';
+      let pairs='';
+      for(let x=0;x<g.length;x++)for(let y=x+1;y<g.length;y++)pairs+=`<div class="ct-match">${pairRow(g[x],g[y])}</div>`;
+      return`<div class="ch-h" style="margin-top:16px">Группа ${String.fromCharCode(65+i)}</div>
+      <div class="chtbl">
+        <div class="chrow hd" style="grid-template-columns:${cols}"><div>#</div><div>Игрок</div><div>Elo</div><div>Ожид. место</div><div>1 место</div><div>Топ-2</div></div>
+        ${rows.map((r,k)=>`<div class="chrow" style="grid-template-columns:${cols}"><div class="num">${k+1}</div><div class="nm">${nm(r.pid)}</div><div class="mut">${Math.round(r.elo)}</div><div class="chpct">${r.exp.toFixed(1)}</div>${cell(r.p1)}${cell(r.p2)}</div>`).join('')}
+      </div>
+      <div class="ct-rh" style="margin:12px 0 8px">Матчи группы</div>
+      <div class="ct-rounds"><div class="ct-round" style="min-width:0;display:flex;flex-wrap:wrap;gap:8px">${pairs}</div></div>`;
+    }).join('')+'<div class="chnote">Монте-Карло 10 000 симуляций на Elo · один круг, тайбрейк — жребий.</div>';
+    return;
+  }
+  // SE / DE
+  const parts=CT.zones[0];
+  if(parts.length<2){out.innerHTML='<div class="panel"><h3>Мало игроков</h3><p>Перетащи в сетку минимум двух игроков.</p></div>';return;}
+  const size=BracketEngine.nextPow2(parts.length);
+  const nodes=BracketEngine.generate(CT.fmt,size);
+  BracketEngine.seed(nodes,parts.map((pid,i)=>({player_id:pid,seed:i+1})),size);
+  const sim=Predict.simulateBracket(nodes,R,10000);
+  // раунды с матчами и вероятностями
+  const ordP={W:0,L:1,GF:2};
+  const byRound={};
+  nodes.forEach(n=>{const k=n.part+'|'+n.round;(byRound[k]=byRound[k]||[]).push(n);});
+  const keys=Object.keys(byRound).sort((a,b)=>{const[pa,ra]=a.split('|'),[pb,rb]=b.split('|');return ordP[pa]-ordP[pb]||(+ra-+rb);});
+  const rname=k=>{const[p,r]=k.split('|');return p==='GF'?'Гранд-финал':(p==='L'?'Нижняя · Раунд '+r:(CT.fmt==='DE'?'Верхняя · ':'')+'Раунд '+r);};
+  const roundsHtml=keys.map(k=>`<div class="ct-round"><div class="ct-rh">${rname(k)}</div>${
+    byRound[k].sort((a,b)=>a.slot-b.slot).map(n=>`<div class="ct-match">${n.is_bye?`<div class="ct-mrow"><span class="n">${nm(n.player1_id||n.player2_id)}</span><span class="p">BYE</span></div>`:pairRow(n.player1_id,n.player2_id)}</div>`).join('')
+  }</div>`).join('');
+  const pids=new Set();nodes.forEach(n=>{if(n.player1_id)pids.add(n.player1_id);if(n.player2_id)pids.add(n.player2_id);});
+  const rows=[...pids].map(pid=>({pid,elo:eloShown(pid),champ:sim[pid]?.champ||0,fin:sim[pid]?.final||0})).sort((a,b)=>b.champ-a.champ||b.fin-a.fin);
+  const cols='40px 1fr 70px 140px 140px';
+  out.innerHTML=`<div class="ct-rounds">${roundsHtml}</div>
+    <div class="ch-h" style="margin-top:10px">Шансы</div>
+    <div class="chtbl">
+      <div class="chrow hd" style="grid-template-columns:${cols}"><div>#</div><div>Игрок</div><div>Elo</div><div>${CT.fmt==='DE'?'Гранд-финал':'Финал'}</div><div>Победа</div></div>
+      ${rows.map((r,i)=>`<div class="chrow" style="grid-template-columns:${cols}"><div class="num">${i+1}</div><div class="nm">${nm(r.pid)}</div><div class="mut">${Math.round(r.elo)}</div>${cell(r.fin)}${cell(r.champ)}</div>`).join('')}
+    </div>
+    <div class="chnote">Монте-Карло 10 000 симуляций на Elo · проценты у матчей — вероятность победы в паре; поздние раунды зависят от исходов ранних.</div>`;
+}
+
+// ---- турнир ----
+function initTour(){
+  const opts=D.tours.map(t=>{
+    const st={live:' · LIVE',upcoming:' · скоро',finished:''}[t.status||'finished']||'';
+    return`<option value="${t.id}">${esc(t.name)}${st}</option>`;
+  }).join('');
+  $('tour-sel').innerHTML=opts;
+  // дефолт — live, иначе первый не-upcoming
+  const cur=D.tours.find(t=>t.status==='live')||D.tours.find(t=>t.status!=='upcoming')||D.tours[0];
+  if(cur)$('tour-sel').value=cur.id;
+  renderTour();
+}
+function renderTour(){
+  const t=D.tours.find(x=>String(x.id)===String($('tour-sel').value));
+  const out=$('tour-out');
+  if(!t){out.innerHTML='';return;}
+  const R=D.elo.ratings;
+  const pct=p=>p>=.0005?(p*100).toFixed(1)+'%':'—';
+  const cell=p=>`<div><span class="chpct">${pct(p)}</span><div class="chbar"><i style="width:${Math.min(100,p*100)}%"></i></div></div>`;
+  const nm=pid=>esc(D.playerMap[pid]?.nickname||'—');
+  const fmtType=(t.bracket_type||'SE').toUpperCase();
+  const finLbl=fmtType==='DE'?'Гранд-финал':'Финал';
+  const encs=D.encs.filter(e=>e.tournament_id===t.id);
+  const nodes=D.nodes[t.id]||[];
+  const bTable=rows=>{
+    const cols='40px 1fr 70px 140px 140px';
+    return`<div class="chtbl">
+      <div class="chrow hd" style="grid-template-columns:${cols}"><div>#</div><div>Игрок</div><div>Elo</div><div>${finLbl}</div><div>Победа в турнире</div></div>
+      ${rows.map((r,i)=>`<div class="chrow" style="grid-template-columns:${cols};${r.out?'opacity:.45':''}">
+        <div class="num">${r.place??i+1}</div><div class="nm">${nm(r.pid)}${r.out?' <span class="mut" style="font-size:12px">— выбыл</span>':''}</div>
+        <div class="mut">${Math.round(r.elo)}</div>${cell(r.fin)}${cell(r.champ)}</div>`).join('')}
+    </div>`;
+  };
+  // 1) точная симуляция по своей сетке
+  if(nodes.length){
+    const sim=Predict.simulateBracket(nodes,R,10000);
+    const pids=new Set();
+    nodes.forEach(n=>{if(n.player1_id)pids.add(n.player1_id);if(n.player2_id)pids.add(n.player2_id);});
+    const rows=[...pids].map(pid=>({pid,elo:eloShown(pid),champ:sim[pid]?.champ||0,fin:sim[pid]?.final||0}))
+      .sort((a,b)=>b.champ-a.champ||b.fin-a.fin||b.elo-a.elo);
+    if(!rows.length){out.innerHTML='<div class="panel"><h3>Сетка ещё не заполнена</h3><p>Шансы появятся, когда участники будут расставлены по сетке.</p></div>';return;}
+    out.innerHTML=bTable(rows)+'<div class="chnote">Точная симуляция по структуре сетки.</div>';
+    return;
+  }
+  // 2) группа / round robin
+  if(['GROUPS','RR','ROUNDROBIN','SWISS'].includes(fmtType)){
+    const pids=new Set((D.parts[t.id]||[]).map(p=>p.player_id));
+    encs.forEach(e=>{if(e.player1_id)pids.add(e.player1_id);if(e.player2_id)pids.add(e.player2_id);});
+    const players=[...pids].filter(Boolean);
+    if(players.length<2){out.innerHTML='<div class="panel"><h3>Недостаточно участников</h3><p>Шансы появятся, когда будут известны участники группы.</p></div>';return;}
+    const sim=Predict.simulateRoundRobin(players,encs,R,10000);
+    const top=(pid,k)=>sim[pid].placeP.slice(0,k).reduce((a,b)=>a+b,0);
+    const rows=players.map(pid=>({pid,elo:eloShown(pid),exp:sim[pid].expPlace,p1:top(pid,1),p2:top(pid,2),p4:top(pid,4)}))
+      .sort((a,b)=>a.exp-b.exp);
+    const wide=players.length>4;
+    const cols='40px 1fr 70px 90px 120px 120px'+(wide?' 120px':'');
+    out.innerHTML=`<div class="chtbl">
+      <div class="chrow hd" style="grid-template-columns:${cols}"><div>#</div><div>Игрок</div><div>Elo</div><div>Ожид. место</div><div>1 место</div><div>Топ-2</div>${wide?'<div>Топ-4</div>':''}</div>
+      ${rows.map((r,i)=>`<div class="chrow" style="grid-template-columns:${cols}">
+        <div class="num">${i+1}</div><div class="nm">${nm(r.pid)}</div><div class="mut">${Math.round(r.elo)}</div>
+        <div class="chpct">${r.exp.toFixed(1)}</div>${cell(r.p1)}${cell(r.p2)}${wide?cell(r.p4):''}</div>`).join('')}
+    </div><div class="chnote">Round robin: несыгранные пары круга разыгрываются по Elo.</div>`;
+    return;
+  }
+  // 3) SE/DE без своей сетки
+  const pids=new Set((D.parts[t.id]||[]).map(p=>p.player_id));
+  encs.forEach(e=>{if(e.player1_id)pids.add(e.player1_id);if(e.player2_id)pids.add(e.player2_id);});
+  const players=[...pids].filter(Boolean);
+  if(players.length<2){out.innerHTML='<div class="panel"><h3>Недостаточно данных</h3><p>Шансы появятся, когда будут известны участники и первые результаты.</p></div>';return;}
+  // завершённый турнир с местами — показываем факт
+  const resRows=(D.results[t.id]||[]).slice().sort((a,b)=>(a.place||99)-(b.place||99));
+  if((t.status||'')==='finished'&&resRows.length){
+    const rows=resRows.map(r=>({pid:r.player_id,place:r.place,elo:eloShown(r.player_id),champ:r.place===1?1:0,fin:r.place<=2?1:0}));
+    out.innerHTML=bTable(rows)+'<div class="chnote">Турнир завершён — показаны фактические итоги.</div>';
+    return;
+  }
+  const losses={};
+  encs.forEach(e=>{
+    if(!e.winner_id)return;
+    const l=e.winner_id===e.player1_id?e.player2_id:e.player1_id;
+    if(l)losses[l]=(losses[l]||0)+1;
+  });
+  const sim=Predict.simulateElimination(players,losses,fmtType,R,10000);
+  const rows=players.map(pid=>({pid,elo:eloShown(pid),out:(losses[pid]||0)>=(fmtType==='DE'?2:1),champ:sim[pid]?.champ||0,fin:sim[pid]?.final||0}))
+    .sort((a,b)=>b.champ-a.champ||b.fin-a.fin||b.elo-a.elo);
+  out.innerHTML=bTable(rows)+'<div class="chnote">Структура пар этой сетки не загружена — пары среди оставшихся разыгрываются жребием (приближение).</div>';
+}
+
+boot();
+</script>
+</body>
+</html>

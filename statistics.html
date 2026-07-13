@@ -21,7 +21,7 @@
   *{box-sizing:border-box;margin:0;padding:0}
   body{background:var(--bg);color:var(--text);font-family:'Rajdhani',sans-serif;min-height:100vh}
   /* faceted brand background */
-  .facets{position:fixed;inset:0;z-index:0;pointer-events:none}
+  .facets{position:fixed;inset:0;width:100%;height:100%;z-index:0;pointer-events:none}
   .topstripe{height:4px;background:var(--grad);position:sticky;top:0;z-index:50}
   body>*:not(.facets){position:relative;z-index:1}
   .disp{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;text-transform:uppercase;letter-spacing:.01em}
@@ -251,6 +251,7 @@
       <a href="index.html">Главная</a>
       <a href="#" class="active">Статистика</a>
       <a href="bracket.html">Турнирная сетка</a>
+      <a href="predict.html">Аналитика</a>
     </nav>
   </div>
   <div style="display:flex;align-items:center;gap:14px">
@@ -292,6 +293,7 @@
   <button class="tab-btn" data-tab="amps">Амплификаторы</button>
   <button class="tab-btn" data-tab="rating">Рейтинги</button>
   <button class="tab-btn" data-tab="ext">Расширенная</button>
+  <a class="tab-btn" href="predict.html" style="text-decoration:none;display:inline-flex;align-items:center">Аналитика</a>
   <button class="shiyu-btn" id="shiyu-btn" data-tab="shiyu">
     <svg class="sb-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2 4 6v6c0 5 3.4 8.3 8 10 4.6-1.7 8-5 8-10V6l-8-4z" stroke-linejoin="round"/></svg>
     Шиюй турнира
@@ -390,6 +392,7 @@
       <a href="statistics.html#chars">Персонажи</a>
       <a href="statistics.html#players">Игроки</a>
       <a href="bracket.html">Турнирная сетка</a>
+      <a href="predict.html">Аналитика</a>
       <a href="https://twitch.tv/Nexus_Shiyu" target="_blank">Twitch</a>
     </nav>
   </div>

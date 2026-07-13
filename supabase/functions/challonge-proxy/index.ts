@@ -69,6 +69,8 @@ function normalize(doc: any) {
       win: m.winner_id != null ? String(m.winner_id) : null,
       scores: m.scores_csv ?? "",
       ident: m.identifier ?? m.suggested_play_order ?? null,
+      // порядок фактической игры матча (для точной хронологии Elo, в т.ч. DE-интерливинга)
+      play_order: m.suggested_play_order ?? null,
       state: m.state,
     };
   });
@@ -115,6 +117,7 @@ function normalize(doc: any) {
         b: seat(m.p2, m.win),
         played: !!m.win,
         scores: m.scores || "",
+        play_order: m.play_order,     // порядок игры матча (для хронологии Elo)
       })),
   }));
 
@@ -131,7 +134,38 @@ function normalize(doc: any) {
   }
   participants.sort((a, b) => (a.seed ?? 1e9) - (b.seed ?? 1e9));
 
-  return { rounds, results, participants, source: "challonge", fetched_at: new Date().toISOString() };
+  // link — ВСЕ участники Challonge с их id (challonge_pid) и сеянием: используется
+  // на бэке для записи tournament_participants (точная связь challonge_pid ↔ player_id).
+  const link: { cid: string; name: string; seed: number | null }[] = [];
+  const seenCid = new Set<string>();
+  for (const wrap of (tour.participants ?? [])) {
+    const p = wrap.participant ?? wrap;
+    const cid = String(p.id);
+    if (seenCid.has(cid)) continue;
+    seenCid.add(cid);
+    link.push({ cid, name: p.name ?? p.display_name ?? "—", seed: p.seed ?? null });
+  }
+
+  return { rounds, results, participants, link, source: "challonge", fetched_at: new Date().toISOString() };
+}
+
+// ---- Резолв ника Challonge → наш player_id (транслит + осторожный фаззи) ----
+// Наши ники и ники в Challonge расходятся (4_poker_↔4покер, Denchik↔Денчик,
+// kykan↔kykan_velikana), поэтому точного равенства мало. Фаззи КОНСЕРВАТИВНЫЙ:
+// при неоднозначности (≥2 кандидатов) возвращаем null, чтобы не записать чужого.
+const _CY: Record<string, string> = { а:"a",б:"b",в:"v",г:"g",д:"d",е:"e",ё:"e",ж:"zh",з:"z",и:"i",й:"i",к:"k",л:"l",м:"m",н:"n",о:"o",п:"p",р:"r",с:"s",т:"t",у:"u",ф:"f",х:"h",ц:"c",ч:"ch",ш:"sh",щ:"sch",ъ:"",ы:"y",ь:"",э:"e",ю:"yu",я:"ya" };
+const nrm = (s: string) => (s ?? "").toLowerCase().replace(/[а-яё]/g, (c) => _CY[c] ?? c).replace(/[^a-z0-9]/g, "");
+function resolvePid(name: string, players: { id: string; n: string }[]): string | null {
+  const n = nrm(name);
+  if (!n) return null;
+  const exact = players.filter((p) => p.n === n);
+  if (exact.length === 1) return exact[0].id;
+  if (exact.length > 1) return null;                    // одинаковые ники — неоднозначно
+  const fuzzy = players.filter((p) => {
+    const s = Math.min(p.n.length, n.length);
+    return (s >= 4 && (p.n.startsWith(n) || n.startsWith(p.n))) || (s >= 5 && (p.n.includes(n) || n.includes(p.n)));
+  });
+  return fuzzy.length === 1 ? fuzzy[0].id : null;       // ровно один кандидат — иначе пропуск
 }
 
 Deno.serve(async (req) => {
@@ -165,7 +199,7 @@ Deno.serve(async (req) => {
       ? createClient(SB_URL, SB_ANON, { auth: { persistSession: false }, global: { headers: { Authorization: authHeader } } })
       : createClient(SB_URL, SB_SR, { auth: { persistSession: false } });
 
-    const synced = { cached: false, cacheError: null as string | null, results_written: 0, results_skipped_manual: 0, unmatched: [] as string[] };
+    const synced = { cached: false, cacheError: null as string | null, results_written: 0, results_skipped_manual: 0, unmatched: [] as string[], participants_written: 0, participants_unmatched: [] as string[] };
 
     if (db_id) {
       // 1) кэш модели сетки (читается bracket.html напрямую)
@@ -173,10 +207,23 @@ Deno.serve(async (req) => {
       synced.cached = !cw.error;
       synced.cacheError = cw.error ? (cw.error.message || JSON.stringify(cw.error)) : null;
 
-      // 2) синк МЕСТ + АВТО-ПРИЗОВЫХ по распределению (граница ручное/авто)
+      // общий список игроков (нормализованные ники) для резолва мест и участников
+      const { data: players } = await admin.from("players").select("id,nickname");
+      const plist = (players ?? []).map((p: any) => ({ id: p.id as string, n: nrm(String(p.nickname)) }));
+
+      // 2) синк УЧАСТНИКОВ: точная связь challonge_pid ↔ player_id (+ сеяние). Нужна
+      // аналитике для точного порядка встреч в сетке (Elo). Upsert по (tournament_id, player_id).
+      for (const lp of (model.link ?? [])) {
+        const pid = resolvePid(lp.name, plist);
+        if (!pid) { synced.participants_unmatched.push(lp.name); continue; }
+        const up = await admin.from("tournament_participants").upsert(
+          { tournament_id: db_id, player_id: pid, seed: lp.seed, challonge_pid: lp.cid, challonge_name: lp.name },
+          { onConflict: "tournament_id,player_id" });
+        if (!up.error) synced.participants_written++;
+      }
+
+      // 3) синк МЕСТ + АВТО-ПРИЗОВЫХ по распределению (граница ручное/авто)
       if (model.results.length) {
-        const { data: players } = await admin.from("players").select("id,nickname");
-        const byNick = new Map((players ?? []).map((p: any) => [String(p.nickname).toLowerCase(), p.id]));
         const { data: existing } = await admin.from("tournament_results").select("player_id,source").eq("tournament_id", db_id);
         const srcByPlayer = new Map((existing ?? []).map((r: any) => [r.player_id, r.source]));
 
@@ -190,7 +237,7 @@ Deno.serve(async (req) => {
         }
 
         for (const r of model.results) {
-          const pid = byNick.get(String(r.name).toLowerCase());
+          const pid = resolvePid(r.name, plist);
           if (!pid) { synced.unmatched.push(r.name); continue; }
           if (srcByPlayer.get(pid) === "manual") { synced.results_skipped_manual++; continue; } // НЕ перетираем ручное
           const row: any = { tournament_id: db_id, player_id: pid, place: r.place, final_rank: r.place, source: "challonge", synced_at: model.fetched_at };
