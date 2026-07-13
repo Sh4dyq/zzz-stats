@@ -180,8 +180,8 @@ async function pgMatches(){
     </div>
     <div style="font-size:11px;color:var(--sub);margin-bottom:8px">Если ник новый — игрок создастся автоматически.</div>
     <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px">
-      <input id="e-link1" type="text" placeholder="ссылка драфта shiyu.darte.gg — Матч 1 (для создания с результатом)" style="padding:6px 10px;font-size:13px">
-      <input id="e-link2" type="text" placeholder="ссылка драфта shiyu.darte.gg — Матч 2 (для создания с результатом)" style="padding:6px 10px;font-size:13px">
+      <input id="e-link1" type="text" placeholder="ссылка драфта (…/drafts/<id>?adminToken=…) — Матч 1 (для создания с результатом)" style="padding:6px 10px;font-size:13px">
+      <input id="e-link2" type="text" placeholder="ссылка драфта (…/drafts/<id>?adminToken=…) — Матч 2 (для создания с результатом)" style="padding:6px 10px;font-size:13px">
     </div>
     <div id="enc-quick-status" style="font-size:11px;color:var(--sub);min-height:13px;margin-bottom:8px"></div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -193,9 +193,9 @@ async function pgMatches(){
   <details class="panel">
     <summary>⚡ Массовый импорт по ссылкам<span class="chev">▾</span></summary>
     <div class="panel-body">
-    <div style="font-size:11px;color:var(--sub);margin-bottom:8px">Вставь ВСЕ ссылки shiyu.darte.gg (по одной на строку, любой порядок). Парами по игрокам соберутся встречи (матч 1 и 2), импортируются результаты И полные ростеры обоих игроков. Существующие встречи переиспользуются (не дублируются). Если пара сыграла больше одного Bo2 — включи «Разрешить рематчи», иначе лишние игры будут пропущены, а не затёрты.</div>
+    <div style="font-size:11px;color:var(--sub);margin-bottom:8px">Вставь ВСЕ ссылки драфтов (с adminToken) (по одной на строку, любой порядок). Парами по игрокам соберутся встречи (матч 1 и 2), импортируются результаты И полные ростеры обоих игроков. Существующие встречи переиспользуются (не дублируются). Если пара сыграла больше одного Bo2 — включи «Разрешить рематчи», иначе лишние игры будут пропущены, а не затёрты.</div>
     <div style="margin-bottom:8px;max-width:340px"><label>Турнир</label>${sel('bulk-tour',D.tours,x=>x.id,x=>x.name)}</div>
-    <textarea id="bulk-links" rows="8" placeholder="https://shiyu.darte.gg/draft?draft_id=...&session_key=...&#10;https://shiyu.darte.gg/draft?draft_id=...&session_key=..." style="width:100%;min-height:120px;padding:8px 10px;font-size:12px;font-family:'JetBrains Mono',monospace;resize:both"></textarea>
+    <textarea id="bulk-links" rows="8" placeholder="https://<сайт>/api/drafts/<id>/draftinfo?adminToken=...&#10;https://<сайт>/api/drafts/<id>/draftinfo?adminToken=..." style="width:100%;min-height:120px;padding:8px 10px;font-size:12px;font-family:'JetBrains Mono',monospace;resize:both"></textarea>
     <label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--sub);margin:8px 0;cursor:pointer"><input type="checkbox" id="bulk-allow-rematch" style="width:auto;margin:0">Разрешить рематчи (несколько Bo2 на одну пару — создаст доп. встречи)</label>
     <div id="bulk-status" style="font-size:11px;color:var(--sub);min-height:13px;margin:8px 0"></div>
     <button class="btn btn-g" onclick="bulkImportDrafts()">Импортировать всё</button>
@@ -361,21 +361,19 @@ async function bulkImportDrafts(){
   const t=v('bulk-tour');
   if(!t)return toast('Выбери турнир','err');
   const raw=document.getElementById('bulk-links')?.value||'';
-  const links=raw.split(/\s+/).map(s=>s.trim()).filter(s=>/(?:draft_id|session_id)=/.test(s));
+  const links=raw.split(/\s+/).map(s=>s.trim()).filter(s=>/adminToken=/.test(s));
   if(!links.length)return toast('Вставь ссылки (по одной на строку)','err');
   const set=m=>{const el=document.getElementById('bulk-status');if(el)el.textContent=m;};
   const{data:tRow}=await sb.from('tournaments').select('restart_penalties').eq('id',t).maybeSingle();
   const pen=tRow?.restart_penalties||[];
-  const ids=await loadShiyuIds();
   // 1) читаем драфты → имена игроков (player0=фп, player1=дабл)
   const metas=[],errs=[];
   for(let i=0;i<links.length;i++){
     set(`Читаю драфты… ${i+1}/${links.length}`);
     try{
-      const parsed=parseDraftLink(links[i]);if(!parsed)throw new Error('не разобрал ссылку');
-      const state=await fetchDraftState(parsed.id,parsed.key);
-      if(!state?.players)throw new Error('пустой драфт');
-      const norm=normalizeDraft(state,ids);
+      const endpoint=parseDraftLink(links[i]);if(!endpoint)throw new Error('не разобрал ссылку');
+      const state=await fetchDraftState(endpoint);
+      const norm=normalizeDraft(state);
       // фп = реальный первоходящий (actor слота 1), не всегда player0 — иначе обе
       // игры пары получают одинаковый match_number и вторая перезатирает первую.
       const fpKey=norm.firstActor,dblKey=fpKey==='player1'?'player0':'player1';
@@ -445,12 +443,10 @@ async function bulkImportDrafts(){
 // победитель по сумме таймеров). Бросает Error при сбое.
 async function importMatchFromLink(encId,num,p1Id,p2Id,link,pen){
   pen=pen||[];
-  const parsed=parseDraftLink(link);
-  if(!parsed)throw new Error('не разобрал ссылку');
-  const ids=await loadShiyuIds();
-  const state=await fetchDraftState(parsed.id,parsed.key);
-  if(!state||!state.players)throw new Error('пустой драфт');
-  const norm=normalizeDraft(state,ids);
+  const endpoint=parseDraftLink(link);
+  if(!endpoint)throw new Error('не разобрал ссылку');
+  const state=await fetchDraftState(endpoint);
+  const norm=normalizeDraft(state);
   const fpId=num===1?p1Id:p2Id,dblId=num===1?p2Id:p1Id;
   const fp=D.players.find(p=>p.id===fpId),dbl=D.players.find(p=>p.id===dblId);
   const ps=[norm.players.player0,norm.players.player1];
@@ -459,7 +455,8 @@ async function importMatchFromLink(encId,num,p1Id,p2Id,link,pen){
   let sFp=find(fp?.nickname),sDbl=find(dbl?.nickname);
   if(!sFp||!sDbl||sFp===sDbl){sFp=norm.players.player0;sDbl=norm.players.player1;}
   const penSum=r=>{let s=0;for(let i=0;i<(r||0)&&i<pen.length;i++)s+=(+pen[i]||0);return s;};
-  const eff=p=>p.clearTime==null?null:p.clearTime+penSum(p.restarts);
+  // finalTime сайта уже включает штраф; пересчитываем от чистого времени только при оверрайде турнира.
+  const eff=p=>pen.length?(p.clearTime==null?null:p.clearTime+penSum(p.restarts)):(p.finalTime??p.clearTime);
   const fpT=eff(sFp),dblT=eff(sDbl);
   const p1Timer=fpId===p1Id?fpT:dblT,p2Timer=fpId===p1Id?dblT:fpT;
   const p1R=fpId===p1Id?(sFp.restarts||0):(sDbl.restarts||0);
@@ -525,7 +522,7 @@ async function importMatchFromLink(encId,num,p1Id,p2Id,link,pen){
 
 // ===== Автозаполнение ростеров из результатов =====
 // Заполняет ростеры ДВУХ игроков из их ПОЛНОГО ростера в драфте (источник —
-// ссылка shiyu.darte.gg): agents — массив {player_id, character_id, mindscape}
+// ссылка драфта нексуса): agents — массив {player_id, character_id, mindscape}
 // со ВСЕМИ персонажами, что игроки принесли в этот матч (17+), не только пикнутыми.
 // Пишет в player_rosters
 // с source='auto', сливая с уже имеющимся авто-ростером (новые персонажи
@@ -597,7 +594,7 @@ async function openMatch(encId,num,p1Id,p2Id){
   </style>
   <div class="mbar">
     <button class="btn btn-g" style="padding:6px 12px;font-size:13px" onclick="go('matches')">← Встречи</button>
-    <input id="draft-link" type="text" placeholder="ссылка shiyu.darte.gg (draft_id + session_key)…" style="flex:1;min-width:200px;padding:6px 10px;font-size:13px">
+    <input id="draft-link" type="text" placeholder="ссылка драфта (…/drafts/<id>?adminToken=…)" style="flex:1;min-width:200px;padding:6px 10px;font-size:13px">
     <button class="btn btn-g" style="padding:6px 14px;font-size:13px" onclick="importDraftFromLink()">Импорт</button>
     <button class="btn btn-y" style="padding:6px 18px;font-size:13px" onclick="saveMatch('${encId}','${num}','${p1Id}','${p2Id}','${fpId}','${mid}')" style="padding:6px 18px;font-size:13px;white-space:nowrap">Сохранить матч</button>
   </div>

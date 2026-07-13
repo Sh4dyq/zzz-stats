@@ -906,7 +906,7 @@ function costsTopControls(tourId,penalties){
   return`<div class="card" style="margin-bottom:16px">
     <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
       <span style="font-weight:600;font-size:14px">Импорт из ссылки драфта:</span>
-      <input id="rs-link" type="text" placeholder="ссылка shiyu.darte.gg…" style="flex:1;min-width:220px;padding:6px 10px;font-size:13px">
+      <input id="rs-link" type="text" placeholder="ссылка драфта (adminToken)…" style="flex:1;min-width:220px;padding:6px 10px;font-size:13px">
       <button class="btn btn-g" style="font-size:13px;padding:6px 14px" onclick="importTourRuleset('${tourId}')">Загрузить косты и штрафы</button>
       <button class="btn btn-y" style="font-size:13px;padding:6px 16px" onclick="saveAllCosts('${tourId}')">Сохранить всё</button>
     </div>
@@ -1001,71 +1001,13 @@ function charCostsSection(tourId,tourName,existing,penalties){
   <div style="font-size:11px;color:var(--sub);margin-top:12px">Сохранение — кнопкой <b>«Сохранить всё»</b> вверху страницы.</div>`;
 }
 
-// Рулсет (косты+штрафы) тянем вживую через Edge Function shiyu-system — она проксирует
-// draft_systems/agents/engines (CORS залочен на shiyu origin) и резолвит ObjectId→enka.
-// Так новая система подхватывается одной кнопкой, без fetch_system.py и без коммита.
-const _sysCache={};
-async function fetchSystemRuleset(systemId){
-  if(_sysCache[systemId])return _sysCache[systemId];
-  const r=await fetch(`${SB_URL}/functions/v1/shiyu-system?system=${encodeURIComponent(systemId)}`,
-    {headers:{apikey:SB_KEY,Authorization:`Bearer ${SB_KEY}`}});
-  const d=await r.json().catch(()=>({}));
-  if(!r.ok||d.error)throw new Error(d.error||`shiyu-system ${r.status}`);
-  _sysCache[systemId]=d;return d;
-}
-
-// Импорт костов персонажей (по минскейпам) + штрафов рестартов из ссылки драфта.
+// Импорт костов персонажей + штрафов из ссылки драфта. Для нового сайта пока
+// недоступен: в draftinfo только косты текущего минскейпа/ранга, а для сетки
+// M0–M6 / R1–R5 / bis нужен отдельный API костов (когда появится — вернуть
+// заполнение формы, старая darte-версия в истории git).
 async function importTourRuleset(tourId){
   const st=document.getElementById('rs-status');
-  const set=m=>{if(st)st.textContent=m;};
-  const url=document.getElementById('rs-link')?.value?.trim();
-  if(!url)return set('Вставь ссылку на драфт');
-  if(typeof fetchDraftState!=='function')return set('draft-import.js не загружен');
-  const parsed=parseDraftLink(url);
-  if(!parsed)return set('Не разобрал ссылку (нужны draft_id и session_key)');
-  set('Загружаю рулсет…');
-  try{
-    const state=await fetchDraftState(parsed.id,parsed.key);
-    const sys=await fetchSystemRuleset(state.system);
-    const base=e=>String(e).split('_')[0];
-    const byEnka={};D.chars.forEach(c=>{if(c.enka_id)byEnka[base(c.enka_id)]=c;});
-    let filled=0,miss=0;
-    Object.entries(sys.agents).forEach(([enka,costs])=>{
-      const c=byEnka[enka];if(!c){miss++;return;}
-      costs.forEach((cost,ms)=>{const el=document.querySelector(`.ci-ms[data-c="${c.id}"][data-m="${ms}"]`);if(el){el.value=cost;filled++;}});
-    });
-    const pen=Array(sys.restart?.free||0).fill(0).concat(sys.restart?.paid||[]);
-    document.querySelectorAll('.rp-in').forEach((el,i)=>{el.value=pen[i]??'';});
-    if(typeof updatePenaltyHint==='function')updatePenaltyHint();
-    // Косты амплификаторов: R1–R5 = own-role base[0..4]; оффроль = base[5]; bis → отдельные строки.
-    let ampFilled=0;
-    D.sigs.forEach(s=>{
-      const engEnka=s.enka_id?base(s.enka_id):null;
-      const ch=D.chars.find(x=>x.id===s.character_id);
-      const ownerEnka=ch&&ch.enka_id?base(ch.enka_id):null;
-      const e=engEnka?sys.engines?.[engEnka]:null;if(!e)return;
-      const bs=e.base||[];
-      for(let i=0;i<5;i++){const el=document.querySelector(`.ac-in[data-sig="${s.id}"][data-r="${i}"]`);if(el&&bs[i]!=null){el.value=bs[i];ampFilled++;}}
-      // оффроль (флэт base[5])
-      const offEl=document.querySelector(`.ac-off[data-sig="${s.id}"]`);
-      if(offEl&&bs[5]!=null){offEl.value=bs[5];ampFilled++;}
-      // bis: строка на каждого переопределённого агента, ВКЛЮЧАЯ владельца.
-      // В рулсете shiyu base[] = кост для обычного агента своей роли (не-владельца),
-      // а bis[ownerEnka] = реальный (BIS) кост самого владельца — он ВЫШЕ base и должен
-      // резолвиться для пика владельца. Поэтому владельца тоже пишем bis-строкой
-      // (statistics.sigCostOf: bis[cid] → own → off), не теряя его настоящий кост.
-      const cont=document.getElementById('bis-rows-'+s.id);
-      if(cont&&e.bis){
-        cont.innerHTML='';
-        Object.entries(e.bis).forEach(([agentEnka,costs])=>{
-          const bc=byEnka[agentEnka];if(!bc)return;  // агента нет в БД
-          cont.insertAdjacentHTML('beforeend',bisRowHtml(s.id,s.character_id,bc.id,costs||[]));
-          ampFilled++;
-        });
-      }
-    });
-    set(`Заполнено ${filled} костов персонажей + ${ampFilled} ячеек амплификаторов из «${sys.title}» (лимит ${sys.costLimit}), штрафы [${pen.join(',')||'нет'}]`+(miss?` · ${miss} агентов нет в БД`:'')+'. Проверь и нажми «Сохранить» в обоих блоках.');
-  }catch(e){set('Ошибка: '+e.message);}
+  if(st)st.textContent='Импорт рулсета с нового сайта пока недоступен: в драфте нет полной сетки костов. Штрафы рестартов подтянутся при импорте матча.';
 }
 
 async function copyCosts(tourId){
