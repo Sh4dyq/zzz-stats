@@ -94,9 +94,9 @@
   .res-bar .fb{background:linear-gradient(90deg,#22b8b5,#3dd9d6);flex:1}
   .res-empty{text-align:center;color:var(--sub);font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;font-size:15px;letter-spacing:.04em;padding:8px 0}
   /* драфт */
-  .slots{display:grid;grid-template-columns:repeat(3,46px);gap:6px;justify-content:center}
-  .slot{position:relative;width:46px;height:46px;border:1px dashed #34343b;border-radius:9px;display:flex;align-items:center;justify-content:center;cursor:pointer;background:var(--panel-2);transition:.12s}
-  .ms-b{position:absolute;right:-6px;bottom:-6px;z-index:2;font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:600;line-height:1;padding:2px 3px;border-radius:5px;background:var(--panel-3);border:1px solid var(--border);color:var(--sub);cursor:pointer}
+  .slots{display:grid;grid-template-columns:repeat(3,96px);gap:8px;justify-content:center}
+  .slot{position:relative;width:96px;height:96px;border:1px dashed #34343b;border-radius:14px;display:flex;align-items:center;justify-content:center;cursor:pointer;background:var(--panel-2);transition:.12s}
+  .ms-b{position:absolute;right:-4px;bottom:-4px;z-index:2;font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:600;line-height:1;padding:3px 5px;border-radius:6px;background:var(--panel-3);border:1px solid var(--border);color:var(--sub);cursor:pointer}
   .ms-b:hover{color:var(--text);border-color:var(--sub)}
   .ms-b.hot{background:rgba(245,200,66,.15);border-color:rgba(245,200,66,.5);color:var(--gold)}
   .slot:hover{border-color:var(--sub)}
@@ -108,7 +108,8 @@
   .pal-it.on{border-color:var(--red);background:rgba(255,31,68,.14);opacity:1}
   .sb .pal-it.on,.pal-it.onb{border-color:var(--cyan);background:rgba(61,217,214,.12);opacity:1}
   .pal-it.hide{display:none}
-  .combo-row{margin-top:2px}
+  .combo-row{margin-top:2px;display:flex;justify-content:center}
+  .combo-row select{min-width:180px;text-align:center}
   .res-break{display:flex;gap:22px;flex-wrap:wrap;justify-content:center;margin-top:8px;font-family:'JetBrains Mono',monospace;font-size:12.5px;color:var(--sub)}
   .res-break b{color:var(--text);font-weight:600}
   /* таблицы (Elo / шансы) */
@@ -140,6 +141,10 @@
   .ct-cols{display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap;margin-bottom:18px}
   .ct-panel{border:1px solid var(--border);border-radius:12px;background:var(--card);padding:14px;min-width:260px}
   .ct-h{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;font-size:13px;letter-spacing:.05em;color:var(--sub);margin-bottom:10px}
+  details.ct-panel>summary{margin-bottom:0}
+  details.ct-panel>summary::-webkit-details-marker{display:none}
+  details.ct-panel>summary::before{content:"▸";color:var(--red);font-size:11px;margin-right:6px;display:inline-block;transition:transform .15s}
+  details.ct-panel[open]>summary::before{transform:rotate(90deg)}
   .ct-pool{display:flex;flex-wrap:wrap;gap:6px;min-height:44px;max-width:340px}
   .chip{display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border:1px solid var(--border);border-radius:8px;background:var(--panel-2);font-weight:600;font-size:13.5px;cursor:grab;user-select:none;transition:.12s}
   .chip:hover{border-color:var(--sub)}
@@ -280,7 +285,6 @@
 
 <!-- ИГРОК VS ИГРОК -->
 <div class="pane" id="pane-pvp" style="display:none">
-  <div class="note">Шанс победы во встрече по Elo-рейтингу (ничьих во встречах не бывает — проценты в сумме дают 100). Рейтинг считается по играм всей истории турниров, ничья в игре = ½ очка; победа над сильным соперником даёт больше рейтинга, чем над слабым.</div>
   <div class="vs-grid">
     <div class="side-card sa">
       <span class="side-lbl">Игрок 1</span>
@@ -313,7 +317,6 @@
 
 <!-- ДРАФТ / ДРАФТ+ИГРОКИ -->
 <div class="pane" id="pane-draft" style="display:none">
-  <div class="note" id="draft-note"></div>
   <div class="tour-pickrow">
     <span class="side-lbl">Первый пик</span>
     <select id="dr-fp" onchange="updateDraft()">
@@ -351,14 +354,12 @@
     <button id="tseg-ctor" class="seg-btn" onclick="setTourView('ctor')">Конструктор</button>
   </div>
   <div id="tour-data">
-    <div class="note">Монте-Карло 10 000 симуляций: сыгранные матчи учтены как есть, несыгранные разыгрываются по Elo. Таблица пересчитывается автоматически по мере внесения результатов.</div>
     <div class="tour-pickrow">
       <select id="tour-sel" onchange="renderTour()"></select>
     </div>
     <div id="tour-out"></div>
   </div>
   <div id="tour-ctor" style="display:none">
-    <div class="note">Собери свой турнир: перетащи игроков в сетку или группы и нажми «Симулировать» — Монте-Карло по Elo покажет шансы каждого и вероятность победы в каждом матче.</div>
     <div class="tour-pickrow">
       <select id="ct-fmt" onchange="ctFmt()">
         <option value="SE">Сетка · Single Elimination</option>
@@ -370,10 +371,10 @@
       <button class="ct-btn" onclick="ctReset()">Сброс</button>
     </div>
     <div class="ct-cols">
-      <div class="ct-panel">
-        <div class="ct-h">Игроки — тяни в сетку/группу</div>
-        <div class="ct-pool ct-drop" id="ct-pool" data-zone="pool"></div>
-      </div>
+      <details class="ct-panel" open>
+        <summary class="ct-h" style="cursor:pointer;list-style:none">Игроки — тяни в сетку/группу</summary>
+        <div class="ct-pool ct-drop" id="ct-pool" data-zone="pool" style="margin-top:10px"></div>
+      </details>
       <div class="ct-panel" style="flex:1">
         <div class="ct-h" id="ct-zh">Участники (порядок = сеяние)</div>
         <div id="ct-zones"></div>
@@ -391,6 +392,7 @@
       <h4>Elo игроков</h4>
       <p>Старт 1000. После каждой игры: <code>R' = R + 40·(S − E)</code>, где S — исход (1/½/0), <code>E = 1/(1 + 10^((Rb−Ra)/400))</code>. Победа над сильным даёт больше, чем над слабым. K=40 подобран по точности прогноза на наших данных. Шанс во встрече = E от разницы рейтингов.</p>
       <p>Для показа рейтинг с малым числом игр стянут к 1000: <code>1000 + (R−1000)·n/(n+8)</code>. Вероятности считаются по сырому рейтингу.</p>
+      <p><b>Личные встречи.</b> К шансу по Elo добавляется лёгкая поправка на историю игр этих двоих: байес-винрейт (прайор +4 игры к 50%, гасит малые выборки) с весом ½ в log-odds — <code>σ(logit(E) + ½·logit(wr))</code>.</p>
       <h4>Сила драфта</h4>
       <p>Винрейт персонажа по всем его пикам (ничья ½) с байес-поправкой (+6 игр по 50%, гасит редкие пики). Сила состава — средний винрейт. Шанс драфт vs драфт — log5: <code>P = a(1−b)/(a(1−b)+b(1−a))</code>.</p>
       <h4>Поправки</h4>
@@ -618,7 +620,6 @@ function setMode(m){
   $('pane-pvp').style.display=m==='pvp'?'block':'none';
   $('pane-draft').style.display=m==='draft'?'block':'none';
   $('pane-tour').style.display=m==='tour'?'block':'none';
-  $('draft-note').textContent='Сила состава = винрейты персонажей в сыгранных драфтах (байес-поправка стягивает редких к 50%), до 6 пиков на сторону. Опции: чей первый пик, Шиюй (винрейты по матчам выбранного турнира с поправкой на общую историю) и игроки (Elo). Все оценки складываются в шансах (log-odds).';
   if(m==='draft')updateDraft();
   history.replaceState(null,'','#'+m);
 }
@@ -667,11 +668,20 @@ function updatePvp(){
   sideStats(a,$('pvst-a'),$('pvph-a'));
   sideStats(b,$('pvst-b'),$('pvph-b'));
   if(!a||!b||a===b){res.innerHTML='<div class="res-empty">Выбери двух разных игроков</div>';return;}
-  const p=Predict.pElo(D.elo.ratings[a]??1000,D.elo.ratings[b]??1000);
+  const pElo=Predict.pElo(D.elo.ratings[a]??1000,D.elo.ratings[b]??1000);
   const h=Predict.headToHead(a,b,D.encs,D.mbe);
+  const n=h.w+h.d+h.l;
+  // Минимальная поправка на личные встречи: байес-винрейт a против b с сильным прайором
+  // (H2H_PRIOR игр к 50%) → мало игр почти не сдвигает; лёгкий вес в log-odds.
+  const H2H_PRIOR=4,H2H_W=0.5;
+  let p=pElo;
+  if(n){
+    const wr=(h.w+0.5*h.d+H2H_PRIOR*0.5)/(n+H2H_PRIOR);
+    p=sigm(logit(pElo)+H2H_W*logit(wr));
+  }
   const na=D.playerMap[a]?.nickname||'?',nb=D.playerMap[b]?.nickname||'?';
   res.innerHTML=resBar(na,p,nb)+
-    `<div class="res-break"><span>Личные встречи (игры): <b>${h.w}–${h.d}–${h.l}</b>${h.w+h.d+h.l?'':' — не играли'}</span></div>`;
+    `<div class="res-break"><span>По Elo: <b>${fPct(pElo)}</b></span><span>Личные встречи (игры): <b>${h.w}–${h.d}–${h.l}</b>${n?` → поправка до <b>${fPct(p)}</b>`:' — не играли'}</span></div>`;
 }
 let ELO_SORT={k:'elo',asc:false};
 function setEloSort(k){
@@ -768,7 +778,7 @@ function renderSlots(side){
   const arr=DR[side];
   $('sl-'+side).innerHTML=Array.from({length:6},(_,i)=>{
     const p=arr[i];
-    return p?`<div class="slot filled" title="Клик — убрать" onclick="togglePick('${side}','${p.cid}')">${iconChar(D.charMap[p.cid],34)}<span class="ms-b${p.ms?' hot':''}" title="Майндскейп — клик меняет" onclick="cycleMs(event,'${side}',${i})">M${p.ms}</span></div>`
+    return p?`<div class="slot filled" title="Клик — убрать" onclick="togglePick('${side}','${p.cid}')">${iconChar(D.charMap[p.cid],80)}<span class="ms-b${p.ms?' hot':''}" title="Майндскейп — клик меняет" onclick="cycleMs(event,'${side}',${i})">M${p.ms}</span></div>`
       :`<div class="slot"></div>`;
   }).join('');
   document.querySelectorAll('#pal-'+side+' .pal-it').forEach(el=>{
