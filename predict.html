@@ -101,6 +101,8 @@
   .ms-b.hot{background:rgba(245,200,66,.15);border-color:rgba(245,200,66,.5);color:var(--gold)}
   .slot:hover{border-color:var(--sub)}
   .slot.filled{border-style:solid;border-color:#3f3f48}
+  .slot.over{border-color:var(--red);border-style:solid;background:rgba(255,31,68,.12)}
+  .slot.filled[draggable]{cursor:grab}
   .pal-search{width:100%}
   .palette{display:flex;flex-wrap:wrap;gap:5px;max-height:216px;overflow-y:auto;padding:7px;border:1px solid var(--border);border-radius:10px;background:var(--panel-2)}
   .pal-it{width:40px;height:40px;border-radius:8px;display:flex;align-items:center;justify-content:center;cursor:pointer;border:1px solid transparent;opacity:.82;transition:.1s}
@@ -753,8 +755,12 @@ function initDraft(){
   $('dr-tour').innerHTML='<option value="">вся история</option>'+
     rotations().map(r=>`<option value="${esc(r.key)}">${esc(r.label)}</option>`).join('');
   ['a','b'].forEach(side=>{
-    $('pal-'+side).innerHTML=D.chars.map(c=>
-      `<div class="pal-it" data-cid="${c.id}" data-name="${esc((c.name||'').toLowerCase())}" title="${esc(c.name)}" onclick="togglePick('${side}','${c.id}')">${iconChar(c,32)}</div>`).join('');
+    const pal=$('pal-'+side);
+    pal.innerHTML=D.chars.map(c=>
+      `<div class="pal-it" data-cid="${c.id}" data-name="${esc((c.name||'').toLowerCase())}" title="${esc(c.name)}" draggable="true" ondragstart="drStart(event,'${side}','pool','${c.id}')" ondragend="drEnd(event)" onclick="togglePick('${side}','${c.id}')">${iconChar(c,32)}</div>`).join('');
+    // пул — цель сброса для удаления слота
+    pal.ondragover=e=>{e.preventDefault();};
+    pal.ondrop=e=>{e.preventDefault();drDropPool(side);};
     renderSlots(side);
   });
   $('cb-a').innerHTML=playerOpts('— игрок (опц.) —');
@@ -778,14 +784,40 @@ function cycleMs(ev,side,idx){
 }
 function renderSlots(side){
   const arr=DR[side];
+  const dh=`ondragover="drOver(event)" ondragleave="drLeave(event)" ondrop="drDropSlot(event,'${side}',SLOTIDX)"`;
   $('sl-'+side).innerHTML=Array.from({length:6},(_,i)=>{
-    const p=arr[i];
-    return p?`<div class="slot filled" title="Клик — убрать" onclick="togglePick('${side}','${p.cid}')">${iconChar(D.charMap[p.cid],80)}<span class="ms-b${p.ms?' hot':''}" title="Майндскейп — клик меняет" onclick="cycleMs(event,'${side}',${i})">M${p.ms}</span></div>`
-      :`<div class="slot"></div>`;
+    const p=arr[i];const h=dh.replace('SLOTIDX',i);
+    return p?`<div class="slot filled" title="Клик — убрать · тяни для перестановки" draggable="true" ondragstart="drStart(event,'${side}',${i},'${p.cid}')" ondragend="drEnd(event)" ${h} onclick="togglePick('${side}','${p.cid}')">${iconChar(D.charMap[p.cid],80)}<span class="ms-b${p.ms?' hot':''}" title="Майндскейп — клик меняет" onclick="cycleMs(event,'${side}',${i})">M${p.ms}</span></div>`
+      :`<div class="slot" ${h}></div>`;
   }).join('');
   document.querySelectorAll('#pal-'+side+' .pal-it').forEach(el=>{
     el.classList.toggle(side==='a'?'on':'onb',arr.some(p=>p.cid===el.dataset.cid));
   });
+}
+// --- drag&drop персонажей: пул→слот, слот→пул (убрать), слот↔слот (свап) ---
+let DR_DRAG=null;
+function drStart(ev,side,from,cid){DR_DRAG={side,from,cid};ev.dataTransfer.effectAllowed='move';try{ev.dataTransfer.setData('text/plain',cid);}catch(e){}}
+function drEnd(ev){DR_DRAG=null;document.querySelectorAll('.slot.over').forEach(s=>s.classList.remove('over'));}
+function drOver(ev){if(DR_DRAG){ev.preventDefault();ev.currentTarget.classList.add('over');}}
+function drLeave(ev){ev.currentTarget.classList.remove('over');}
+function drDropSlot(ev,side,idx){
+  ev.preventDefault();ev.currentTarget.classList.remove('over');
+  const d=DR_DRAG;DR_DRAG=null;if(!d||d.side!==side)return;
+  const arr=DR[side];
+  if(d.from==='pool'){
+    if(arr.some(p=>p.cid===d.cid))return;          // уже в составе
+    const item={cid:d.cid,ms:defaultMs(d.cid)};
+    if(idx>=arr.length)arr.push(item);else arr.splice(idx,0,item);
+    if(arr.length>6)arr.length=6;
+  }else{                                            // слот↔слот
+    if(idx<arr.length){const t=arr[idx];arr[idx]=arr[d.from];arr[d.from]=t;} // свап
+    else{const[it]=arr.splice(d.from,1);arr.push(it);}                       // в конец
+  }
+  renderSlots(side);updateDraft();
+}
+function drDropPool(side){
+  const d=DR_DRAG;DR_DRAG=null;
+  if(d&&d.side===side&&d.from!=='pool'){DR[side].splice(d.from,1);renderSlots(side);updateDraft();}
 }
 function filterPal(side){
   const q=($('ps-'+side).value||'').toLowerCase().trim();
@@ -800,6 +832,8 @@ const sigm=x=>1/(1+Math.exp(-x));
 const MS_PRIOR=4,PC_PRIOR=4,PC_W=0.5;
 function effBwr(p,stats){
   const base=(stats[p.cid]&&stats[p.cid].bwr)||0.5;
+  // А-ранги всегда идут на M6 и от майндскейпа не зависят → базовый винрейт без разреза по M
+  if(D.charMap[p.cid]&&D.charMap[p.cid].rarity==='A')return base;
   const s=D.msStats[p.cid+':'+p.ms];
   if(!s||!s.games)return base;
   return(s.wEq+MS_PRIOR*base)/(s.games+MS_PRIOR);
@@ -859,17 +893,25 @@ function updateDraft(){
     const nmA=DR.a.map(x=>D.charMap[x.cid]&&D.charMap[x.cid].name).filter(Boolean);
     const nmB=DR.b.map(x=>D.charMap[x.cid]&&D.charMap[x.cid].name).filter(Boolean);
     const fPt=v=>(v>0?'+':'')+v.toFixed(3);
-    const spA=Synergy.splitSide(nmA),spB=Synergy.splitSide(nmB);
-    // синергия по половинам: [половина1 | половина2] с суммой
-    const halvesSyn=sp=>sp.scores.length?sp.scores.map(s=>fPt(s.total)).join(' | '):'—';
-    const sumSyn=sp=>sp.scores.length>1?` <b>Σ${fPt(sp.total)}</b>`:'';
-    if(spA.scores.length&&spB.scores.length)
-      parts.push(`<span class="ana">Синергия половин (аналитика, не в прогнозе): [${halvesSyn(spA)}]${sumSyn(spA)} vs [${halvesSyn(spB)}]${sumSyn(spB)}</span>`);
+    // половины ПО ПОЗИЦИИ: слоты 1–3 = первая команда, 4–6 = вторая
+    const halvesOf=names=>[[0,names.slice(0,3)],[1,names.slice(3,6)]].filter(([,t])=>t.length);
     const rooms=rotRooms(tid);
+    const agg={monsters:rooms.flatMap(r=>r.monsters||[])};
+    const synHalves=names=>halvesOf(names).map(([,t])=>{const r=Synergy.score(t);return r?r.total:0;});
+    const line=names=>{
+      const hs=synHalves(names),cells=hs.map(fPt);
+      const sum=hs.reduce((a,b)=>a+b,0);
+      return `[${cells.join(' | ')}]`+(hs.length>1?` <b>Σ${fPt(sum)}</b>`:'');
+    };
+    if(halvesOf(nmA).length&&halvesOf(nmB).length)
+      parts.push(`<span class="ana">Синергия команд (1–3 / 4–6, аналитика, не в прогнозе): ${line(nmA)} vs ${line(nmB)}</span>`);
     if(rooms.length){
-      const halvesMu=sp=>sp.scores.length?sp.scores.map(s=>{const m=Synergy.bestMatchup(s.members,rooms);return m==null?'—':fPt(m);}).join(' | '):'—';
-      if(spA.scores.length&&spB.scores.length)
-        parts.push(`<span class="ana">Матчап vs Шиюй по половинам (аналитика): [${halvesMu(spA)}] vs [${halvesMu(spB)}]</span>`);
+      const muLine=names=>'['+halvesOf(names).map(([pos,t])=>{
+        const room=rooms[pos]||agg;                     // команда i ↔ комната i
+        return fPt(Synergy.elementMatchup(t,room).pts);
+      }).join(' | ')+']';
+      if(halvesOf(nmA).length&&halvesOf(nmB).length)
+        parts.push(`<span class="ana">Матчап vs Шиюй (команда↔комната, аналитика): ${muLine(nmA)} vs ${muLine(nmB)}</span>`);
     }
   }
   res.innerHTML=resBar(na,p,nb)+`<div class="res-break">${parts.join('')}</div>`;
