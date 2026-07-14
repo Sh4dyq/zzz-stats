@@ -103,17 +103,27 @@
   .slot.filled{border-style:solid;border-color:#3f3f48}
   .slot.over{border-color:var(--red);border-style:solid;background:rgba(255,31,68,.12)}
   .slot.filled[draggable]{cursor:grab}
+  .sa .slot.sel{border-color:var(--red);border-style:solid;box-shadow:0 0 0 2px rgba(255,31,68,.35)}
+  .sb .slot.sel{border-color:var(--cyan);border-style:solid;box-shadow:0 0 0 2px rgba(61,217,214,.35)}
+  .sa .slot.await{border-color:var(--red)}
+  .sb .slot.await{border-color:var(--cyan)}
   .pal-search{width:100%}
   .palette{display:flex;flex-wrap:wrap;gap:5px;max-height:216px;overflow-y:auto;padding:7px;border:1px solid var(--border);border-radius:10px;background:var(--panel-2)}
+  .pool-shared{margin-top:16px;display:flex;flex-direction:column;gap:8px}
+  .pool-wide{max-height:none;justify-content:flex-start;gap:7px}
+  .pool-wide .pal-it{width:56px;height:56px;border-radius:10px}
   .pal-it{width:40px;height:40px;border-radius:8px;display:flex;align-items:center;justify-content:center;cursor:pointer;border:1px solid transparent;opacity:.82;transition:.1s}
   .pal-it:hover{border-color:var(--sub);opacity:1}
   .pal-it.on{border-color:var(--red);background:rgba(255,31,68,.14);opacity:1}
   .sb .pal-it.on,.pal-it.onb{border-color:var(--cyan);background:rgba(61,217,214,.12);opacity:1}
+  .pal-it.sel{outline:2px solid var(--text);outline-offset:1px;opacity:1}
   .pal-it.hide{display:none}
   .combo-row{margin-top:2px;display:flex;justify-content:center}
   .combo-row select{min-width:180px;text-align:center}
   .res-break{display:flex;gap:22px;flex-wrap:wrap;justify-content:center;margin-top:8px;font-family:'JetBrains Mono',monospace;font-size:12.5px;color:var(--sub)}
   .res-break b{color:var(--text);font-weight:600}
+  .res-break .ana{color:var(--cyan);opacity:.92}
+  .res-break .note-micro{font-size:9px;opacity:.4;width:100%;text-align:center;letter-spacing:0}
   /* таблицы (Elo / шансы) */
   .chwrap{margin-top:26px}
   .ch-h{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;font-size:19px;letter-spacing:.02em;margin-bottom:10px}
@@ -320,12 +330,6 @@
 <!-- ДРАФТ / ДРАФТ+ИГРОКИ -->
 <div class="pane" id="pane-draft" style="display:none">
   <div class="tour-pickrow">
-    <span class="side-lbl">Первый пик</span>
-    <select id="dr-fp" onchange="updateDraft()">
-      <option value="">не учитывать</option>
-      <option value="a">Драфт 1</option>
-      <option value="b">Драфт 2</option>
-    </select>
     <span class="side-lbl">Шиюй</span>
     <select id="dr-tour" onchange="updateDraft()"></select>
   </div>
@@ -334,17 +338,17 @@
       <span class="side-lbl">Драфт 1</span>
       <div class="combo-row"><select id="cb-a" onchange="updateDraft()"></select></div>
       <div class="slots" id="sl-a"></div>
-      <input type="text" class="pal-search" id="ps-a" placeholder="Поиск персонажа…" oninput="filterPal('a')">
-      <div class="palette" id="pal-a"></div>
     </div>
     <div class="vs-mid"><span class="vs-word">VS</span></div>
     <div class="side-card sb">
       <span class="side-lbl">Драфт 2</span>
       <div class="combo-row"><select id="cb-b" onchange="updateDraft()"></select></div>
       <div class="slots" id="sl-b"></div>
-      <input type="text" class="pal-search" id="ps-b" placeholder="Поиск персонажа…" oninput="filterPal('b')">
-      <div class="palette" id="pal-b"></div>
     </div>
+  </div>
+  <div class="pool-shared">
+    <input type="text" class="pal-search" id="ps-shared" placeholder="Поиск персонажа…" oninput="filterPal()">
+    <div class="palette pool-wide" id="pal-shared"></div>
   </div>
   <div class="res-panel" id="draft-res"><div class="res-empty">Выбери персонажей обеих сторон</div></div>
 </div>
@@ -709,7 +713,8 @@ function renderEloTable(){
 }
 
 // ---- драфт ----
-const DR={a:[],b:[]};
+// 6 независимых ячеек на сторону (null = пусто). Ряд 1 = слоты 0–2, ряд 2 = 3–5.
+const DR={a:[null,null,null,null,null,null],b:[null,null,null,null,null,null]};
 // Ротации Шиюй: на одну ротацию часто выпадает несколько турниров, поэтому группируем
 // турниры по shiyu_url (id ротации); без url турнир образует свою группу.
 function rotations(){
@@ -754,15 +759,13 @@ function cstatsFor(rotKey){
 function initDraft(){
   $('dr-tour').innerHTML='<option value="">вся история</option>'+
     rotations().map(r=>`<option value="${esc(r.key)}">${esc(r.label)}</option>`).join('');
-  ['a','b'].forEach(side=>{
-    const pal=$('pal-'+side);
-    pal.innerHTML=D.chars.map(c=>
-      `<div class="pal-it" data-cid="${c.id}" data-name="${esc((c.name||'').toLowerCase())}" title="${esc(c.name)}" draggable="true" ondragstart="drStart(event,'${side}','pool','${c.id}')" ondragend="drEnd(event)" onclick="togglePick('${side}','${c.id}')">${iconChar(c,32)}</div>`).join('');
-    // пул — цель сброса для удаления слота
-    pal.ondragover=e=>{e.preventDefault();};
-    pal.ondrop=e=>{e.preventDefault();drDropPool(side);};
-    renderSlots(side);
-  });
+  const pal=$('pal-shared');
+  pal.innerHTML=D.chars.map(c=>
+    `<div class="pal-it" data-cid="${c.id}" data-name="${esc((c.name||'').toLowerCase())}" title="${esc(c.name)}" draggable="true" ondragstart="drStart(event,null,'pool','${c.id}')" ondragend="drEnd(event)" onclick="poolPick('${c.id}')">${iconChar(c,32)}</div>`).join('');
+  // пул — цель сброса для удаления слота (с любой стороны)
+  pal.ondragover=e=>{e.preventDefault();};
+  pal.ondrop=e=>{e.preventDefault();drDropPool();};
+  renderSlots('a');renderSlots('b');
   $('cb-a').innerHTML=playerOpts('— игрок (опц.) —');
   $('cb-b').innerHTML=playerOpts('— игрок (опц.) —');
 }
@@ -770,10 +773,36 @@ function initDraft(){
 // S-ранги — M0. Пользователь может переопределить кликом по бейджу.
 const defaultMs=cid=>(D.charMap[cid]&&D.charMap[cid].rarity==='A')?6:0;
 function togglePick(side,cid){
-  const arr=DR[side],i=arr.findIndex(p=>p.cid===cid);
-  if(i>=0)arr.splice(i,1);
-  else{if(arr.length>=6)return;arr.push({cid,ms:defaultMs(cid)});}
+  const arr=DR[side],i=arr.findIndex(p=>p&&p.cid===cid);
+  if(i>=0)arr[i]=null;                              // уже в составе → убрать
+  else{const e=arr.findIndex(p=>!p);if(e<0)return;arr[e]={cid,ms:defaultMs(cid)};} // в первую пустую
   renderSlots(side);updateDraft();
+}
+// два способа: (1) клик слота → ACTIVE, затем клик персонажа; (2) клик персонажа → PENDING, затем клик слота
+let ACTIVE=null,PENDING=null;
+function place(side,idx,cid){DR[side][idx]={cid,ms:defaultMs(cid)};ACTIVE=PENDING=null;renderSlots('a');renderSlots('b');updateDraft();}
+function selectSlot(side,idx){
+  if(PENDING){place(side,idx,PENDING);return;}       // ждём слот под выбранного персонажа
+  ACTIVE=(ACTIVE&&ACTIVE.side===side&&ACTIVE.idx===idx)?null:{side,idx};
+  renderSlots('a');renderSlots('b');
+}
+const takenSide=cid=>DR.a.some(p=>p&&p.cid===cid)?'a':DR.b.some(p=>p&&p.cid===cid)?'b':null;
+// клик по персонажу в общем пуле
+function poolPick(cid){
+  const t=takenSide(cid);
+  if(t){togglePick(t,cid);return;}                  // уже занят → снять пик
+  if(ACTIVE){place(ACTIVE.side,ACTIVE.idx,cid);return;} // слот уже выбран → кладём туда
+  PENDING=(PENDING===cid)?null:cid;                  // иначе выбираем персонажа, ждём слот
+  renderSlots('a');renderSlots('b');
+}
+// подсветка занятости в общем пуле: сторона a → красный (.on), b → бирюза (.onb)
+function refreshPool(){
+  document.querySelectorAll('#pal-shared .pal-it').forEach(el=>{
+    const t=takenSide(el.dataset.cid);
+    el.classList.toggle('on',t==='a');
+    el.classList.toggle('onb',t==='b');
+    el.classList.toggle('sel',el.dataset.cid===PENDING);
+  });
 }
 // клик по бейджу M — циклит майндскейп M0..M6
 function cycleMs(ev,side,idx){
@@ -787,14 +816,15 @@ function renderSlots(side){
   const dh=`ondragover="drOver(event)" ondragleave="drLeave(event)" ondrop="drDropSlot(event,'${side}',SLOTIDX)"`;
   $('sl-'+side).innerHTML=Array.from({length:6},(_,i)=>{
     const p=arr[i];const h=dh.replace('SLOTIDX',i);
+    const sel=ACTIVE&&ACTIVE.side===side&&ACTIVE.idx===i?' sel':(PENDING?' await':'');
     return p?`<div class="slot filled" title="Клик — убрать · тяни для перестановки" draggable="true" ondragstart="drStart(event,'${side}',${i},'${p.cid}')" ondragend="drEnd(event)" ${h} onclick="togglePick('${side}','${p.cid}')">${iconChar(D.charMap[p.cid],80)}<span class="ms-b${p.ms?' hot':''}" title="Майндскейп — клик меняет" onclick="cycleMs(event,'${side}',${i})">M${p.ms}</span></div>`
-      :`<div class="slot" ${h}></div>`;
+      :`<div class="slot${sel}" ${h} onclick="selectSlot('${side}',${i})"></div>`;
   }).join('');
-  document.querySelectorAll('#pal-'+side+' .pal-it').forEach(el=>{
-    el.classList.toggle(side==='a'?'on':'onb',arr.some(p=>p.cid===el.dataset.cid));
-  });
+  refreshPool();
 }
-// --- drag&drop персонажей: пул→слот, слот→пул (убрать), слот↔слот (свап) ---
+// --- drag&drop: ячейки НЕЗАВИСИМЫ, ничего не съезжает. пул→ячейка (замена),
+// ячейка→ячейка (обмен: пустая цель = перенос, занятая = свап только этих двух),
+// ячейка→пул (убрать эту ячейку). ---
 let DR_DRAG=null;
 function drStart(ev,side,from,cid){DR_DRAG={side,from,cid};ev.dataTransfer.effectAllowed='move';try{ev.dataTransfer.setData('text/plain',cid);}catch(e){}}
 function drEnd(ev){DR_DRAG=null;document.querySelectorAll('.slot.over').forEach(s=>s.classList.remove('over'));}
@@ -802,26 +832,24 @@ function drOver(ev){if(DR_DRAG){ev.preventDefault();ev.currentTarget.classList.a
 function drLeave(ev){ev.currentTarget.classList.remove('over');}
 function drDropSlot(ev,side,idx){
   ev.preventDefault();ev.currentTarget.classList.remove('over');
-  const d=DR_DRAG;DR_DRAG=null;if(!d||d.side!==side)return;
+  const d=DR_DRAG;DR_DRAG=null;if(!d)return;
   const arr=DR[side];
   if(d.from==='pool'){
-    if(arr.some(p=>p.cid===d.cid))return;          // уже в составе
-    const item={cid:d.cid,ms:defaultMs(d.cid)};
-    if(idx>=arr.length)arr.push(item);else arr.splice(idx,0,item);
-    if(arr.length>6)arr.length=6;
-  }else{                                            // слот↔слот
-    if(idx<arr.length){const t=arr[idx];arr[idx]=arr[d.from];arr[d.from]=t;} // свап
-    else{const[it]=arr.splice(d.from,1);arr.push(it);}                       // в конец
+    if(takenSide(d.cid))return;                      // уже занят любой стороной
+    arr[idx]={cid:d.cid,ms:defaultMs(d.cid)};        // положить в эту ячейку (заменяет)
+  }else{
+    if(d.side!==side)return;                         // перестановка только внутри стороны
+    const tmp=arr[idx];arr[idx]=arr[d.from];arr[d.from]=tmp; // обмен ячеек (пустая цель = перенос)
   }
   renderSlots(side);updateDraft();
 }
-function drDropPool(side){
+function drDropPool(){
   const d=DR_DRAG;DR_DRAG=null;
-  if(d&&d.side===side&&d.from!=='pool'){DR[side].splice(d.from,1);renderSlots(side);updateDraft();}
+  if(d&&d.from!=='pool'){DR[d.side][d.from]=null;renderSlots(d.side);updateDraft();}
 }
-function filterPal(side){
-  const q=($('ps-'+side).value||'').toLowerCase().trim();
-  document.querySelectorAll('#pal-'+side+' .pal-it').forEach(el=>{
+function filterPal(){
+  const q=($('ps-shared').value||'').toLowerCase().trim();
+  document.querySelectorAll('#pal-shared .pal-it').forEach(el=>{
     el.classList.toggle('hide',!!q&&!el.dataset.name.includes(q));
   });
 }
@@ -829,14 +857,34 @@ const logit=p=>Math.log(Math.min(1-1e-6,Math.max(1e-6,p))/(1-Math.min(1-1e-6,Mat
 const sigm=x=>1/(1+Math.exp(-x));
 // Винрейт пика с учётом майндскейпа: статистика (cid, M) с прайором к винрейту
 // персонажа (мало игр на конкретном M → тянет к базовому).
-const MS_PRIOR=4,PC_PRIOR=4,PC_W=0.5;
+// PC_W — вес личного опыта игрока; ELO_W — вес Elo-разницы игроков. Влияние игроков
+// было слишком сильным (переворачивало винрейты в безшансовые), поэтому Elo придушен.
+const MS_PRIOR=4,PC_PRIOR=4,PC_W=0.35,ELO_W=0.45;
+// адаптивный вес синергии: при малой выборке пиков персонажа теги весят больше.
+// SYN_K — сколько пиков для «половинной» уверенности; SYN_BOOST — сила буста (низкий:
+// на мете почти не трогает, включается на редких/новых персонажах). Проверено на данных.
+const SYN_K=8,SYN_BOOST=1;
 function effBwr(p,stats){
   const base=(stats[p.cid]&&stats[p.cid].bwr)||0.5;
   // А-ранги всегда идут на M6 и от майндскейпа не зависят → базовый винрейт без разреза по M
   if(D.charMap[p.cid]&&D.charMap[p.cid].rarity==='A')return base;
+  // МОНОТОННОСТЬ (для симуляции): повышение майндскейпа НИКОГДА не снижает винрейт.
+  // value(M) = максимум по m≤M из (есть данные ? блендованный к базе : базовый).
+  // Несыгранный высокий M наследует лучшее снизу — статданных по нему нет (микро-сноска в UI).
+  let v=-1;
+  for(let m=0;m<=p.ms;m++){
+    const s=D.msStats[p.cid+':'+m];
+    const val=(s&&s.games)?(s.wEq+MS_PRIOR*base)/(s.games+MS_PRIOR):base;
+    if(val>v)v=val;
+  }
+  return v<0?base:v;
+}
+// есть ли у пика высокий майндскейп без статистики по нему (для микро-сноски)
+function msNoData(p){
+  if(D.charMap[p.cid]&&D.charMap[p.cid].rarity==='A')return false;
+  if(!p.ms)return false;
   const s=D.msStats[p.cid+':'+p.ms];
-  if(!s||!s.games)return base;
-  return(s.wEq+MS_PRIOR*base)/(s.games+MS_PRIOR);
+  return !s||!s.games;
 }
 const sideStrength=(arr,stats)=>{const v=arr.map(p=>effBwr(p,stats));return v.length?v.reduce((a,b)=>a+b,0)/v.length:0.5;};
 // Личный винрейт игрока на выбранных персонажах (прайор — винрейт персонажа).
@@ -859,61 +907,58 @@ function rotRooms(rotKey){
     if(rooms&&rooms.length)return rooms;
   } return[];
 }
+// сторона «готова» = собран хотя бы один полный ряд (слоты 0–2 ИЛИ 3–5)
+const rowFull=(arr,lo)=>!!(arr[lo]&&arr[lo+1]&&arr[lo+2]);
+const sideReady=arr=>rowFull(arr,0)||rowFull(arr,3);
 function updateDraft(){
   const res=$('draft-res');
-  if(!DR.a.length||!DR.b.length){res.innerHTML='<div class="res-empty">Выбери персонажей обеих сторон</div>';return;}
+  if(!sideReady(DR.a)||!sideReady(DR.b)){res.innerHTML='<div class="res-empty">Ожидание наполнения — соберите хотя бы один полный ряд (3) у обеих сторон</div>';return;}
   const tid=$('dr-tour').value;
   const stats=cstatsFor(tid);
-  const sa=sideStrength(DR.a,stats),sb=sideStrength(DR.b,stats);
+  const fA=DR.a.filter(Boolean),fB=DR.b.filter(Boolean);
+  const sa=sideStrength(fA,stats),sb=sideStrength(fB,stats);
   const num=sa*(1-sb),pd=num/(num+sb*(1-sa)); // log5
   let L=logit(pd);
   const parts=[`<span>Сила составов (байес-WR${tid?', эта Шиюй':''}, с учётом M): <b>${fPct(sa)}</b> vs <b>${fPct(sb)}</b></span>`];
-  const fp=$('dr-fp').value;
-  if(fp){
-    L+=(fp==='a'?1:-1)*logit(D.fpwr);
-    parts.push(`<span>Первый пик (${fp==='a'?'Драфт 1':'Драфт 2'}): WR fp-стороны <b>${fPct(D.fpwr)}</b></span>`);
-  }
   let na='Драфт 1',nb='Драфт 2';
-  // игроки — опционально: если выбраны оба, добавляем их Elo + лёгкую поправку
-  // на личный винрейт каждого с выбранными персонажами (вес ×0.5)
+  // игроки — опционально: если выбраны оба, добавляем их Elo (придушен ×ELO_W) +
+  // лёгкую поправку на личный винрейт каждого с выбранными персонажами (×PC_W)
   const a=$('cb-a').value,b=$('cb-b').value;
   if(a&&b&&a!==b){
     const pe=Predict.pElo(D.elo.ratings[a]??1000,D.elo.ratings[b]??1000);
-    L+=logit(pe);
-    const pca=pcBwr(a,DR.a,stats),pcb=pcBwr(b,DR.b,stats);
+    L+=ELO_W*logit(pe);
+    const pca=pcBwr(a,fA,stats),pcb=pcBwr(b,fB,stats);
     L+=PC_W*(logit(pca)-logit(pcb));
     na=D.playerMap[a]?.nickname||na;nb=D.playerMap[b]?.nickname||nb;
-    parts.push(`<span>По игрокам (Elo): <b>${fPct(pe)}</b></span>`);
+    parts.push(`<span>По игрокам (Elo ×${ELO_W}): <b>${fPct(pe)}</b></span>`);
     parts.push(`<span>Опыт на этих персонажах: <b>${fPct(pca)}</b> vs <b>${fPct(pcb)}</b> (вес ×${PC_W})</span>`);
   }
   const p=sigm(L);
-  if(parts.length>1)parts.push(`<span>Суммарно: <b>${fPct(p)}</b></span>`);
-  // --- аналитика (НЕ входит в вероятность): синергия состава + матчап vs Шиюй ---
+  // микро-сноска: есть ли высокий майндскейп без статистики
+  const noData=fA.concat(fB).some(msNoData);
+  // --- синергия команд + матчап vs Шиюй — ТОЛЬКО аналитика снизу (не в вероятность) ---
   if(window.Synergy&&Synergy.ready){
-    const nmA=DR.a.map(x=>D.charMap[x.cid]&&D.charMap[x.cid].name).filter(Boolean);
-    const nmB=DR.b.map(x=>D.charMap[x.cid]&&D.charMap[x.cid].name).filter(Boolean);
     const fPt=v=>(v>0?'+':'')+v.toFixed(3);
-    // половины ПО ПОЗИЦИИ: слоты 1–3 = первая команда, 4–6 = вторая
-    const halvesOf=names=>[[0,names.slice(0,3)],[1,names.slice(3,6)]].filter(([,t])=>t.length);
+    // ряды ПО ПОЗИЦИИ ячеек: ряд 1 = слоты 0–2, ряд 2 = 3–5; команда = ПОЛНЫЙ ряд (3 пика)
+    const rowsOf=picks=>[[0,picks.slice(0,3).filter(Boolean)],[1,picks.slice(3,6).filter(Boolean)]].filter(([,t])=>t.length===3);
+    const nmOf=t=>t.map(x=>D.charMap[x.cid]&&D.charMap[x.cid].name).filter(Boolean);
+    // адаптивный буст: при малой ОБЩЕЙ выборке пиков персонажа теги весят больше
+    // (D.cstats.games — не разрез по майндскейпу, иначе бустило бы всегда).
+    const teamMult=t=>{const conf=t.reduce((s,x)=>{const g=(D.cstats[x.cid]&&D.cstats[x.cid].games)||0;return s+g/(g+SYN_K);},0)/t.length;return 1+SYN_BOOST*(1-conf);};
     const rooms=rotRooms(tid);
     const agg={monsters:rooms.flatMap(r=>r.monsters||[])};
-    const synHalves=names=>halvesOf(names).map(([,t])=>{const r=Synergy.score(t);return r?r.total:0;});
-    const line=names=>{
-      const hs=synHalves(names),cells=hs.map(fPt);
-      const sum=hs.reduce((a,b)=>a+b,0);
-      return `[${cells.join(' | ')}]`+(hs.length>1?` <b>Σ${fPt(sum)}</b>`:'');
-    };
-    if(halvesOf(nmA).length&&halvesOf(nmB).length)
-      parts.push(`<span class="ana">Синергия команд (1–3 / 4–6, аналитика, не в прогнозе): ${line(nmA)} vs ${line(nmB)}</span>`);
-    if(rooms.length){
-      const muLine=names=>'['+halvesOf(names).map(([pos,t])=>{
-        const room=rooms[pos]||agg;                     // команда i ↔ комната i
-        return fPt(Synergy.elementMatchup(t,room).pts);
-      }).join(' | ')+']';
-      if(halvesOf(nmA).length&&halvesOf(nmB).length)
-        parts.push(`<span class="ana">Матчап vs Шиюй (команда↔комната, аналитика): ${muLine(nmA)} vs ${muLine(nmB)}</span>`);
+    const synRows=picks=>rowsOf(picks).map(([,t])=>{const r=Synergy.score(nmOf(t));return r?r.total*teamMult(t):0;});
+    const muRows=picks=>rooms.length?rowsOf(picks).map(([pos,t])=>Synergy.elementMatchup(nmOf(t),rooms[pos]||agg).pts):[];
+    const box=arr=>`[${arr.map(fPt).join(' | ')}]`+(arr.length>1?` <b>Σ${fPt(arr.reduce((x,y)=>x+y,0))}</b>`:'');
+    const hsA=synRows(DR.a),hsB=synRows(DR.b),muA=muRows(DR.a),muB=muRows(DR.b);
+    if(rowsOf(DR.a).length&&rowsOf(DR.b).length){
+      parts.push(`<span class="ana">Синергия команд (1–3 / 4–6, буст при редких пиках): ${box(hsA)} vs ${box(hsB)}</span>`);
+      if(rooms.length)
+        parts.push(`<span class="ana">Матчап vs Шиюй (команда↔комната): ${box(muA)} vs ${box(muB)}</span>`);
     }
   }
+  // крупные цифры = сила составов БЕЗ синергии (на 303 матчах синергия ухудшает предсказание)
+  if(noData)parts.push(`<span class="note-micro">* высокий майндскейп — нет статистических данных</span>`);
   res.innerHTML=resBar(na,p,nb)+`<div class="res-break">${parts.join('')}</div>`;
 }
 
