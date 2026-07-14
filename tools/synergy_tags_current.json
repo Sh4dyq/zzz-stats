@@ -1,0 +1,1226 @@
+{
+ "1191": {
+  "name": "Ellen Joe",
+  "element": "Ice",
+  "specialty": "Attack",
+  "roles": {
+   "crit_dps": 3
+  },
+  "gives": {},
+  "needs": {
+   "atk_buff": 3,
+   "dmg_buff": 3,
+   "crit_buff": 3,
+   "pen_buff": 1,
+   "def_shred": 2,
+   "daze": 3,
+   "amp_on_stun": 3,
+   "decibel": 1
+  },
+  "note": "",
+  "passive_use": 3
+ },
+ "1251": {
+  "name": "Qingyi",
+  "element": "Electric",
+  "specialty": "Stun",
+  "roles": {
+   "stunner": 3
+  },
+  "gives": {
+   "crit_buff": 1,
+   "daze": 4,
+   "amp_on_stun": 4
+  },
+  "needs": {},
+  "note": "",
+  "passive_use": 1
+ },
+ "1261": {
+  "name": "Jane Doe",
+  "element": "Physical",
+  "specialty": "Anomaly",
+  "roles": {
+   "main_anomaly": 3,
+   "sub_anomaly": 1
+  },
+  "gives": {
+   "anomaly_buff": 1,
+   "anomaly_assist": 3
+  },
+  "needs": {
+   "atk_buff": 3,
+   "dmg_buff": 3,
+   "anomaly_buff": 3,
+   "pen_buff": 1,
+   "def_shred": 1,
+   "anomaly_assist": 3,
+   "abloom": 1
+  },
+  "note": "может быть sub_anomaly, но только под Alice (парная связка, не общий кейс)",
+  "passive_use": 3
+ },
+ "1311": {
+  "name": "Astra Yao",
+  "element": "Ether",
+  "specialty": "Support",
+  "roles": {
+   "support": 4,
+   "off_field": 3
+  },
+  "gives": {
+   "atk_buff": 4,
+   "dmg_buff": 3,
+   "crit_buff": 3,
+   "decibel": 3
+  },
+  "needs": {},
+  "note": "",
+  "passive_use": null
+ },
+ "1091": {
+  "name": "Hoshimi Miyabi",
+  "element": "Ice",
+  "specialty": "Anomaly",
+  "roles": {
+   "crit_dps": 3,
+   "main_anomaly": 4
+  },
+  "gives": {
+   "anomaly_buff": 1,
+   "anomaly_assist": 3
+  },
+  "needs": {
+   "atk_buff": 3,
+   "dmg_buff": 3,
+   "crit_buff": 3,
+   "anomaly_buff": 3,
+   "pen_buff": 1,
+   "def_shred": 1,
+   "daze": 1,
+   "anomaly_assist": 4
+  },
+  "note": "",
+  "passive_use": 4
+ },
+ "1431": {
+  "name": "Ye Shunguang",
+  "element": "Physical",
+  "specialty": "Attack",
+  "roles": {
+   "crit_dps": 4
+  },
+  "gives": {},
+  "needs": {
+   "atk_buff": 3,
+   "dmg_buff": 3,
+   "crit_buff": 3,
+   "pen_buff": 1,
+   "def_shred": 1,
+   "amp_on_stun": 4,
+   "decibel": 2,
+   "ether_veil": 4
+  },
+  "note": "",
+  "passive_use": 4
+ },
+ "1011": {
+  "name": "Anby Demara",
+  "element": "Electric",
+  "specialty": "Stun",
+  "roles": {
+   "stunner": 3
+  },
+  "gives": {
+   "crit_buff": 1,
+   "daze": 3
+  },
+  "needs": {},
+  "note": "",
+  "passive_use": null
+ },
+ "1021": {
+  "name": "Nekomiya Mana",
+  "element": "Physical",
+  "specialty": "Attack",
+  "roles": {
+   "crit_dps": 3
+  },
+  "gives": {},
+  "needs": {
+   "atk_buff": 3,
+   "dmg_buff": 3,
+   "crit_buff": 3,
+   "pen_buff": 1,
+   "def_shred": 1,
+   "daze": 3,
+   "amp_on_stun": 3,
+   "decibel": 1
+  },
+  "note": "",
+  "passive_use": 3
+ },
+ "1031": {
+  "name": "Nicole Demara",
+  "element": "Ether",
+  "specialty": "Support",
+  "roles": {
+   "sub_anomaly": 1,
+   "support": 3
+  },
+  "gives": {
+   "dmg_buff": 3,
+   "crit_buff": 2,
+   "def_shred": 4,
+   "daze": 1,
+   "anomaly_assist": 1
+  },
+  "needs": {
+   "atk_buff": 1,
+   "dmg_buff": 1,
+   "crit_buff": 1,
+   "def_shred": 2
+  },
+  "note": "",
+  "passive_use": null
+ },
+ "1041": {
+  "name": "Soldier 11",
+  "element": "Fire",
+  "specialty": "Attack",
+  "roles": {
+   "crit_dps": 3
+  },
+  "gives": {},
+  "needs": {
+   "atk_buff": 3,
+   "dmg_buff": 3,
+   "crit_buff": 3,
+   "pen_buff": 1,
+   "def_shred": 1,
+   "daze": 3,
+   "amp_on_stun": 3,
+   "decibel": 1
+  },
+  "note": "",
+  "passive_use": 4
+ },
+ "1051": {
+  "name": "Yidhari Murphy",
+  "element": "Ice",
+  "specialty": "Rupture",
+  "roles": {
+   "sheer_dps": 3
+  },
+  "gives": {
+   "ether_veil": 1
+  },
+  "needs": {
+   "atk_buff": 1,
+   "dmg_buff": 3,
+   "crit_buff": 3,
+   "sheer_dmg_buff": 3,
+   "daze": 3,
+   "amp_on_stun": 3,
+   "decibel": 1,
+   "ether_veil": 2
+  },
+  "note": "HP-скейл; AA-гейт: Stun/Support",
+  "passive_use": 3
+ },
+ "1061": {
+  "name": "Corin Wickes",
+  "element": "Physical",
+  "specialty": "Attack",
+  "roles": {
+   "crit_dps": 3
+  },
+  "gives": {},
+  "needs": {
+   "atk_buff": 3,
+   "dmg_buff": 3,
+   "crit_buff": 3,
+   "pen_buff": 1,
+   "def_shred": 1,
+   "daze": 3,
+   "amp_on_stun": 3,
+   "decibel": 1
+  },
+  "note": "",
+  "passive_use": 1
+ },
+ "1071": {
+  "name": "Caesar King",
+  "element": "Physical",
+  "specialty": "Defense",
+  "roles": {
+   "support": 3
+  },
+  "gives": {
+   "atk_buff": 2,
+   "dmg_buff": 2,
+   "daze": 1
+  },
+  "needs": {},
+  "note": "щит + DMG-taken debuff 25%",
+  "passive_use": 2
+ },
+ "1081": {
+  "name": "Billy Kid",
+  "element": "Physical",
+  "specialty": "Attack",
+  "roles": {
+   "crit_dps": 3,
+   "sub_dps": 1
+  },
+  "gives": {},
+  "needs": {
+   "atk_buff": 3,
+   "dmg_buff": 3,
+   "crit_buff": 3,
+   "pen_buff": 1,
+   "def_shred": 1,
+   "daze": 3,
+   "amp_on_stun": 3,
+   "decibel": 1
+  },
+  "note": "",
+  "passive_use": 4
+ },
+ "1101": {
+  "name": "Koleda Belobog",
+  "element": "Fire",
+  "specialty": "Stun",
+  "roles": {
+   "stunner": 3
+  },
+  "gives": {
+   "daze": 3
+  },
+  "needs": {},
+  "note": "",
+  "passive_use": 1
+ },
+ "1111": {
+  "name": "Anton Ivanov",
+  "element": "Electric",
+  "specialty": "Attack",
+  "roles": {
+   "crit_dps": 3
+  },
+  "gives": {},
+  "needs": {
+   "atk_buff": 3,
+   "dmg_buff": 3,
+   "crit_buff": 3,
+   "daze": 3,
+   "amp_on_stun": 3,
+   "decibel": 1
+  },
+  "note": "",
+  "passive_use": null
+ },
+ "1121": {
+  "name": "Ben Bigger",
+  "element": "Fire",
+  "specialty": "Defense",
+  "roles": {
+   "support": 1
+  },
+  "gives": {
+   "crit_buff": 2,
+   "daze": 1
+  },
+  "needs": {},
+  "note": "щит + CRIT Rate +16%",
+  "passive_use": 2
+ },
+ "1131": {
+  "name": "Soukaku",
+  "element": "Ice",
+  "specialty": "Support",
+  "roles": {
+   "crit_dps": 1,
+   "sub_anomaly": 1,
+   "stunner": 1,
+   "support": 3
+  },
+  "gives": {
+   "atk_buff": 3,
+   "dmg_buff": 3,
+   "daze": 2,
+   "anomaly_assist": 2
+  },
+  "needs": {
+   "atk_buff": 2,
+   "dmg_buff": 2,
+   "crit_buff": 1,
+   "anomaly_buff": 1
+  },
+  "note": "",
+  "passive_use": 1
+ },
+ "1141": {
+  "name": "Von Lycaon",
+  "element": "Ice",
+  "specialty": "Stun",
+  "roles": {
+   "stunner": 4
+  },
+  "gives": {
+   "dmg_buff": 2,
+   "crit_buff": 1,
+   "daze": 4,
+   "amp_on_stun": 3
+  },
+  "needs": {},
+  "note": "Ice RES -25%",
+  "passive_use": 3
+ },
+ "1151": {
+  "name": "Luciana de Montefio",
+  "element": "Fire",
+  "specialty": "Support",
+  "roles": {
+   "support": 3
+  },
+  "gives": {
+   "atk_buff": 3,
+   "dmg_buff": 2,
+   "crit_buff": 1,
+   "daze": 1,
+   "anomaly_assist": 1
+  },
+  "needs": {},
+  "note": "",
+  "passive_use": null
+ },
+ "1161": {
+  "name": "Lighter",
+  "element": "Fire",
+  "specialty": "Stun",
+  "roles": {
+   "stunner": 3
+  },
+  "gives": {
+   "dmg_buff": 2,
+   "crit_buff": 1,
+   "daze": 4,
+   "amp_on_stun": 3
+  },
+  "needs": {},
+  "note": "",
+  "passive_use": 3
+ },
+ "1171": {
+  "name": "Burnice White",
+  "element": "Fire",
+  "specialty": "Anomaly",
+  "roles": {
+   "main_anomaly": 1,
+   "sub_anomaly": 4,
+   "off_field": 3
+  },
+  "gives": {
+   "daze": 1,
+   "anomaly_assist": 4,
+   "aftershock": 1,
+   "abloom": 1
+  },
+  "needs": {
+   "atk_buff": 3,
+   "dmg_buff": 3,
+   "anomaly_buff": 3,
+   "pen_buff": 1,
+   "def_shred": 1,
+   "anomaly_assist": 3
+  },
+  "note": "",
+  "passive_use": 2
+ },
+ "1181": {
+  "name": "Grace Howard",
+  "element": "Electric",
+  "specialty": "Anomaly",
+  "roles": {
+   "main_anomaly": 2,
+   "sub_anomaly": 2
+  },
+  "gives": {
+   "anomaly_assist": 3,
+   "abloom": 2
+  },
+  "needs": {
+   "atk_buff": 3,
+   "dmg_buff": 3,
+   "anomaly_buff": 3,
+   "pen_buff": 2,
+   "def_shred": 1,
+   "anomaly_assist": 3
+  },
+  "note": "",
+  "passive_use": 1
+ },
+ "1201": {
+  "name": "Asaba Harumasa",
+  "element": "Electric",
+  "specialty": "Attack",
+  "roles": {
+   "crit_dps": 3
+  },
+  "gives": {},
+  "needs": {
+   "atk_buff": 3,
+   "dmg_buff": 3,
+   "crit_buff": 3,
+   "pen_buff": 1,
+   "def_shred": 1,
+   "daze": 3,
+   "amp_on_stun": 3,
+   "anomaly_assist": 1,
+   "decibel": 1
+  },
+  "note": "AA: Stun/Anomaly",
+  "passive_use": 3
+ },
+ "1211": {
+  "name": "Alexandrina Sebastiane",
+  "element": "Electric",
+  "specialty": "Support",
+  "roles": {
+   "support": 3
+  },
+  "gives": {
+   "atk_buff": 1,
+   "dmg_buff": 2,
+   "anomaly_buff": 1,
+   "pen_buff": 4,
+   "anomaly_assist": 1
+  },
+  "needs": {},
+  "note": "",
+  "passive_use": 1
+ },
+ "1221": {
+  "name": "Tsukishiro Yanagi",
+  "element": "Electric",
+  "specialty": "Anomaly",
+  "roles": {
+   "main_anomaly": 3,
+   "sub_anomaly": 2
+  },
+  "gives": {
+   "anomaly_buff": 2,
+   "anomaly_assist": 3
+  },
+  "needs": {
+   "atk_buff": 3,
+   "dmg_buff": 3,
+   "anomaly_buff": 3,
+   "pen_buff": 3,
+   "def_shred": 1,
+   "daze": 1,
+   "amp_on_stun": 1,
+   "anomaly_assist": 4
+  },
+  "note": "Disorder mult +125%",
+  "passive_use": 2
+ },
+ "1241": {
+  "name": "Zhu Yuan",
+  "element": "Ether",
+  "specialty": "Attack",
+  "roles": {
+   "crit_dps": 3
+  },
+  "gives": {},
+  "needs": {
+   "atk_buff": 3,
+   "dmg_buff": 3,
+   "crit_buff": 3,
+   "pen_buff": 1,
+   "def_shred": 1,
+   "daze": 3,
+   "amp_on_stun": 3,
+   "decibel": 1
+  },
+  "note": "AA-гейт: Support",
+  "passive_use": 3
+ },
+ "1271": {
+  "name": "Seth Lowell",
+  "element": "Electric",
+  "specialty": "Defense",
+  "roles": {
+   "sub_anomaly": 1,
+   "support": 2
+  },
+  "gives": {
+   "dmg_buff": 1,
+   "anomaly_buff": 2,
+   "daze": 1,
+   "anomaly_assist": 2
+  },
+  "needs": {},
+  "note": "Anomaly Buildup RES -20%",
+  "passive_use": null
+ },
+ "1281": {
+  "name": "Piper",
+  "element": "Physical",
+  "specialty": "Anomaly",
+  "roles": {
+   "main_anomaly": 2,
+   "sub_anomaly": 3,
+   "off_field": 1
+  },
+  "gives": {
+   "dmg_buff": 1,
+   "anomaly_assist": 4
+  },
+  "needs": {
+   "atk_buff": 3,
+   "dmg_buff": 3,
+   "anomaly_buff": 3,
+   "pen_buff": 1,
+   "def_shred": 1,
+   "anomaly_assist": 2
+  },
+  "note": "squad DMG +18%",
+  "passive_use": 1
+ },
+ "1291": {
+  "name": "Hugo Vlad",
+  "element": "Ice",
+  "specialty": "Attack",
+  "roles": {
+   "crit_dps": 3
+  },
+  "gives": {},
+  "needs": {
+   "atk_buff": 3,
+   "dmg_buff": 3,
+   "crit_buff": 3,
+   "pen_buff": 1,
+   "def_shred": 2,
+   "daze": 4,
+   "amp_on_stun": 4,
+   "decibel": 1
+  },
+  "note": "ATK масштаб от кол-ва Stun в отряде",
+  "passive_use": 3
+ },
+ "1301": {
+  "name": "Orphie Magnusson & Magus",
+  "element": "Fire",
+  "specialty": "Attack",
+  "roles": {
+   "crit_dps": 2,
+   "sub_dps": 4,
+   "off_field": 4
+  },
+  "gives": {
+   "atk_buff": 1,
+   "def_shred": 3,
+   "aftershock": 4
+  },
+  "needs": {
+   "atk_buff": 3,
+   "dmg_buff": 3,
+   "crit_buff": 3,
+   "pen_buff": 1,
+   "def_shred": 3,
+   "daze": 1,
+   "amp_on_stun": 1,
+   "aftershock": 2
+  },
+  "note": "AA: Stun/Support; aftershock DEF ignore",
+  "passive_use": 2
+ },
+ "1321": {
+  "name": "Evelyn Chevalier",
+  "element": "Fire",
+  "specialty": "Attack",
+  "roles": {
+   "crit_dps": 3
+  },
+  "gives": {},
+  "needs": {
+   "atk_buff": 3,
+   "dmg_buff": 3,
+   "crit_buff": 3,
+   "pen_buff": 1,
+   "def_shred": 1,
+   "daze": 3,
+   "amp_on_stun": 3,
+   "decibel": 2
+  },
+  "note": "AA-гейт: Stun/Support",
+  "passive_use": 3
+ },
+ "1331": {
+  "name": "Vivian Banshee",
+  "element": "Ether",
+  "specialty": "Anomaly",
+  "roles": {
+   "sub_anomaly": 4,
+   "off_field": 3
+  },
+  "gives": {
+   "anomaly_buff": 2,
+   "anomaly_assist": 3,
+   "abloom": 4
+  },
+  "needs": {
+   "atk_buff": 3,
+   "dmg_buff": 3,
+   "anomaly_buff": 3,
+   "pen_buff": 1,
+   "def_shred": 1,
+   "anomaly_assist": 4
+  },
+  "note": "ТОЛЬКО саб-аномалист (user)",
+  "passive_use": 3
+ },
+ "1341": {
+  "name": "Zhao",
+  "element": "Ice",
+  "specialty": "Defense",
+  "roles": {
+   "support": 3,
+   "off_field": 1
+  },
+  "gives": {
+   "atk_buff": 3,
+   "dmg_buff": 4,
+   "ether_veil": 3
+  },
+  "needs": {
+   "ether_veil": 1
+  },
+  "note": "squad DMG +10..40% внутри Ether Veil — нужен Ether Veil",
+  "passive_use": 4
+ },
+ "1351": {
+  "name": "Pulchra Fellini",
+  "element": "Physical",
+  "specialty": "Stun",
+  "roles": {
+   "stunner": 3,
+   "off_field": 3
+  },
+  "gives": {
+   "dmg_buff": 2,
+   "crit_buff": 1,
+   "daze": 3,
+   "aftershock": 3
+  },
+  "needs": {
+   "atk_buff": 1,
+   "dmg_buff": 1,
+   "crit_buff": 1
+  },
+  "note": "AA: Attack/Rupture",
+  "passive_use": 3
+ },
+ "1361": {
+  "name": "Trigger",
+  "element": "Electric",
+  "specialty": "Stun",
+  "roles": {
+   "sub_dps": 1,
+   "stunner": 3,
+   "off_field": 4
+  },
+  "gives": {
+   "dmg_buff": 2,
+   "crit_buff": 1,
+   "def_shred": 1,
+   "daze": 3,
+   "amp_on_stun": 3,
+   "aftershock": 4
+  },
+  "needs": {
+   "atk_buff": 2,
+   "dmg_buff": 2,
+   "crit_buff": 2,
+   "pen_buff": 1,
+   "def_shred": 2,
+   "aftershock": 1
+  },
+  "note": "",
+  "passive_use": 2
+ },
+ "1371": {
+  "name": "Yixuan",
+  "element": "Ether",
+  "specialty": "Rupture",
+  "roles": {
+   "sheer_dps": 4
+  },
+  "gives": {},
+  "needs": {
+   "atk_buff": 1,
+   "dmg_buff": 3,
+   "crit_buff": 3,
+   "sheer_dmg_buff": 3,
+   "daze": 3,
+   "amp_on_stun": 3,
+   "decibel": 2,
+   "ether_veil": 1
+  },
+  "note": "AA: Stun/Support/Defense; HP-скейл",
+  "passive_use": 3
+ },
+ "1381": {
+  "name": "Soldier 0 - Anby",
+  "element": "Electric",
+  "specialty": "Attack",
+  "roles": {
+   "crit_dps": 3
+  },
+  "gives": {
+   "dmg_buff": 1,
+   "crit_buff": 1,
+   "aftershock": 4
+  },
+  "needs": {
+   "atk_buff": 3,
+   "dmg_buff": 3,
+   "crit_buff": 3,
+   "pen_buff": 1,
+   "def_shred": 1,
+   "daze": 2,
+   "amp_on_stun": 2,
+   "aftershock": 4
+  },
+  "note": "AA: Stun/Support; squad Aftershock +25%",
+  "passive_use": 4
+ },
+ "1391": {
+  "name": "Ju Fufu",
+  "element": "Fire",
+  "specialty": "Stun",
+  "roles": {
+   "stunner": 3,
+   "off_field": 2
+  },
+  "gives": {
+   "dmg_buff": 1,
+   "crit_buff": 3,
+   "daze": 3,
+   "decibel": 4,
+   "aftershock": 1
+  },
+  "needs": {},
+  "note": "max Decibel +1000",
+  "passive_use": 2
+ },
+ "1401": {
+  "name": "Alice Thymefield",
+  "element": "Physical",
+  "specialty": "Anomaly",
+  "roles": {
+   "main_anomaly": 4,
+   "sub_anomaly": 2
+  },
+  "gives": {
+   "anomaly_assist": 3
+  },
+  "needs": {
+   "atk_buff": 3,
+   "dmg_buff": 3,
+   "anomaly_buff": 3,
+   "pen_buff": 1,
+   "def_shred": 1,
+   "daze": 2,
+   "amp_on_stun": 1,
+   "anomaly_assist": 3
+  },
+  "note": "связка с Jane",
+  "passive_use": 4
+ },
+ "1411": {
+  "name": "Ukinami Yuzuha",
+  "element": "Physical",
+  "specialty": "Support",
+  "roles": {
+   "sub_anomaly": 1,
+   "support": 4
+  },
+  "gives": {
+   "atk_buff": 4,
+   "dmg_buff": 3,
+   "anomaly_buff": 4,
+   "anomaly_assist": 4,
+   "aftershock": 1
+  },
+  "needs": {},
+  "note": "нет прозы скиллов на nanoka — размечено по амплуа, проверить",
+  "passive_use": 2
+ },
+ "1421": {
+  "name": "Pan Yinhu",
+  "element": "Physical",
+  "specialty": "Defense",
+  "roles": {
+   "support": 3
+  },
+  "gives": {
+   "dmg_buff": 3,
+   "sheer_dmg_buff": 3
+  },
+  "needs": {},
+  "note": "Sheer Force бафф + Depleted Qi +20%",
+  "passive_use": 2
+ },
+ "1441": {
+  "name": "Komano Manato",
+  "element": "Fire",
+  "specialty": "Rupture",
+  "roles": {
+   "sheer_dps": 2
+  },
+  "gives": {},
+  "needs": {
+   "atk_buff": 1,
+   "dmg_buff": 2,
+   "sheer_dmg_buff": 3,
+   "daze": 3,
+   "amp_on_stun": 3,
+   "decibel": 1,
+   "ether_veil": 1
+  },
+  "note": "AA: Support/Stun; HP-скейл",
+  "passive_use": 2
+ },
+ "1451": {
+  "name": "Lucia Elowen",
+  "element": "Ether",
+  "specialty": "Support",
+  "roles": {
+   "support": 4
+  },
+  "gives": {
+   "dmg_buff": 3,
+   "crit_buff": 3,
+   "sheer_dmg_buff": 4,
+   "aftershock": 2,
+   "ether_veil": 2
+  },
+  "needs": {},
+  "note": "активирует Ether Veil: Wellspring — ключ для sheer",
+  "passive_use": 2
+ },
+ "1461": {
+  "name": "Seed",
+  "element": "Electric",
+  "specialty": "Attack",
+  "roles": {
+   "crit_dps": 3,
+   "sub_dps": 2,
+   "support": 1
+  },
+  "gives": {
+   "atk_buff": 2,
+   "dmg_buff": 2,
+   "crit_buff": 2
+  },
+  "needs": {
+   "atk_buff": 3,
+   "dmg_buff": 3,
+   "crit_buff": 3,
+   "pen_buff": 1,
+   "def_shred": 2,
+   "daze": 2,
+   "amp_on_stun": 2,
+   "decibel": 1
+  },
+  "note": "бафает Vanguard (Attack-напарника)",
+  "passive_use": 4
+ },
+ "1471": {
+  "name": "Banyue",
+  "element": "Fire",
+  "specialty": "Rupture",
+  "roles": {
+   "sheer_dps": 3
+  },
+  "gives": {},
+  "needs": {
+   "atk_buff": 1,
+   "dmg_buff": 3,
+   "crit_buff": 3,
+   "sheer_dmg_buff": 3,
+   "daze": 3,
+   "amp_on_stun": 3,
+   "decibel": 1
+  },
+  "note": "нет прозы скиллов на nanoka — размечено по амплуа, проверить",
+  "passive_use": 1
+ },
+ "1481": {
+  "name": "Dialyn",
+  "element": "Physical",
+  "specialty": "Stun",
+  "roles": {
+   "sub_dps": 1,
+   "stunner": 4
+  },
+  "gives": {
+   "dmg_buff": 4,
+   "crit_buff": 1,
+   "daze": 4,
+   "amp_on_stun": 4,
+   "decibel": 3
+  },
+  "needs": {
+   "atk_buff": 1,
+   "dmg_buff": 1,
+   "crit_buff": 1
+  },
+  "note": "нет прозы скиллов на nanoka — размечено по амплуа, проверить",
+  "passive_use": 4
+ },
+ "1491": {
+  "name": "Sunna",
+  "element": "Physical",
+  "specialty": "Support",
+  "roles": {
+   "support": 4
+  },
+  "gives": {
+   "atk_buff": 4,
+   "dmg_buff": 1,
+   "daze": 2,
+   "amp_on_stun": 3,
+   "ether_veil": 4
+  },
+  "needs": {},
+  "note": "нет прозы скиллов на nanoka — размечено по амплуа, проверить",
+  "passive_use": 4
+ },
+ "1501": {
+  "name": "Aria",
+  "element": "Ether",
+  "specialty": "Anomaly",
+  "roles": {
+   "main_anomaly": 4,
+   "sub_anomaly": 1
+  },
+  "gives": {
+   "anomaly_buff": 1,
+   "anomaly_assist": 3,
+   "abloom": 4
+  },
+  "needs": {
+   "atk_buff": 3,
+   "dmg_buff": 3,
+   "anomaly_buff": 3,
+   "pen_buff": 1,
+   "def_shred": 1,
+   "daze": 3,
+   "amp_on_stun": 3,
+   "anomaly_assist": 2,
+   "ether_veil": 2
+  },
+  "note": "нет прозы скиллов на nanoka — размечено по амплуа, проверить",
+  "passive_use": 3
+ },
+ "1511": {
+  "name": "Nangong Yu",
+  "element": "Ether",
+  "specialty": "Stun",
+  "roles": {
+   "sub_anomaly": 2,
+   "stunner": 3
+  },
+  "gives": {
+   "dmg_buff": 3,
+   "anomaly_buff": 4,
+   "daze": 4,
+   "amp_on_stun": 4,
+   "anomaly_assist": 4,
+   "abloom": 2,
+   "ether_veil": 1
+  },
+  "needs": {
+   "atk_buff": 2,
+   "dmg_buff": 2,
+   "anomaly_buff": 2,
+   "pen_buff": 1,
+   "def_shred": 1,
+   "anomaly_assist": 2
+  },
+  "note": "нет прозы скиллов на nanoka — размечено по амплуа, проверить",
+  "passive_use": 4
+ },
+ "1521": {
+  "name": "Cissia",
+  "element": "Electric",
+  "specialty": "Attack",
+  "roles": {
+   "crit_dps": 3,
+   "sub_dps": 3,
+   "stunner": 2,
+   "off_field": 2
+  },
+  "gives": {
+   "crit_buff": 4,
+   "def_shred": 3,
+   "daze": 2,
+   "ether_veil": 1
+  },
+  "needs": {
+   "atk_buff": 3,
+   "dmg_buff": 3,
+   "crit_buff": 3,
+   "pen_buff": 1,
+   "def_shred": 4,
+   "daze": 2,
+   "amp_on_stun": 3
+  },
+  "note": "нет прозы скиллов на nanoka — размечено по амплуа, проверить",
+  "passive_use": 3
+ },
+ "1531": {
+  "name": "Starlight - Billy",
+  "element": "Physical",
+  "specialty": "Rupture",
+  "roles": {
+   "sheer_dps": 3
+  },
+  "gives": {},
+  "needs": {
+   "atk_buff": 1,
+   "dmg_buff": 3,
+   "crit_buff": 3,
+   "sheer_dmg_buff": 3,
+   "daze": 3,
+   "amp_on_stun": 3,
+   "decibel": 1,
+   "ether_veil": 1
+  },
+  "note": "нет прозы скиллов на nanoka — размечено по амплуа, проверить",
+  "passive_use": 3
+ },
+ "1541": {
+  "name": "Promeia",
+  "element": "Ice",
+  "specialty": "Anomaly",
+  "roles": {
+   "main_anomaly": 4,
+   "sub_anomaly": 1
+  },
+  "gives": {
+   "dmg_buff": 1,
+   "anomaly_buff": 2,
+   "def_shred": 4,
+   "anomaly_assist": 3,
+   "abloom": 4
+  },
+  "needs": {
+   "atk_buff": 3,
+   "dmg_buff": 3,
+   "anomaly_buff": 3,
+   "pen_buff": 1,
+   "def_shred": 3,
+   "daze": 2,
+   "amp_on_stun": 2,
+   "anomaly_assist": 3,
+   "abloom": 4
+  },
+  "note": "Abloom DMG squad; frostbite extend",
+  "passive_use": 4
+ },
+ "1551": {
+  "name": "Pyrois",
+  "element": "Ether",
+  "specialty": "Attack",
+  "roles": {
+   "crit_dps": 3
+  },
+  "gives": {},
+  "needs": {
+   "atk_buff": 3,
+   "dmg_buff": 3,
+   "crit_buff": 3,
+   "pen_buff": 1,
+   "def_shred": 1,
+   "daze": 3,
+   "amp_on_stun": 3,
+   "decibel": 3
+  },
+  "note": "AA: Stun/Support",
+  "passive_use": 4
+ },
+ "1561": {
+  "name": "Velina Airgid",
+  "element": "Wind",
+  "specialty": "Anomaly",
+  "roles": {
+   "sub_anomaly": 3,
+   "off_field": 2
+  },
+  "gives": {
+   "anomaly_buff": 2,
+   "daze": 1,
+   "anomaly_assist": 4,
+   "abloom": 3
+  },
+  "needs": {
+   "atk_buff": 3,
+   "dmg_buff": 3,
+   "anomaly_buff": 3,
+   "pen_buff": 1,
+   "def_shred": 1,
+   "daze": 1,
+   "anomaly_assist": 4
+  },
+  "note": "нет прозы скиллов на nanoka — размечено по амплуа, проверить",
+  "passive_use": 3
+ },
+ "1571": {
+  "name": "Norma Hollowell",
+  "element": "Fire",
+  "specialty": "Stun",
+  "roles": {
+   "sub_dps": 1,
+   "stunner": 3
+  },
+  "gives": {
+   "dmg_buff": 2,
+   "crit_buff": 1,
+   "daze": 3,
+   "amp_on_stun": 4
+  },
+  "needs": {
+   "atk_buff": 2,
+   "dmg_buff": 2,
+   "crit_buff": 2,
+   "sheer_dmg_buff": 2
+  },
+  "note": "нет прозы скиллов на nanoka — размечено по амплуа, проверить",
+  "passive_use": 4
+ },
+ "1591": {
+  "name": "Sigrid",
+  "element": "Ice",
+  "specialty": "Attack",
+  "roles": {
+   "crit_dps": 3
+  },
+  "gives": {},
+  "needs": {
+   "atk_buff": 3,
+   "dmg_buff": 3,
+   "crit_buff": 3,
+   "pen_buff": 1,
+   "def_shred": 1,
+   "daze": 3,
+   "amp_on_stun": 3
+  },
+  "note": "AA: Support/Stun; Contamination",
+  "passive_use": 3
+ }
+}

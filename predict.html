@@ -433,6 +433,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>document.write('<script src="web/icons.js?v='+Date.now()+'"><\/script>');</script>
 <script>document.write('<script src="web/predict.js?v='+Date.now()+'"><\/script>');</script>
+<script>document.write('<script src="web/synergy.js?v='+Date.now()+'"><\/script>');</script>
 <script>document.write('<script src="web/bracket-engine.js?v='+Date.now()+'"><\/script>');</script>
 <script>
 const SB_URL='https://zoavnckfbfiejxfjakue.supabase.co';
@@ -570,6 +571,7 @@ async function boot(){
   D.cache={};bc.forEach(c=>{D.cache[c.tournament_id]=c.json;});
   // порядок встреч для Elo — из синканых сеток (Challonge/своя), иначе sort_order
   D.playOrder=playOrderMap();
+  Synergy.load().then(()=>updateDraft()).catch(e=>console.warn('synergy load',e));
   D.elo=Predict.buildRatings(D.tours,encs,D.mbe,D.playOrder);
   // Отображаемый рейтинг стянут к 1000 по числу игр (n₀=8): игрок с 2 играми не висит
   // в топе. ВАЖНО: вероятности/симуляции считаются по СЫРОМУ рейтингу (стягивание
@@ -812,6 +814,17 @@ function pcBwr(pid,arr,stats){
   });
   return v.length?v.reduce((a,b)=>a+b,0)/v.length:0.5;
 }
+// комнаты Шиюй выбранной ротации (для матчап-аналитики): первый турнир ротации
+// с нормализованными данными shiyu_data.rooms (враги + weak/res).
+function rotRooms(rotKey){
+  if(!rotKey)return[];
+  const rot=rotations().find(r=>r.key===rotKey);if(!rot)return[];
+  for(const tid of rot.tids){
+    const t=D.tours.find(x=>x.id===tid);
+    const rooms=t&&t.shiyu_data&&t.shiyu_data.rooms;
+    if(rooms&&rooms.length)return rooms;
+  } return[];
+}
 function updateDraft(){
   const res=$('draft-res');
   if(!DR.a.length||!DR.b.length){res.innerHTML='<div class="res-empty">Выбери персонажей обеих сторон</div>';return;}
@@ -841,6 +854,24 @@ function updateDraft(){
   }
   const p=sigm(L);
   if(parts.length>1)parts.push(`<span>Суммарно: <b>${fPct(p)}</b></span>`);
+  // --- аналитика (НЕ входит в вероятность): синергия состава + матчап vs Шиюй ---
+  if(window.Synergy&&Synergy.ready){
+    const nmA=DR.a.map(x=>D.charMap[x.cid]&&D.charMap[x.cid].name).filter(Boolean);
+    const nmB=DR.b.map(x=>D.charMap[x.cid]&&D.charMap[x.cid].name).filter(Boolean);
+    const fPt=v=>(v>0?'+':'')+v.toFixed(3);
+    const spA=Synergy.splitSide(nmA),spB=Synergy.splitSide(nmB);
+    // синергия по половинам: [половина1 | половина2] с суммой
+    const halvesSyn=sp=>sp.scores.length?sp.scores.map(s=>fPt(s.total)).join(' | '):'—';
+    const sumSyn=sp=>sp.scores.length>1?` <b>Σ${fPt(sp.total)}</b>`:'';
+    if(spA.scores.length&&spB.scores.length)
+      parts.push(`<span class="ana">Синергия половин (аналитика, не в прогнозе): [${halvesSyn(spA)}]${sumSyn(spA)} vs [${halvesSyn(spB)}]${sumSyn(spB)}</span>`);
+    const rooms=rotRooms(tid);
+    if(rooms.length){
+      const halvesMu=sp=>sp.scores.length?sp.scores.map(s=>{const m=Synergy.bestMatchup(s.members,rooms);return m==null?'—':fPt(m);}).join(' | '):'—';
+      if(spA.scores.length&&spB.scores.length)
+        parts.push(`<span class="ana">Матчап vs Шиюй по половинам (аналитика): [${halvesMu(spA)}] vs [${halvesMu(spB)}]</span>`);
+    }
+  }
   res.innerHTML=resBar(na,p,nb)+`<div class="res-break">${parts.join('')}</div>`;
 }
 
