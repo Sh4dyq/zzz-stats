@@ -592,6 +592,7 @@ async function boot(){
   D.picks=pks;D.mmap=mmap;
   D.encTour={};encs.forEach(e=>D.encTour[e.id]=e.tournament_id);
   D.cstats=Predict.charStats(pks,mmap);
+  D.pairLift=buildPairLift(pks,mmap,D.cstats);
   // преимущество первого пика: доля побед fp-стороны по всем играм (ничья = ½)
   {let w=0,n=0;ms.forEach(m=>{
     if(!m.fp_player_id||(!m.winner_id&&!m.is_draw))return;
@@ -871,6 +872,8 @@ const MS_PRIOR=4,PC_PRIOR=4,PC_W=0.35,ELO_W=0.45;
 // SYN_K — сколько пиков для «половинной» уверенности; SYN_BOOST — сила буста (низкий:
 // на мете почти не трогает, включается на редких/новых персонажах). Проверено на данных.
 const SYN_K=8,SYN_BOOST=1;
+// веса синергии в серой строке (откалибровано на данных); кап тега — в synergy.js
+const SYN_TAG_W=0.6,SYN_LIFT_W=0.3;
 function effBwr(p,stats){
   const base=(stats[p.cid]&&stats[p.cid].bwr)||0.5;
   // А-ранги всегда идут на M6 и от майндскейпа не зависят → базовый винрейт без разреза по M
@@ -903,6 +906,23 @@ function pcBwr(pid,arr,stats){
   });
   return v.length?v.reduce((a,b)=>a+b,0)/v.length:0.5;
 }
+// ко-пик-лифт пар: key(cidA|cidB)→{g,lift}. lift = винрейт пары в одном отряде − средний соло-WR двух
+function buildPairLift(pks,mmap,cstats){
+  const grp={};
+  pks.forEach(p=>{const m=mmap[p.match_id];if(!m||(!m.winner_id&&!m.is_draw))return;
+    const k=p.match_id+'|'+p.player_id+'|'+p.team_slot;(grp[k]=grp[k]||[]).push(p);});
+  const pair={};
+  for(const k in grp){const g=grp[k],m=mmap[g[0].match_id];
+    const win=m.is_draw?0.5:(m.winner_id===g[0].player_id?1:0);
+    for(let i=0;i<g.length;i++)for(let j=i+1;j<g.length;j++){
+      const key=[g[i].character_id,g[j].character_id].sort().join('|');
+      const s=pair[key]||(pair[key]={g:0,w:0});s.g++;s.w+=win;}}
+  const soloWr=c=>{const s=cstats[c];return s&&s.games?s.wEq/s.games:0.5;};
+  const out={};
+  for(const key in pair){const s=pair[key],[a,b]=key.split('|');
+    out[key]={g:s.g,lift:s.w/s.g-(soloWr(a)+soloWr(b))/2};}
+  return out;
+}
 // комнаты Шиюй выбранной ротации (для матчап-аналитики): первый турнир ротации
 // с нормализованными данными shiyu_data.rooms (враги + weak/res).
 function rotRooms(rotKey){
@@ -928,8 +948,7 @@ function updateDraft(){
   let L=logit(pd);
   const parts=[`<span>Сила составов (байес-WR${tid?', эта Шиюй':''}, с учётом M): <b>${fPct(sa)}</b> vs <b>${fPct(sb)}</b></span>`];
   let na='Драфт 1',nb='Драфт 2';
-  // игроки — опционально: если выбраны оба, добавляем их Elo (придушен ×ELO_W) +
-  // лёгкую поправку на личный винрейт каждого с выбранными персонажами (×PC_W)
+  // игроки (опц.): Elo обоих ×ELO_W + личный винрейт с этими персонажами ×PC_W
   const a=$('cb-a').value,b=$('cb-b').value;
   if(a&&b&&a!==b){
     const pe=Predict.pElo(D.elo.ratings[a]??1000,D.elo.ratings[b]??1000);
@@ -941,32 +960,36 @@ function updateDraft(){
     parts.push(`<span>Опыт на этих персонажах: <b>${fPct(pca)}</b> vs <b>${fPct(pcb)}</b> (вес ×${PC_W})</span>`);
   }
   const p=sigm(L);
-  // микро-сноска: мало данных — высокий M без статистики ИЛИ персонажа вообще редко брали
-  // (напр. только вышедший — независимо от майндскейпа/ранга). RARE_GAMES — порог «редких».
+  // сноска «мало данных»: высокий M без статистики ИЛИ персонажа редко брали
   const RARE_GAMES=5;
   const lowSample=p=>((D.cstats[p.cid]&&D.cstats[p.cid].games)||0)<RARE_GAMES;
   const noDataNames=[...new Set(fA.concat(fB).filter(p=>msNoData(p)||lowSample(p)).map(p=>D.charMap[p.cid]&&D.charMap[p.cid].name).filter(Boolean))];
-  // --- синергия команд + матчап vs Шиюй — отдельная серая строка со скорректированным
-  // винрейтом (сумма 100%); крупные цифры остаются БЕЗ синергии (она ухудшает предсказание) ---
+  // синергия — отдельная серая строка (сумма 100%); крупные цифры остаются без неё
   if(window.Synergy&&Synergy.ready){
-    // ряды ПО ПОЗИЦИИ ячеек: ряд 1 = слоты 0–2, ряд 2 = 3–5; команда = ПОЛНЫЙ ряд (3 пика)
+    // отряд = полный ряд: слоты 0–2 или 3–5
     const rowsOf=picks=>[[0,picks.slice(0,3).filter(Boolean)],[1,picks.slice(3,6).filter(Boolean)]].filter(([,t])=>t.length===3);
     const nmOf=t=>t.map(x=>D.charMap[x.cid]&&D.charMap[x.cid].name).filter(Boolean);
-    // адаптивный буст: при малой ОБЩЕЙ выборке пиков персонажа теги весят больше
-    // (D.cstats.games — не разрез по майндскейпу, иначе бустило бы всегда).
+    // буст тегов при малой выборке пиков (по общим играм, не по майндскейпу)
     const teamMult=t=>{const conf=t.reduce((s,x)=>{const g=(D.cstats[x.cid]&&D.cstats[x.cid].games)||0;return s+g/(g+SYN_K);},0)/t.length;return 1+SYN_BOOST*(1-conf);};
     const rooms=rotRooms(tid);
     const agg={monsters:rooms.flatMap(r=>r.monsters||[])};
     const sumSyn=picks=>rowsOf(picks).reduce((s,[,t])=>{const r=Synergy.score(nmOf(t));return s+(r?r.total*teamMult(t):0);},0);
     const sumMu=picks=>rooms.length?rowsOf(picks).reduce((s,[pos,t])=>s+Synergy.elementMatchup(nmOf(t),rooms[pos]||agg).pts,0):0;
+    // эмпирический лифт: среднее по парам отряда с усадкой по числу игр
+    const PL_MIN=6,PL_K=6,plKey=(x,y)=>[x,y].sort().join('|');
+    const squadLift=t=>{const ids=t.map(x=>x.cid);let s=0,n=0;
+      for(let i=0;i<ids.length;i++)for(let j=i+1;j<ids.length;j++){const pl=D.pairLift[plKey(ids[i],ids[j])];n++;
+        if(pl&&pl.g>=PL_MIN)s+=pl.lift*(pl.g/(pl.g+PL_K));}
+      return n?s/n:0;};
+    const sumLift=picks=>rowsOf(picks).reduce((s,[,t])=>s+squadLift(t),0);
     if(rowsOf(DR.a).length&&rowsOf(DR.b).length){
-      const anaA=sumSyn(DR.a)+sumMu(DR.a),anaB=sumSyn(DR.b)+sumMu(DR.b);
+      const anaOf=picks=>sumSyn(picks)*SYN_TAG_W+sumMu(picks)+sumLift(picks)*SYN_LIFT_W;
+      const anaA=anaOf(DR.a),anaB=anaOf(DR.b);
       const delta=Math.max(-0.49,Math.min(0.49,anaA-anaB));
       const pSyn=sigm(L+logit(0.5+delta));
       parts.push(`<span class="syn-wr">с синергией: ${fPct(pSyn)} vs ${fPct(1-pSyn)}</span>`);
     }
   }
-  // крупные цифры = сила составов БЕЗ синергии (на 303 матчах синергия ухудшает предсказание)
   if(noDataNames.length)parts.push(`<span class="note-micro">Мало статистических данных: ${noDataNames.map(esc).join(', ')}</span>`);
   res.innerHTML=resBar(na,p,nb)+`<div class="res-break">${parts.join('')}</div>`;
 }

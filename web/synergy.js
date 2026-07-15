@@ -1,8 +1,5 @@
-// Squad synergy scorer — JS port of tools/synergy_model.py (v2).
-// Analytics-only layer: a winrate-point correction shown NEXT TO the win%,
-// never folded into it (synergy degrades raw prediction — see the memo).
-// Loads two static files: web/data/synergy_tags.json (hand-tagged roles/gives/
-// needs) and web/data/characters_synergy.json (Additional-Ability squad gate).
+// Squad synergy scorer (порт tools/synergy_model.py). Аналитика: поправка в очках
+// винрейта. Данные: web/data/synergy_tags.json + characters_synergy.json.
 (function(g){
 'use strict';
 let TAGS=null, SYN=null, NAME2ID={};
@@ -28,7 +25,7 @@ const MAIN=['crit_dps','sheer_dps','main_anomaly'];
 const DMG=MAIN.concat(['sub_dps','sub_anomaly']);
 const PREMIUM_SUPPORT=new Set(['Ukinami Yuzuha','Lucia Elowen','Astra Yao','Sunna','Nicole Demara']);
 
-const CAP=0.10;
+const CAP=0.15;
 const W={scale:0.012,crit_conflict:-0.05,sheer_conflict:-0.08,anomaly_conflict:-0.012,
  premium_support:0.01,hugo_extra_stun:0.015};
 
