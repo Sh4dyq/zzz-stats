@@ -187,24 +187,54 @@
   /* ===== bracket canvas ===== */
   .bracket-wrap{position:relative;overflow:auto;padding:26px 28px 50px;-webkit-overflow-scrolling:touch}
   svg.gflink{inset:0 auto auto 0;width:auto;height:auto}
-  /* групповой этап — карточки-стендинги */
-  .gs-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:14px;margin-bottom:30px}
-  .gs-card{background:linear-gradient(180deg,#15171f,#11131a);border:1px solid var(--border);border-radius:12px;overflow:hidden}
-  .gs-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 14px;border-bottom:1px solid var(--border);background:rgba(255,255,255,.02)}
-  .gs-title{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;text-transform:uppercase;font-size:15px;letter-spacing:.04em}
-  .gs-badge{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#6a6a74}
-  .gs-row{display:flex;align-items:center;gap:10px;padding:8px 14px}
-  .gs-row+.gs-row{border-top:1px solid var(--border)}
-  .gs-lead{background:rgba(255,31,68,.07);box-shadow:inset 3px 0 0 var(--red)}
-  .gs-rk{font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;color:#7a7a85;width:16px;text-align:center;flex-shrink:0}
-  .gs-lead .gs-rk{color:var(--red)}
-  .gs-av{width:28px;height:28px;border-radius:7px;background:#1d1d22;display:flex;align-items:center;justify-content:center;font-style:italic;font-size:10px;font-weight:900;color:var(--sub);flex-shrink:0;overflow:hidden}
-  .gs-av img{width:100%;height:100%;object-fit:cover;display:block}
-  .gs-nm{flex:1;font-weight:600;font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .gs-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
-  .gs-up{background:var(--win,#46d369);box-shadow:0 0 5px rgba(70,211,105,.7)}
-  .gs-dn{background:var(--red);box-shadow:0 0 5px rgba(255,31,68,.6)}
-  .gs-sc{font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:700;color:#c9c9d0;min-width:34px;text-align:right}
+  /* групповой этап — карточка на группу с переключателем Таблица/Матчи */
+  .gv-wrap{max-width:1180px;margin:0 auto;display:flex;flex-direction:column;gap:26px}
+  .gv-card{background:var(--panel-2,#141418);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+  .gv-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px;border-bottom:1px solid var(--border)}
+  .gv-title{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;text-transform:uppercase;font-size:17px;letter-spacing:.03em}
+  .gv-tabs{display:flex;gap:4px;background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:8px;padding:3px}
+  .gv-tab{font-family:inherit;font-size:12px;font-weight:600;color:var(--sub);background:none;border:none;border-radius:6px;padding:5px 14px;cursor:pointer;transition:background .15s,color .15s}
+  .gv-tab:hover{color:#d6d6dd}
+  .gv-tab.on{background:var(--red);color:#fff}
+  .gv-view{display:none}
+  .gv-view.on{display:block}
+  /* таблица */
+  .gv-table{width:100%;border-collapse:collapse;font-size:13px}
+  .gv-table th{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;color:var(--sub);text-align:center;padding:11px 10px;border-bottom:1px solid var(--border);white-space:nowrap}
+  .gv-table th:nth-child(2){text-align:left}
+  .gv-table td{text-align:center;padding:11px 10px;border-bottom:1px solid rgba(255,255,255,.04);color:#c9c9d0}
+  .gv-table tbody tr:last-child td{border-bottom:none}
+  .gv-table tbody tr:hover{background:rgba(255,255,255,.025)}
+  .gv-lead{background:rgba(255,31,68,.06)}
+  .gv-lead td{box-shadow:none}
+  .gv-lead .gv-rk{color:var(--red);font-weight:800}
+  .gv-rk{font-family:'JetBrains Mono',monospace;font-weight:700;color:#8a8a93}
+  .gv-part{display:flex;align-items:center;gap:10px;text-align:left!important}
+  .gv-nm{font-weight:600;color:#e6e6ec}
+  .gv-mut{color:#6a6a74}
+  .gv-pts{font-weight:800;color:#fff}
+  .gv-av{width:26px;height:26px;border-radius:7px;background:#1d1d22;display:inline-flex;align-items:center;justify-content:center;font-style:italic;font-size:10px;font-weight:900;color:var(--sub);flex-shrink:0;overflow:hidden}
+  .gv-av img{width:100%;height:100%;object-fit:cover;display:block}
+  .gv-hist{white-space:nowrap}
+  .gv-h{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:5px;font-size:11px;font-weight:800;margin:0 1px;color:#fff}
+  .gv-h-W{background:#3d7dff}.gv-h-L{background:var(--red)}.gv-h-D{background:#55555e}
+  .gv-dash{color:#55555e}
+  /* матчи (round-robin) */
+  .gv-mgrid{display:flex;gap:34px;padding:20px 18px;overflow-x:auto}
+  .gv-mr{display:flex;flex-direction:column;gap:14px;min-width:210px}
+  .gv-mrh{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;font-size:12px;letter-spacing:.05em;color:var(--sub);text-align:center;background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:6px;padding:5px 0}
+  .gv-m{position:relative;background:linear-gradient(180deg,#1a1a20,#141418);border:1px solid var(--border);border-radius:9px;overflow:hidden}
+  .gv-mid{position:absolute;left:-24px;top:50%;transform:translateY(-50%);font-family:'JetBrains Mono',monospace;font-size:10px;color:#4d4d55;width:18px;text-align:center}
+  .gv-seat{display:flex;align-items:center;gap:8px;padding:7px 10px 7px 0;min-height:34px}
+  .gv-seat+.gv-seat{border-top:1px solid var(--border)}
+  .gv-sd{font-family:'JetBrains Mono',monospace;font-size:10px;color:#7a7a85;width:22px;text-align:center;flex-shrink:0;align-self:stretch;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.03);border-right:1px solid var(--border)}
+  .gv-snm{flex:1;font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#c9c9d0}
+  .gv-chk{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--win,#46d369);min-width:16px;text-align:right;padding-right:2px}
+  .gv-win{background:linear-gradient(90deg,rgba(70,211,105,.12),transparent 70%)}
+  .gv-win .gv-snm{color:#fff;font-weight:700}
+  .gv-win .gv-sd{color:#fff}
+  .gv-empty{padding:22px 18px;color:var(--sub);font-size:13px}
+  @media(max-width:600px){.gv-table th:nth-child(4),.gv-table td:nth-child(4),.gv-table th:nth-child(5),.gv-table td:nth-child(5),.gv-table th:nth-child(6),.gv-table td:nth-child(6){display:none}}
   /* DE: верхняя+нижняя сетки слева (стопкой), грандфинал — отдельной колонкой справа,
      по вертикали между финалами обеих сеток */
   .de-grid{display:flex;align-items:stretch;gap:90px;min-width:min-content}
@@ -839,25 +869,66 @@ function layoutRounds(rounds){
   }
   return Math.max(MATCH_H,...rounds.flatMap(r=>r.matches.map(m=>m._top+MATCH_H)));
 }
-// Групповой этап: карточка-стендинг на каждую группу (из кэша Challonge model.groups).
+// Групповой этап (Challonge model.groups): на каждую группу — переключатель Таблица/Матчи.
+function gvSwitch(btn,view){
+  const card=btn.closest('.gv-card');if(!card)return;
+  card.querySelectorAll('.gv-tab').forEach(b=>b.classList.toggle('on',b===btn));
+  card.querySelectorAll('.gv-view').forEach(v=>v.classList.toggle('on',v.dataset.view===view));
+}
+function gvAvatar(nm){
+  const init=(nm||'?').replace(/[^A-Za-zА-Яа-я0-9$]/g,'').slice(0,2).toUpperCase()||'—';
+  const sl=(nm||'').trim().toLowerCase();
+  return`<span class="gv-av"><img src="web/players/${esc(sl)}.webp" alt="" onerror="imgFallback(this)">${init}</span>`;
+}
+function gvTable(st){
+  const fmtPts=p=>Number.isInteger(p)?p:(+p).toFixed(1);
+  const hist=h=>(h||[]).map(r=>`<span class="gv-h gv-h-${r}">${r==='W'?'В':r==='L'?'П':'Н'}</span>`).join('')||'<span class="gv-dash">—</span>';
+  const rows=(st||[]).map((s,i)=>`<tr${i===0&&s.w?' class="gv-lead"':''}>
+    <td class="gv-rk">${i+1}</td>
+    <td class="gv-part">${gvAvatar(s.name)}<span class="gv-nm">${esc(s.name||'—')}</span></td>
+    <td>${s.w||0} - ${s.l||0} - ${s.d||0}</td>
+    <td class="gv-mut">${s.tb||0}</td>
+    <td>${s.gw!=null?s.gw:(s.w||0)}</td>
+    <td>${s.d||0}</td>
+    <td class="gv-pts">${fmtPts(s.pts!=null?s.pts:(s.w||0))}</td>
+    <td class="gv-hist">${hist(s.history)}</td>
+  </tr>`).join('')||'<tr><td colspan="8" class="gv-mut" style="padding:14px 16px">Нет игроков</td></tr>';
+  return`<table class="gv-table"><thead><tr>
+    <th>Место</th><th>Участник</th><th>Матчи В-П-Н</th><th>Тай-брейк</th><th>Победы</th><th>Ничьи</th><th>Очки</th><th>История матчей</th>
+  </tr></thead><tbody>${rows}</tbody></table>`;
+}
+function gvSeat(s,winner){
+  return`<div class="gv-seat${winner?' gv-win':''}">
+    <span class="gv-sd">${s&&s.seed||''}</span>
+    ${gvAvatar(s&&s.name)}
+    <span class="gv-snm">${esc((s&&s.name)||'TBD')}</span>
+    <span class="gv-chk">${winner?'✓':''}</span>
+  </div>`;
+}
+function gvMatches(rounds){
+  if(!rounds||!rounds.length)return`<div class="gv-empty">Матчей нет</div>`;
+  let id=0;
+  return`<div class="gv-mgrid">`+rounds.map(r=>`<div class="gv-mr">
+    <div class="gv-mrh">${esc(r.name)}</div>
+    ${(r.matches||[]).map(m=>`<div class="gv-m"><span class="gv-mid">${++id}</span>${gvSeat(m.a,m.win==='a')}${gvSeat(m.b,m.win==='b')}</div>`).join('')}
+  </div>`).join('')+`</div>`;
+}
 function renderGroups(groups){
   if(!groups||!groups.length)return'';
-  const row=(s,rank)=>{
-    const nm=s.name||'—',init=(nm||'?').replace(/[^A-Za-zА-Яа-я0-9$]/g,'').slice(0,2).toUpperCase()||'—';
-    const sl=nm.trim().toLowerCase(),decided=(s.w||0)||(s.l||0);
-    const dot=decided?`<span class="gs-dot ${(s.w||0)>=(s.l||0)?'gs-up':'gs-dn'}"></span>`:'';
-    return`<div class="gs-row${rank===1&&s.w?' gs-lead':''}">
-      <span class="gs-rk">${rank}</span>
-      <span class="gs-av"><img src="web/players/${esc(sl)}.webp" alt="" onerror="imgFallback(this)">${init}</span>
-      <span class="gs-nm">${esc(nm)}</span>${dot}
-      <span class="gs-sc">${s.w||0}:${s.l||0}</span>
+  return`<div class="gv-wrap">`+groups.map(g=>{
+    const hasM=(g.rounds||[]).length;
+    return`<div class="gv-card">
+      <div class="gv-head">
+        <span class="gv-title">${esc(g.name)}</span>
+        <div class="gv-tabs">
+          <button class="gv-tab on" onclick="gvSwitch(this,'table')">Таблица</button>
+          ${hasM?`<button class="gv-tab" onclick="gvSwitch(this,'matches')">Матчи</button>`:''}
+        </div>
+      </div>
+      <div class="gv-view on" data-view="table">${gvTable(g.standings)}</div>
+      ${hasM?`<div class="gv-view" data-view="matches">${gvMatches(g.rounds)}</div>`:''}
     </div>`;
-  };
-  const cards=groups.map(g=>`<div class="gs-card">
-    <div class="gs-head"><span class="gs-title">${esc(g.name)}</span><span class="gs-badge">Групповой этап</span></div>
-    ${(g.standings||[]).map((s,i)=>row(s,i+1)).join('')||'<div class="gs-row"><span class="gs-nm" style="color:var(--sub)">Нет игроков</span></div>'}
-  </div>`).join('');
-  return`<div class="gs-grid">${cards}</div>`;
+  }).join('')+`</div>`;
 }
 function renderRounds(rounds){
   const h=layoutRounds(rounds);

@@ -1094,17 +1094,25 @@ function charCostsSection(tourId,tourName,existing,penalties){
 function _normName(s){
   return (s||'').replace(/ /g,' ').replace(/ё/gi,'е').toLowerCase().replace(/\s+/g,' ').trim();
 }
-// Карта нормализованное имя → персонаж (лениво, по D.chars).
+// Рус. имя nexus (нормализованное) → англ. имя в нашей БД. nexus рендерит косты
+// по-русски, а characters/signatures.name — английские. Сгенерировано из darte
+// (ru↔en) сверкой с БД; ключи в _normName-форме (lower, ё→е). См. tools (scratchpad build_map.py).
+const RU2CHAR={"антон":"Anton","ария":"Aria","астра яо":"Astra","баньюэ":"Banyue","бен":"Ben Bigger","бернис":"Burnice","билли":"Billy","велина":"Velina","вивиан":"Vivian","гашетка":"Trigger","грейс":"Grace","джейн":"Jane Doe","диалинь":"Dialyn","е шуньгуан":"Ye Shunguang","звездный билли":"S Billy","исюань":"Yixuan","йидхари":"Yidhari","коляда":"Koleda","корин":"Corin","лайтер":"Lighter","ликаон":"Lycaon","люси":"Lucy","люсия":"Lucia","манато":"Manato","мияби":"Miyabi","наньгун юй":"Nangong Yu","николь":"Nicole","норма":"Norma","нэкомата":"Nekomata","орфей и магус":"Orphie","орфея и магус":"Orphie","пайпер":"Piper","пань иньху":"Pan Yinhu","пироис":"Pyrois","промея":"Promeia","пульхра":"Pulchra","рина":"Rina","санна":"Sunna","сет":"Seth","сид":"Seed","сокаку":"Soukaku","солдат 0 - энби":"S Anby","солдат 0 энби":"S Anby","солдат 11":"Soldier 11","харумаса":"Harumasa","хуго":"Hugo Vlad","хьюго":"Hugo Vlad","цезарь":"Caesar","цзюй фуфу":"Ju Fufu","цинъи":"Qingyi","циссия":"Cissia","чжао":"Zhao","чжу юань":"Zhu Yuan","эвелин":"Evelyn","элис":"Alice","элис таймфилд":"Alice","эллен":"Ellen","энби":"Anby","юдзуха":"Yuzuha","янаги":"Yanagi"};
+const RU2SIG={"аптечка дзансин":"Zanshin Herb Case","вместилище фурчаний":"Roaring Fur-nace","всесторонняя отто":"Practiced Perfection","всесторонняя отточенность":"Practiced Perfection","встроенный компилятор":"Fusion Compiler","вчерашние звонки":"Yesterday Calls","гость из глубин":"Deep Sea Visitor","грозный страж":"Wrathful Vajra","драгоценная прохлада":"Joyau Dore","душа в доспехах":"Angel in the Shell","заостренные шипы":"Sharpened Stinger","звездное забрало":"Starlight Rider Faceplate","звонок из прошлого":"Yesterday Calls","клетка небесной птицы":"Qingming Birdcage","клыки ярости":"Tusks of Fury","колыбель кракена":"Kraken's Cradle","колыбель плача":"Weeping Cradle","ледяное новолуние":"Frostfall Sickle","мысли в бит":"Thoughtbop","неоновое наваждение":"Neon Fantasies","очаг грез":"Dreamlit Hearth","пламенный венец":"Blazing Laurel","пламя брани":"Bellicose Blaze","полет среди грез":"Flight of Fancy","призрачный взор":"Spectral Gaze","проблеск в облаках":"Cloudcleave Radiance","рептилокатор":"Serpentine Seeker","рукотворное сердце":"Cordis Germina","сдержанность":"The Restrained","семь уловок тануки":"Metanukimorphosis","сера":"The Brimstone","сладковатая зайка":"Half-Sugar Bunny","солярный экзувий":"Sol Exuvia","стальная лапа":"Steel Cushion","старший ассистент":"Head Lackey","стильная штучка":"Elegant Vanity","струны ночи":"Heartstring Nocturne","ткач времени":"Timeweaver","тысяча затмений":"Myriad Eclipse","усмиритель беспорядков vi":"Riot Suppressor Mark VI","храм вьюги":"Hailstorm Shrine","чайник нефритовой чистоты":"Ice-Jade Teapot","чистота утраты":"Severed Innocence","шейкер-огнемейкер":"Flamemaker Shaker","шестерни адского пламени":"Hellfire Gears"};
+
+// Имя (рус. из nexus или англ.) → персонаж БД. Рус. переводим через RU2CHAR.
 let _charByNameCache=null;
 function _charByName(name){
   if(!_charByNameCache){_charByNameCache={};D.chars.forEach(c=>{_charByNameCache[_normName(c.name)]=c;});}
-  return _charByNameCache[_normName(name)]||null;
+  const key=_normName(name),en=RU2CHAR[key];
+  return _charByNameCache[en?_normName(en):key]||null;
 }
-// Карта нормализованное имя → сигнатура (лениво, по D.sigs).
+// Имя (рус. из nexus или англ.) → сигнатура БД. Рус. переводим через RU2SIG.
 let _sigByNameCache=null;
 function _sigByName(name){
   if(!_sigByNameCache){_sigByNameCache={};D.sigs.forEach(s=>{_sigByNameCache[_normName(s.name)]=s;});}
-  return _sigByNameCache[_normName(name)]||null;
+  const key=_normName(name),en=RU2SIG[key];
+  return _sigByNameCache[en?_normName(en):key]||null;
 }
 // Значение ячейки коста: число или null для прочерка «—».
 function _cellCost(td){

@@ -110,29 +110,65 @@ function normalize(doc: any) {
     pid: id,
   });
 
-  // --- Групповой этап: матчи с group_id → стендинги по группам (W:L) ---
-  // Группы метим буквами A,B,… по возрастанию group_id; игроки берутся из матчей группы.
+  // --- Групповой этап (Challonge group_id) → две проекции на группу: стендинг + матчи ---
+  // Группы метим буквами A,B,… по возрастанию group_id. Матч «сыгран» = есть winner ИЛИ state=complete.
   const groupMatches = matches.filter((m: any) => m.group);
+  // сумма выигранных геймов игроком id по scores_csv («2-1,1-2» → сеты); фолбэк — победа в матче
+  const gameWinsOf = (m: any, id: string): number => {
+    if (!m.scores) return m.win === id ? 1 : 0;
+    let n = 0;
+    for (const set of String(m.scores).split(",")) {
+      const [x, y] = set.split("-").map((v) => parseInt(v, 10));
+      if (Number.isNaN(x) || Number.isNaN(y)) continue;
+      n += id === m.p1 ? x : y;
+    }
+    return n;
+  };
   const groups = (() => {
     if (!groupMatches.length) return [];
     const gids = [...new Set(groupMatches.map((m: any) => m.group as string))].sort((a, b) => Number(a) - Number(b));
     return gids.map((gid, gi) => {
       const gm = groupMatches.filter((m: any) => m.group === gid);
-      const st = new Map<string, { name: string; seed: number | string; pid: string; w: number; l: number }>();
-      const seatG = (id: string) => {
-        if (!st.has(id)) st.set(id, { name: nameOf(id) ?? "—", seed: seedOf(id), pid: id, w: 0, l: 0 });
+      type Row = { name: string; seed: number | string; pid: string; w: number; l: number; d: number; gw: number; pts: number; history: { r: string; ord: number }[] };
+      const st = new Map<string, Row>();
+      const seatG = (id: string): Row => {
+        if (!st.has(id)) st.set(id, { name: nameOf(id) ?? "—", seed: seedOf(id), pid: id, w: 0, l: 0, d: 0, gw: 0, pts: 0, history: [] });
         return st.get(id)!;
       };
       for (const m of gm) {
         if (m.p1) seatG(m.p1);
         if (m.p2) seatG(m.p2);
+        const done = !!m.win || m.state === "complete";
+        if (!done) continue;
+        const ord = m.round ?? 0;
+        const push = (id: string, r: string) => { const row = seatG(id); row.gw += gameWinsOf(m, id); row.history.push({ r, ord }); };
         if (m.win) {
           const lo = m.win === m.p1 ? m.p2 : m.p1;
-          seatG(m.win).w++; if (lo) seatG(lo).l++;
+          seatG(m.win).w++; seatG(m.win).pts += 1; push(m.win, "W");
+          if (lo) { seatG(lo).l++; push(lo, "L"); }
+        } else {
+          // завершён без победителя → ничья обоим (Challonge: 0.5 очка)
+          [m.p1, m.p2].forEach((id: string | null) => { if (id) { seatG(id).d++; seatG(id).pts += 0.5; push(id, "D"); } });
         }
       }
-      const standings = [...st.values()].sort((a, b) => b.w - a.w || a.l - b.l || a.name.localeCompare(b.name));
-      return { name: `Группа ${String.fromCharCode(65 + gi)}`, standings };
+      const standings = [...st.values()]
+        .map((r) => ({ ...r, history: r.history.sort((a, b) => a.ord - b.ord).map((h) => h.r) }))
+        .sort((a, b) => b.pts - a.pts || (b.w - b.l) - (a.w - a.l) || b.gw - a.gw || a.name.localeCompare(b.name));
+      // матчи группы, разложенные по раундам (round-robin)
+      const rkeys = [...new Set(gm.map((m: any) => m.round ?? 0))].sort((a, b) => a - b);
+      const grounds = rkeys.map((rk) => ({
+        name: `Раунд ${rk}`,
+        matches: gm.filter((m: any) => (m.round ?? 0) === rk)
+          .sort((m1, m2) => String(m1.ident ?? "").localeCompare(String(m2.ident ?? "")))
+          .map((m) => ({
+            a: { name: nameOf(m.p1), seed: seedOf(m.p1) },
+            b: { name: nameOf(m.p2), seed: seedOf(m.p2) },
+            win: m.win === m.p1 ? "a" : m.win === m.p2 ? "b" : null,
+            played: !!m.win || m.state === "complete",
+            scores: m.scores || "",
+          })),
+      }));
+      return { name: `Группа ${String.fromCharCode(65 + gi)}`, standings, rounds: grounds };
     });
   })();
 
