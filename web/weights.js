@@ -53,7 +53,26 @@ function _winrates(picks,matches){
   return out;
 }
 
-let _W={rows:[],saved:{},sortKey:'power',sortDir:-1,wman:0.5};
+let _W={rows:[],saved:{},sortKey:'power',sortDir:-1,wman:0.5,roleFilter:'all',expanded:new Set()};
+
+// констелляции (майндскейпы), реально сыгранные на турнирах: пики/винрейт + кост майндскейпа.
+// Только сыгранные — это заодно отсекает мусорные косты незаигранных M (напр. заглушки).
+function _constsByChar(picks,matches,costs){
+  const mById={};matches.forEach(m=>mById[m.id]=m);
+  const play={};
+  picks.forEach(p=>{const c=play[p.character_id]=play[p.character_id]||{};const s=c[p.mindscape]=c[p.mindscape]||{picks:0,wins:0};s.picks++;const m=mById[p.match_id];if(m&&m.winner_id===p.player_id)s.wins++;});
+  const costMap={};
+  costs.forEach(c=>{if(c.is_allowed===false)return;((costMap[c.character_id]=costMap[c.character_id]||{})[c.mindscape]=costMap[c.character_id][c.mindscape]||[]).push(c.cost);});
+  const med=a=>{a=a.slice().sort((x,y)=>x-y);const n=a.length;return n?(n%2?a[(n-1)/2]:Math.round((a[n/2-1]+a[n/2])/2)):null;};
+  const out={};
+  for(const ch in play){
+    out[ch]=Object.keys(play[ch]).map(ms=>{
+      const s=play[ch][ms];const raw=(costMap[ch]&&costMap[ch][ms])||[];const nz=raw.filter(x=>x>0);
+      return{ms:+ms,picks:s.picks,wins:s.wins,cost:nz.length?med(nz):(raw.length?0:null)};
+    }).sort((a,b)=>a.ms-b.ms);
+  }
+  return out;
+}
 
 async function pgWeights(){
   html(`<div class="card"><span class="spinner"></span> Считаю косты и винрейты…</div>`);
@@ -61,12 +80,13 @@ async function pgWeights(){
     _fetchAllW('tournament_costs'),_fetchAllW('match_picks'),_fetchAllW('matches'),_fetchAllW('char_weights')
   ]);
   const avgCost=_avgCosts(costs), wr=_winrates(picks,matches);
+  _W.consts=_constsByChar(picks,matches,costs);
   const savedMap={};saved.forEach(r=>savedMap[r.character_id]=r);
   _W.saved=savedMap;
   _W.rows=D.chars
     .filter(c=>avgCost[c.id]!==undefined||wr[c.id])   // только персонажи с историей
     .map(c=>({
-      id:c.id,c,
+      id:c.id,c,role:c.role,
       cost:avgCost[c.id]!=null?Math.round(avgCost[c.id]):null,
       wr:wr[c.id]?wr[c.id].wr:null,
       picks:wr[c.id]?wr[c.id].picks:0,
@@ -95,22 +115,47 @@ function _tierOf(power){
   return{t:'D', c:'#ff6a3d'};
 }
 
+const _ROLES=[['atk','ДД'],['stun','Стан'],['ano','Аном'],['sup','Сап'],['rupt','Разр'],['def','Защ']];
+const _roleLabel=r=>{const x=_ROLES.find(e=>e[0]===r);return x?x[1]:r;};
+
+// разворот: строка деталей с констелляциями (сыгранные майндскейпы + кост/винрейт)
+function _constDetailHtml(r){
+  const cs=(_W.consts&&_W.consts[r.id])||[];
+  if(!cs.length)return `<span style="color:var(--sub);font-size:13px">Нет сыгранных констелляций в матчах.</span>`;
+  const chip=c=>{const wr=c.picks?Math.round(c.wins/c.picks*100):0;
+    return `<div style="display:flex;flex-direction:column;gap:2px;background:var(--field);border:1px solid var(--border);border-radius:8px;padding:8px 11px;min-width:104px">
+      <span style="font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;font-size:15px;color:var(--gold)">M${c.ms}</span>
+      <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--sub)">кост ${c.cost!=null?c.cost:'—'}</span>
+      <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--sub)">пики ${c.picks} · WR ${wr}%</span>
+    </div>`;};
+  return `<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+    <span style="font-size:12px;color:var(--sub);text-transform:uppercase;letter-spacing:.06em;font-weight:600;margin-right:4px">Констелляции на турнирах</span>
+    ${cs.map(chip).join('')}</div>`;
+}
+
 function _renderWeights(){
   const w=_W.wman;
-  const rows=_W.rows.map(r=>({r,power:_powerOf(r,w)}));
+  const rf=_W.roleFilter;
+  let rows=_W.rows.map(r=>({r,power:_powerOf(r,w)}));
+  if(rf!=='all')rows=rows.filter(x=>x.r.role===rf);
   const k=_W.sortKey,dir=_W.sortDir;
   const keyVal=x=>k==='name'?x.r.c.name:k==='cost'?(x.r.cost??-1):k==='wr'?(x.r.wr??-1):k==='man'?x.r.man:x.power;
   rows.sort((a,b)=>{const va=keyVal(a),vb=keyVal(b);return dir*(typeof va==='string'?va.localeCompare(vb,'ru'):va-vb);});
   const arrow=key=>k===key?(dir<0?' ↓':' ↑'):'';
+  const rbtn=(val,label)=>`<button class="tbtn" style="${rf===val?'border-color:var(--accent);color:#fff':''}" onclick="_roleFilter('${val}')">${label}</button>`;
   html(`
-  <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:16px">
+  <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:12px">
     <div class="card" style="display:flex;align-items:center;gap:12px;padding:12px 16px">
       <label style="margin:0;text-transform:none;letter-spacing:0;font-size:13px;color:var(--sub)">Доверие ручному весу</label>
       <input type="range" min="0" max="100" step="5" value="${Math.round(w*100)}" style="width:170px" oninput="_wmanChange(this.value)">
       <span id="wman-out" style="font-family:'JetBrains Mono',monospace;font-weight:600;color:#fff;min-width:36px">${w.toFixed(2)}</span>
     </div>
     <button class="btn btn-y" onclick="saveWeights()">Сохранить</button>
-    <span class="count-chip">${_W.rows.length} персонажей</span>
+    <span class="count-chip">${rows.length} из ${_W.rows.length}</span>
+  </div>
+  <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-bottom:14px">
+    <span style="font-size:12px;color:var(--sub);margin-right:4px">Роль:</span>
+    ${rbtn('all','Все')}${_ROLES.map(([v,l])=>rbtn(v,l)).join('')}
   </div>
   <div class="card" style="padding:0;overflow:hidden">
   <table>
@@ -128,9 +173,10 @@ function _renderWeights(){
       const idx=_W.rows.indexOf(r);
       const tier=_tierOf(power);
       const mtier=_tierOf(_manPowerOf(r));
+      const open=_W.expanded.has(r.id);
       const badge=(t,attr)=>`<span ${attr} style="display:inline-flex;align-items:center;justify-content:center;min-width:30px;height:22px;font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;font-size:14px;color:#181820;background:${t.c};border-radius:5px;padding:0 6px">${t.t}</span>`;
       return `<tr data-ri="${idx}" style="border-top:1px solid var(--line)">
-        <td style="padding:9px 14px"><div style="display:flex;align-items:center;gap:9px">${iconChar(r.c,28)}<span style="font-weight:600">${r.c.name}</span></div></td>
+        <td style="padding:9px 14px"><div style="display:flex;align-items:center;gap:9px;cursor:pointer" onclick="_toggleExpand('${r.id}')" title="Показать констелляции"><span style="color:var(--sub);width:12px;display:inline-block;transition:transform .15s;${open?'transform:rotate(90deg)':''}">▶</span>${iconChar(r.c,28)}<span style="font-weight:600">${r.c.name}</span><span style="font-size:11px;color:var(--sub);border:1px solid var(--border);border-radius:4px;padding:0 5px">${_roleLabel(r.role)}</span></div></td>
         <td style="padding:9px 8px;font-family:'JetBrains Mono',monospace;color:var(--sub)">${r.cost!=null?r.cost:'—'}</td>
         <td style="padding:9px 8px;font-family:'JetBrains Mono',monospace;color:var(--sub)">${r.wr!=null?Math.round(r.wr*100)+'%':'—'}</td>
         <td style="padding:9px 8px;white-space:nowrap">
@@ -145,12 +191,12 @@ function _renderWeights(){
             <span style="flex:1;height:6px;background:var(--field);border-radius:3px;overflow:hidden;min-width:60px"><span data-tierbar style="display:block;height:100%;width:${Math.round(power)}%;background:${tier.c}"></span></span>
           </div>
         </td>
-      </tr>`;
+      </tr>${open?`<tr><td colspan="7" style="padding:6px 14px 14px 38px;background:rgba(255,255,255,.015)">${_constDetailHtml(r)}</td></tr>`:''}`;
     }).join('')}
     </tbody>
   </table>
   </div>
-  <p style="color:var(--sub);font-size:12px;margin-top:12px;line-height:1.5">Ползунок 0–100: 50 = средний персонаж. «Сила» (0–100) — итог после смешивания руки с авто (кост+винрейт), относительна пулу. Клик по «Кост»/«Винрейт»/«Сила» — сортировка. Не забудь «Сохранить».</p>`);
+  <p style="color:var(--sub);font-size:12px;margin-top:12px;line-height:1.5">Клик по персонажу — констелляции (сыгранные майндскейпы + кост/винрейт). Фильтр по ролям сверху. Клик по заголовку — сортировка. Не забудь «Сохранить».</p>`);
 }
 
 // Точечная перерисовка ячеек строки БЕЗ пересборки таблицы и без пересортировки —
@@ -170,6 +216,8 @@ function _wmanChange(val){
   document.querySelectorAll('#page-content tbody tr').forEach(_paintRow);
 }
 function _sortW(key){if(_W.sortKey===key)_W.sortDir*=-1;else{_W.sortKey=key;_W.sortDir=-1;}_renderWeights();}
+function _roleFilter(v){_W.roleFilter=v;_renderWeights();}
+function _toggleExpand(id){if(_W.expanded.has(id))_W.expanded.delete(id);else _W.expanded.add(id);_renderWeights();}
 function _manChange(idx,val){_W.rows[idx].man=+val;const tr=document.querySelector(`#page-content tbody tr[data-ri="${idx}"]`);if(tr)_paintRow(tr);}
 
 async function saveWeights(){
