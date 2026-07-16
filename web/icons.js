@@ -96,12 +96,24 @@ function icSelect(id,items,selected){
     <div class="icsel-list" id="icsel-list-${id}">${opts}</div>
   </div>`;
 }
+// Открытую выпадашку позиционируем fixed по кнопке — чтобы overflow:hidden у
+// родителей (details.panel и т.п.) её не обрезал. Открываем вверх, если снизу мало места.
+function icSelectPlace(list){
+  const wrap=list.closest('.icsel');const btn=wrap&&wrap.querySelector('.icsel-btn');if(!btn)return;
+  const r=btn.getBoundingClientRect();
+  list.style.position='fixed';list.style.width=r.width+'px';list.style.left=r.left+'px';
+  const mh=Math.min(260,list.scrollHeight+2),gap=4;
+  const below=window.innerHeight-r.bottom-gap,above=r.top-gap;
+  if(below<mh&&above>below){list.style.top='auto';list.style.bottom=(window.innerHeight-r.top+gap)+'px';}
+  else{list.style.bottom='auto';list.style.top=(r.bottom+gap)+'px';}
+}
+function icSelectCloseAll(){document.querySelectorAll('.icsel-list.open').forEach(l=>{l.classList.remove('open');l.style.cssText='';});}
 function icSelectToggle(id,ev){
   if(ev)ev.stopPropagation();
   const list=document.getElementById('icsel-list-'+id);if(!list)return;
   const open=list.classList.contains('open');
-  document.querySelectorAll('.icsel-list.open').forEach(l=>l.classList.remove('open'));
-  if(!open)list.classList.add('open');
+  icSelectCloseAll();
+  if(!open){list.classList.add('open');icSelectPlace(list);}
 }
 function icSelectPick(id,el){
   const inp=document.getElementById(id);if(inp)inp.value=el.getAttribute('data-v');
@@ -110,9 +122,12 @@ function icSelectPick(id,el){
     wrap.querySelector('.icsel-cur').innerHTML=el.innerHTML;
     wrap.querySelectorAll('.icsel-opt').forEach(o=>o.classList.toggle('sel',o===el));
   }
-  const list=document.getElementById('icsel-list-'+id);if(list)list.classList.remove('open');
+  icSelectCloseAll();
 }
 if(typeof document!=='undefined'&&!window._icSelInit){
   window._icSelInit=true;
-  document.addEventListener('click',e=>{if(!e.target.closest('.icsel'))document.querySelectorAll('.icsel-list.open').forEach(l=>l.classList.remove('open'));});
+  document.addEventListener('click',e=>{if(!e.target.closest('.icsel'))icSelectCloseAll();});
+  // При скролле/ресайзе fixed-выпадашка «отрывается» от кнопки — просто закрываем.
+  window.addEventListener('scroll',()=>{if(document.querySelector('.icsel-list.open'))icSelectCloseAll();},true);
+  window.addEventListener('resize',icSelectCloseAll);
 }
