@@ -64,6 +64,7 @@ function normalize(doc: any) {
     const m = wrap.match ?? wrap;
     return {
       round: m.round ?? 0,
+      group: m.group_id != null ? String(m.group_id) : null,   // групповой этап → id группы
       p1: m.player1_id != null ? String(m.player1_id) : null,
       p2: m.player2_id != null ? String(m.player2_id) : null,
       win: m.winner_id != null ? String(m.winner_id) : null,
@@ -75,9 +76,10 @@ function normalize(doc: any) {
     };
   });
 
-  // группировка по раунду; в DE round<0 = нижняя сетка
+  // группировка по раунду (без групповых матчей); в DE round<0 = нижняя сетка
   const byRound = new Map<number, any[]>();
   for (const m of matches) {
+    if (m.group) continue;   // групповые матчи не идут в дерево
     if (!byRound.has(m.round)) byRound.set(m.round, []);
     byRound.get(m.round)!.push(m);
   }
@@ -107,6 +109,32 @@ function normalize(doc: any) {
     win: !!(win && id && win === id),
     pid: id,
   });
+
+  // --- Групповой этап: матчи с group_id → стендинги по группам (W:L) ---
+  // Группы метим буквами A,B,… по возрастанию group_id; игроки берутся из матчей группы.
+  const groupMatches = matches.filter((m: any) => m.group);
+  const groups = (() => {
+    if (!groupMatches.length) return [];
+    const gids = [...new Set(groupMatches.map((m: any) => m.group as string))].sort((a, b) => Number(a) - Number(b));
+    return gids.map((gid, gi) => {
+      const gm = groupMatches.filter((m: any) => m.group === gid);
+      const st = new Map<string, { name: string; seed: number | string; pid: string; w: number; l: number }>();
+      const seatG = (id: string) => {
+        if (!st.has(id)) st.set(id, { name: nameOf(id) ?? "—", seed: seedOf(id), pid: id, w: 0, l: 0 });
+        return st.get(id)!;
+      };
+      for (const m of gm) {
+        if (m.p1) seatG(m.p1);
+        if (m.p2) seatG(m.p2);
+        if (m.win) {
+          const lo = m.win === m.p1 ? m.p2 : m.p1;
+          seatG(m.win).w++; if (lo) seatG(lo).l++;
+        }
+      }
+      const standings = [...st.values()].sort((a, b) => b.w - a.w || a.l - b.l || a.name.localeCompare(b.name));
+      return { name: `Группа ${String.fromCharCode(65 + gi)}`, standings };
+    });
+  })();
 
   const rounds = roundKeys.map((r) => ({
     name: roundName(r),
@@ -146,7 +174,7 @@ function normalize(doc: any) {
     link.push({ cid, name: p.name ?? p.display_name ?? "—", seed: p.seed ?? null });
   }
 
-  return { rounds, results, participants, link, source: "challonge", fetched_at: new Date().toISOString() };
+  return { rounds, groups, results, participants, link, source: "challonge", fetched_at: new Date().toISOString() };
 }
 
 // ---- Резолв ника Challonge → наш player_id (транслит + осторожный фаззи) ----

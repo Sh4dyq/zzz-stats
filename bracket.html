@@ -187,6 +187,24 @@
   /* ===== bracket canvas ===== */
   .bracket-wrap{position:relative;overflow:auto;padding:26px 28px 50px;-webkit-overflow-scrolling:touch}
   svg.gflink{inset:0 auto auto 0;width:auto;height:auto}
+  /* групповой этап — карточки-стендинги */
+  .gs-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:14px;margin-bottom:30px}
+  .gs-card{background:linear-gradient(180deg,#15171f,#11131a);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+  .gs-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 14px;border-bottom:1px solid var(--border);background:rgba(255,255,255,.02)}
+  .gs-title{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;text-transform:uppercase;font-size:15px;letter-spacing:.04em}
+  .gs-badge{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#6a6a74}
+  .gs-row{display:flex;align-items:center;gap:10px;padding:8px 14px}
+  .gs-row+.gs-row{border-top:1px solid var(--border)}
+  .gs-lead{background:rgba(255,31,68,.07);box-shadow:inset 3px 0 0 var(--red)}
+  .gs-rk{font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;color:#7a7a85;width:16px;text-align:center;flex-shrink:0}
+  .gs-lead .gs-rk{color:var(--red)}
+  .gs-av{width:28px;height:28px;border-radius:7px;background:#1d1d22;display:flex;align-items:center;justify-content:center;font-style:italic;font-size:10px;font-weight:900;color:var(--sub);flex-shrink:0;overflow:hidden}
+  .gs-av img{width:100%;height:100%;object-fit:cover;display:block}
+  .gs-nm{flex:1;font-weight:600;font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .gs-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+  .gs-up{background:var(--win,#46d369);box-shadow:0 0 5px rgba(70,211,105,.7)}
+  .gs-dn{background:var(--red);box-shadow:0 0 5px rgba(255,31,68,.6)}
+  .gs-sc{font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:700;color:#c9c9d0;min-width:34px;text-align:right}
   /* DE: верхняя+нижняя сетки слева (стопкой), грандфинал — отдельной колонкой справа,
      по вертикали между финалами обеих сеток */
   .de-grid{display:flex;align-items:stretch;gap:90px;min-width:min-content}
@@ -733,12 +751,14 @@ function renderBracket(t){
   // ИСТОЧНИК (гибрид): для турниров с challonge_url авторитет сетки = кэш Challonge (синк на бэке),
   // иначе фолбэк на encounters, иначе каркас.
   const ch=S.cache[t.id];
+  const groupsHTML=(ch&&Array.isArray(ch.groups)&&ch.groups.length)?renderGroups(ch.groups):'';
   let src='enc';
   let model=(ch&&Array.isArray(ch.rounds)&&ch.rounds.length)?(src='challonge',{rounds:relabelRounds(ch.rounds.map(r=>({...r})))}):modelFromEncounters(t);
   if(model&&src!=='challonge')src='enc';
   let skeleton=false;
   // нет сохранённых встреч → показываем КАРКАС по формату+числу участников
-  if(!model){
+  // (но если это чисто групповой этап из кэша — каркас не строим, покажем только группы)
+  if(!model&&!groupsHTML){
     src='skeleton';
     const seeds=seedsOf(t.id);
     const n=Math.max(seeds.length,t.expected_players||0);
@@ -746,6 +766,12 @@ function renderBracket(t){
     skeleton=!!model;
   }
   if(!model){
+    // только группы (плей-офф ещё нет) — показываем стендинги без «сетка не готова»
+    if(groupsHTML){
+      const gnote=`<div style="max-width:1080px;margin:0 auto;padding:16px 28px 0;color:var(--sub);font-size:13px;display:flex;gap:10px;align-items:center;flex-wrap:wrap"><span style="display:inline-block;padding:2px 9px;border-radius:99px;background:linear-gradient(90deg,#ff3b6b,#ff8a5b);color:#fff;font-size:11px;font-weight:700;letter-spacing:.4px">CHALLONGE · авто-синк${ch.fetched_at?' · '+fmtDate(ch.fetched_at):''}</span></div>`;
+      $('content').innerHTML=gnote+`<div class="bracket-wrap">${groupsHTML}</div>`;
+      return;
+    }
     $('content').innerHTML=`<div class="panel">
       <h3>Сетка ещё не готова</h3>
       <p>Укажи формат и число участников турнира, чтобы показать каркас сетки.</p>
@@ -758,7 +784,7 @@ function renderBracket(t){
     ?`<span style="display:inline-block;padding:2px 9px;border-radius:99px;background:linear-gradient(90deg,#ff3b6b,#ff8a5b);color:#fff;font-size:11px;font-weight:700;letter-spacing:.4px">CHALLONGE · авто-синк${ch.fetched_at?' · '+fmtDate(ch.fetched_at):''}</span>`
     :src==='enc'?`<span style="display:inline-block;padding:2px 9px;border-radius:99px;background:#1a1d27;border:1px solid var(--border);color:var(--sub);font-size:11px;font-weight:600">Ручной ввод</span>`:'';
   const note=(badge||skeleton)?`<div style="max-width:1080px;margin:0 auto;padding:16px 28px 0;color:var(--sub);font-size:13px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">${badge}${skeleton?`<span>Предварительный каркас сетки${seedsOf(t.id).length?' (участники по посеву)':' — участники появятся по мере заполнения'}.</span>`:''}</div>`:'';
-  $('content').innerHTML=note+`<div class="bracket-wrap">${renderBracketBody(model.rounds,t.bracket_type||'')}</div>`;
+  $('content').innerHTML=note+`<div class="bracket-wrap">${groupsHTML}${renderBracketBody(model.rounds,t.bracket_type||'')}</div>`;
 }
 
 // Каркас сетки: для Double Elimination раскладываем горизонтально по секциям
@@ -812,6 +838,26 @@ function layoutRounds(rounds){
       r.matches.forEach((m,i)=>{m._top=span*(i+0.5)-MATCH_H/2;});});
   }
   return Math.max(MATCH_H,...rounds.flatMap(r=>r.matches.map(m=>m._top+MATCH_H)));
+}
+// Групповой этап: карточка-стендинг на каждую группу (из кэша Challonge model.groups).
+function renderGroups(groups){
+  if(!groups||!groups.length)return'';
+  const row=(s,rank)=>{
+    const nm=s.name||'—',init=(nm||'?').replace(/[^A-Za-zА-Яа-я0-9$]/g,'').slice(0,2).toUpperCase()||'—';
+    const sl=nm.trim().toLowerCase(),decided=(s.w||0)||(s.l||0);
+    const dot=decided?`<span class="gs-dot ${(s.w||0)>=(s.l||0)?'gs-up':'gs-dn'}"></span>`:'';
+    return`<div class="gs-row${rank===1&&s.w?' gs-lead':''}">
+      <span class="gs-rk">${rank}</span>
+      <span class="gs-av"><img src="web/players/${esc(sl)}.webp" alt="" onerror="imgFallback(this)">${init}</span>
+      <span class="gs-nm">${esc(nm)}</span>${dot}
+      <span class="gs-sc">${s.w||0}:${s.l||0}</span>
+    </div>`;
+  };
+  const cards=groups.map(g=>`<div class="gs-card">
+    <div class="gs-head"><span class="gs-title">${esc(g.name)}</span><span class="gs-badge">Групповой этап</span></div>
+    ${(g.standings||[]).map((s,i)=>row(s,i+1)).join('')||'<div class="gs-row"><span class="gs-nm" style="color:var(--sub)">Нет игроков</span></div>'}
+  </div>`).join('');
+  return`<div class="gs-grid">${cards}</div>`;
 }
 function renderRounds(rounds){
   const h=layoutRounds(rounds);

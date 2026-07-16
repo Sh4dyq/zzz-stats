@@ -279,35 +279,43 @@ function applyBracketResults(model,parts,encs,plMap){
 }
 // draggable=true → слоты 1-го раунда можно перетаскивать для смены посева (не-Challonge).
 // res={parts,encs,plMap} → подставляет продвинувшихся победителей в поздние раунды (SE).
-// Групповой этап: карточка-стендинг на каждую группу (по стадиям встреч), как на darte.
-// Группы берём из encounters.stage; W:L считаем по winner_id. singleGroup=RR → одна группа.
+// Групповой этап: карточка-стендинг на каждую группу, как на darte.
+// Источник: кэш Challonge (bracket_cache.groups) → иначе encounters.stage. W:L по winner_id.
+// Нормализованная форма группы: {name, st:[{nm,w,l}]} (уже отсортирована).
 function groupStandingsHTML(t,seeds,res,singleGroup){
-  const parts=(res&&res.parts)||[],encs=(res&&res.encs)||[],plMap=(res&&res.plMap)||{};
+  const encs=(res&&res.encs)||[],plMap=(res&&res.plMap)||{};
+  const cacheGroups=res&&res.cacheGroups;
   const nickOf=pid=>plMap[pid]?.nickname||'—';
-  // группировка встреч по стадии (для RR — всё в одну «группу»)
-  const byGrp={};
-  encs.forEach(e=>{const k=singleGroup?'Round Robin':(e.stage||'Без группы');(byGrp[k]=byGrp[k]||[]).push(e);});
-  // стендинг группы: {pid, w, l} по встречам этой группы
-  const standOf=list=>{
-    const st={};
-    const seat=pid=>st[pid]||(st[pid]={pid,w:0,l:0});
-    list.forEach(e=>{
-      [e.player1_id,e.player2_id].forEach(pid=>{if(pid)seat(pid);});
-      if(e.winner_id){
-        const lo=e.winner_id===e.player1_id?e.player2_id:e.player1_id;
-        seat(e.winner_id).w++; if(lo)seat(lo).l++;
-      }
-    });
-    return Object.values(st).sort((a,b)=>b.w-a.w||a.l-b.l||nickOf(a.pid).localeCompare(nickOf(b.pid)));
-  };
-  const keys=Object.keys(byGrp).sort();
-  if(!keys.length){
-    return`<p style="color:var(--sub);font-size:13px">Групп ещё нет. Создавай встречи ниже и помечай их стадией «Группа A/B/…» — здесь появятся стендинги.</p>`;
+  let grp;
+  if(cacheGroups&&cacheGroups.length){
+    // Challonge-синк уже посчитал стендинги — берём напрямую
+    grp=cacheGroups.map(g=>({name:g.name,st:(g.standings||[]).map(s=>({nm:s.name,w:s.w||0,l:s.l||0}))}));
+  }else{
+    // фолбэк: считаем из encounters по стадии (для ручных турниров)
+    const byGrp={};
+    encs.forEach(e=>{const k=singleGroup?'Round Robin':(e.stage||'Без группы');(byGrp[k]=byGrp[k]||[]).push(e);});
+    const keys=Object.keys(byGrp).sort();
+    if(!keys.length){
+      return`<p style="color:var(--sub);font-size:13px">Групп ещё нет. Создай встречи ниже и помечай их стадией «Группа A/B/…» (или синкни с Challonge) — здесь появятся стендинги.</p>`;
+    }
+    const standOf=list=>{
+      const st={};
+      const seat=pid=>st[pid]||(st[pid]={pid,w:0,l:0});
+      list.forEach(e=>{
+        [e.player1_id,e.player2_id].forEach(pid=>{if(pid)seat(pid);});
+        if(e.winner_id){
+          const lo=e.winner_id===e.player1_id?e.player2_id:e.player1_id;
+          seat(e.winner_id).w++; if(lo)seat(lo).l++;
+        }
+      });
+      return Object.values(st).sort((a,b)=>b.w-a.w||a.l-b.l||nickOf(a.pid).localeCompare(nickOf(b.pid)))
+        .map(s=>({nm:nickOf(s.pid),w:s.w,l:s.l}));
+    };
+    grp=keys.map(k=>({name:k,st:standOf(byGrp[k])}));
   }
-  const row=(s,rank,groupPlayed)=>{
-    const nm=nickOf(s.pid),init=(nm||'?').replace(/[^A-Za-zА-Яа-я0-9$]/g,'').slice(0,2).toUpperCase()||'—';
-    const sl=nm.trim().toLowerCase();
-    const decided=s.w||s.l; // сыграл хоть один матч
+  const row=(s,rank)=>{
+    const nm=s.nm||'—',init=(nm||'?').replace(/[^A-Za-zА-Яа-я0-9$]/g,'').slice(0,2).toUpperCase()||'—';
+    const sl=nm.trim().toLowerCase(),decided=s.w||s.l;
     const dot=decided?`<span class="gs-dot ${s.w>=s.l?'gs-up':'gs-dn'}"></span>`:'';
     return`<div class="gs-row${rank===1&&s.w?' gs-lead':''}">
       <span class="gs-rk">${rank}</span>
@@ -316,14 +324,10 @@ function groupStandingsHTML(t,seeds,res,singleGroup){
       ${dot}<span class="gs-sc">${s.w}:${s.l}</span>
     </div>`;
   };
-  const cards=keys.map(k=>{
-    const st=standOf(byGrp[k]);
-    const played=byGrp[k].some(e=>e.winner_id);
-    return`<div class="gs-card">
-      <div class="gs-head"><span class="gs-title">${escapeHtml(k)}</span><span class="gs-badge">Групповой этап</span></div>
-      ${st.map((s,i)=>row(s,i+1,played)).join('')||'<div class="gs-row"><span class="gs-nm" style="color:var(--sub)">Нет игроков</span></div>'}
-    </div>`;
-  }).join('');
+  const cards=grp.map(g=>`<div class="gs-card">
+      <div class="gs-head"><span class="gs-title">${escapeHtml(g.name)}</span><span class="gs-badge">Групповой этап</span></div>
+      ${g.st.map((s,i)=>row(s,i+1)).join('')||'<div class="gs-row"><span class="gs-nm" style="color:var(--sub)">Нет игроков</span></div>'}
+    </div>`).join('');
   return`<style>
     .gs-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px}
     .gs-card{background:linear-gradient(180deg,#15171f,#11131a);border:1px solid var(--border);border-radius:12px;overflow:hidden}
@@ -408,6 +412,9 @@ async function openBracketEditor(tourId,tourName){
   const seeds=(parts||[]).map(pt=>plMap[pt.player_id]?.nickname).filter(Boolean);
   const t=D.tours.find(x=>x.id===tourId)||{};
   const isCh=!!t.challonge_url; // у Challonge посев/продвижение тянет синк — drag отключаем
+  // групповые стендинги из кэша Challonge (синк пишет их туда, не в encounters)
+  const{data:cache}=await sb.from('bracket_cache').select('json').eq('tournament_id',tourId).maybeSingle();
+  const cacheGroups=cache?.json?.groups||null;
   // своя сетка — независимый движок
   const{data:brk}=await sb.from('brackets').select('*').eq('tournament_id',tourId).maybeSingle();
   let ownNodes=[];
@@ -430,7 +437,7 @@ async function openBracketEditor(tourId,tourName){
     </div>
     ${isCh?`<div style="font-size:11px;color:var(--sub);margin-bottom:8px">Синк тянет сетку и МЕСТА из Challonge (авто). Призовые и строки результата, помеченные «вручную», синк не трогает.</div>`
         :`<div style="font-size:11px;color:var(--sub);margin-bottom:8px">Перетащи участников 1-го раунда, чтобы поменять посев.</div>`}
-    ${compactSkeletonHTML(t,seeds,!isCh,{parts,encs,plMap})}
+    ${compactSkeletonHTML(t,seeds,!isCh,{parts,encs,plMap,cacheGroups})}
   </div>`;
   // дропдаун стадии из раундов модели + текущее значение (если кастомное/из Challonge)
   const stageSel=e=>{
@@ -976,14 +983,22 @@ function costsTopControls(tourId,penalties){
   </select>
   <button class="btn btn-g" style="font-size:12px;padding:5px 12px" onclick="copyCosts('${tourId}')">Скопировать косты</button>`:'<span style="color:var(--sub);font-size:13px">Нет других турниров для копирования</span>';
   return`<div class="card" style="margin-bottom:16px">
-    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-      <span style="font-weight:600;font-size:14px">Импорт из ссылки драфта:</span>
-      <input id="rs-link" type="text" placeholder="ссылка драфта (adminToken)…" style="flex:1;min-width:220px;padding:6px 10px;font-size:13px">
-      <button class="btn btn-g" style="font-size:13px;padding:6px 14px" onclick="importTourRuleset('${tourId}')">Загрузить косты и штрафы</button>
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px">
+      <span style="font-weight:600;font-size:14px">Импорт костов из nexus:</span>
+      <button class="btn btn-g" style="font-size:13px;padding:6px 14px" onclick="importTourRuleset('${tourId}')">Разобрать</button>
       <button class="btn btn-y" style="font-size:13px;padding:6px 16px" onclick="saveAllCosts('${tourId}')">Сохранить всё</button>
     </div>
+    <div style="display:flex;gap:12px;flex-wrap:wrap">
+      <div style="flex:1;min-width:220px">
+        <label style="font-size:12px;font-weight:600">Агенты</label>
+        <textarea id="rs-html-agents" style="width:100%;min-height:80px;padding:8px 10px;font-size:12px;font-family:monospace;resize:vertical"></textarea>
+      </div>
+      <div style="flex:1;min-width:220px">
+        <label style="font-size:12px;font-weight:600">Амплификаторы</label>
+        <textarea id="rs-html-amps" style="width:100%;min-height:80px;padding:8px 10px;font-size:12px;font-family:monospace;resize:vertical"></textarea>
+      </div>
+    </div>
     <div id="rs-status" style="font-size:12px;color:var(--sub);margin-top:8px"></div>
-    <div style="font-size:11px;color:var(--sub);margin-top:4px">Заполнит косты персонажей по минскейпам и штрафы рестартов. Косты амплификаторов — в блоке «Косты амплификаторов». Проверь и нажми «Сохранить».</div>
   </div>
   <div class="card" style="margin-bottom:16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
     <span style="font-weight:600;font-size:14px">Скопировать косты из турнира:</span>
@@ -1073,13 +1088,121 @@ function charCostsSection(tourId,tourName,existing,penalties){
   <div style="font-size:11px;color:var(--sub);margin-top:12px">Сохранение — кнопкой <b>«Сохранить всё»</b> вверху страницы.</div>`;
 }
 
-// Импорт костов персонажей + штрафов из ссылки драфта. Для нового сайта пока
-// недоступен: в draftinfo только косты текущего минскейпа/ранга, а для сетки
-// M0–M6 / R1–R5 / bis нужен отдельный API костов (когда появится — вернуть
-// заполнение формы, старая darte-версия в истории git).
+// Импорт костов из HTML таблицы nexus (/costs). API костов под авторизацией
+// (adminToken его не открывает), поэтому косты тянем из вставленной разметки
+// страницы. Вкладка «Агенты» → сетка M0–M6 (.ci-ms), «Амплификаторы» → R1–R5 (.ac-in).
+function _normName(s){
+  return (s||'').replace(/ /g,' ').replace(/ё/gi,'е').toLowerCase().replace(/\s+/g,' ').trim();
+}
+// Карта нормализованное имя → персонаж (лениво, по D.chars).
+let _charByNameCache=null;
+function _charByName(name){
+  if(!_charByNameCache){_charByNameCache={};D.chars.forEach(c=>{_charByNameCache[_normName(c.name)]=c;});}
+  return _charByNameCache[_normName(name)]||null;
+}
+// Карта нормализованное имя → сигнатура (лениво, по D.sigs).
+let _sigByNameCache=null;
+function _sigByName(name){
+  if(!_sigByNameCache){_sigByNameCache={};D.sigs.forEach(s=>{_sigByNameCache[_normName(s.name)]=s;});}
+  return _sigByNameCache[_normName(name)]||null;
+}
+// Значение ячейки коста: число или null для прочерка «—».
+function _cellCost(td){
+  const t=(td.textContent||'').replace(/ /g,' ').trim();
+  if(!t||/^[—–-]$/.test(t))return null;
+  const n=parseInt(t.replace(/[^\d-]/g,''),10);
+  return Number.isFinite(n)?n:null;
+}
+// Импорт костов из HTML nexus (/costs): разбирает ВСЕ найденные таблицы за одно
+// нажатие — можно вставить обе вкладки (Агенты + Амплификаторы) подряд.
 async function importTourRuleset(tourId){
   const st=document.getElementById('rs-status');
-  if(st)st.textContent='Импорт рулсета с нового сайта пока недоступен: в драфте нет полной сетки костов. Штрафы рестартов подтянутся при импорте матча.';
+  const raw=[document.getElementById('rs-html-agents')?.value,document.getElementById('rs-html-amps')?.value].filter(Boolean).join('\n').trim();
+  if(!raw){if(st)st.textContent='Вставь HTML костов из nexus в поля «Агенты» и/или «Амплификаторы».';return;}
+  let doc;try{doc=new DOMParser().parseFromString(raw,'text/html');}catch(e){if(st)st.textContent='Не удалось разобрать HTML.';return;}
+  const tables=[...doc.querySelectorAll('table')];
+  if(!tables.length){if(st)st.textContent='В тексте нет <table>. Скопируй элемент таблицы целиком.';return;}
+  const reports=[];
+  tables.forEach(table=>_importCostTable(table,reports));
+  if(st)st.innerHTML=reports.length
+    ?reports.join('<br>')+'<br>Проверь и нажми «Сохранить всё».'
+    :'Не распознал таблицы: нужны колонки M0–M6 (Агенты) или R1–R5 (Амплификаторы).';
+}
+// Разбор одной таблицы (Агенты M0–M6 или Амплификаторы R1–R5); отчёт → reports[].
+function _importCostTable(table,reports){
+  const heads=[...table.querySelectorAll('thead th')].map(th=>_normName(th.textContent));
+  const isAgents=heads.some(h=>/^m0$|^м0$/.test(h));
+  const rows=[...table.querySelectorAll('tbody tr')].filter(tr=>tr.querySelector('td'));
+  if(!rows.length)return;
+
+  if(isAgents){
+    // колонки M0–M6 идут после первой (имя). Берём по 7 последних ячеек-значений.
+    let filled=0,cleared=0;const miss=[];
+    rows.forEach(tr=>{
+      const nameEl=tr.querySelector('td p,td span');
+      const name=nameEl?nameEl.textContent:'';
+      const c=_charByName(name);
+      const cells=[...tr.querySelectorAll('td')].slice(1); // без колонки имени
+      if(!c){if(_normName(name))miss.push(name.replace(/ /g,' ').trim());return;}
+      for(let ms=0;ms<=6&&ms<cells.length;ms++){
+        const inp=document.querySelector(`.ci-ms[data-c="${c.id}"][data-m="${ms}"]`);
+        if(!inp)continue;
+        const v=_cellCost(cells[ms]);
+        if(v==null){if(inp.value!==''){inp.value='';cleared++;}}
+        else{inp.value=v;filled++;}
+      }
+    });
+    reports.push(`Агенты: заполнено ${filled} ячеек, очищено ${cleared}.`+
+      (miss.length?` <span style="color:var(--warn,#e0a030)">Не найдены персонажи: ${[...new Set(miss)].join(', ')}</span>`:''));
+    const sec=document.getElementById('cost-sec-char');if(sec&&sec.hidden)toggleCostSection('char');
+    return;
+  }
+
+  // Амплификаторы: одна таблица R1–R5, строки чередуются —
+  //   шапка амплификатора (иконка /icons/amplifiers/, база R1–R5)
+  //   + строки-персонажи с отступом (иконка /api/media/characters/crops/, оверрайды R1–R5).
+  // Мапинг: база → R1–R5 владельца сигнатуры (.ac-in); оверрайды по персонажам → BIS-строки.
+  const isAmps=heads.some(h=>/^r1$/.test(h));
+  if(isAmps){
+    let bases=0,ovr=0;const missAmp=[],missChar=[];
+    let curSig=null,curOwner=null;
+    rows.forEach(tr=>{
+      const td0=tr.querySelector('td');
+      const isAmpHead=!!td0?.querySelector('img[src*="/icons/amplifiers/"]');
+      const nameEl=td0?.querySelector('span,p');
+      const name=nameEl?nameEl.textContent:'';
+      const cells=[...tr.querySelectorAll('td')].slice(1); // R1–R5
+      const vals=Array.from({length:5},(_,i)=>i<cells.length?_cellCost(cells[i]):null);
+      if(isAmpHead){
+        const s=_sigByName(name);
+        curSig=s||null;curOwner=s?s.character_id:null;
+        if(!s){if(_normName(name))missAmp.push(name.replace(/ /g,' ').trim());return;}
+        // база → R1–R5 владельца
+        for(let r=0;r<5;r++){const inp=document.querySelector(`.ac-in[data-sig="${s.id}"][data-char="${curOwner}"][data-r="${r}"]`);if(inp)inp.value=vals[r]==null?'':vals[r];}
+        // сбрасываем авто-BIS этой сигнатуры перед импортом оверрайдов
+        const cont=document.getElementById('bis-rows-'+s.id);if(cont)cont.innerHTML='';
+        bases++;
+      }else{
+        if(!curSig)return; // персонаж без валидного амплификатора
+        const c=_charByName(name);
+        if(!c){if(_normName(name))missChar.push(name.replace(/ /g,' ').trim());return;}
+        if(c.id===curOwner){ // оверрайд владельца → в его R1–R5
+          for(let r=0;r<5;r++){const inp=document.querySelector(`.ac-in[data-sig="${curSig.id}"][data-char="${curOwner}"][data-r="${r}"]`);if(inp)inp.value=vals[r]==null?'':vals[r];}
+        }else{
+          const arr=vals.slice();while(arr.length&&arr[arr.length-1]==null)arr.pop();
+          const cont=document.getElementById('bis-rows-'+curSig.id);
+          if(cont)cont.insertAdjacentHTML('beforeend',bisRowHtml(curSig.id,curOwner,c.id,arr));
+        }
+        ovr++;
+      }
+    });
+    const uniq=a=>[...new Set(a)];
+    reports.push(`Амплификаторы: база у ${bases} сигнатур, оверрайдов ${ovr}.`+
+      (missAmp.length?` <span style="color:var(--warn,#e0a030)">Нет в базе сигнатур (A-ранг/неподписные пропущены): ${uniq(missAmp).join(', ')}</span>`:'')+
+      (missChar.length?` <span style="color:var(--warn,#e0a030)">Не найдены персонажи: ${uniq(missChar).join(', ')}</span>`:''));
+    const sec=document.getElementById('cost-sec-amp');if(sec&&sec.hidden)toggleCostSection('amp');
+    return;
+  }
 }
 
 async function copyCosts(tourId){
