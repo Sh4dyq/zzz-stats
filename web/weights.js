@@ -68,7 +68,7 @@ function _constsByChar(picks,matches,costs){
   for(const ch in play){
     out[ch]=Object.keys(play[ch]).map(ms=>{
       const s=play[ch][ms];const raw=(costMap[ch]&&costMap[ch][ms])||[];const nz=raw.filter(x=>x>0);
-      return{ms:+ms,picks:s.picks,wins:s.wins,cost:nz.length?med(nz):(raw.length?0:null)};
+      return{ms:+ms,picks:s.picks,wins:s.wins,wr:(s.wins+KB_WR*0.5)/(s.picks+KB_WR),cost:nz.length?med(nz):(raw.length?0:null)};
     }).sort((a,b)=>a.ms-b.ms);
   }
   return out;
@@ -76,13 +76,14 @@ function _constsByChar(picks,matches,costs){
 
 async function pgWeights(){
   html(`<div class="card"><span class="spinner"></span> Считаю косты и винрейты…</div>`);
-  const[costs,picks,matches,saved]=await Promise.all([
-    _fetchAllW('tournament_costs'),_fetchAllW('match_picks'),_fetchAllW('matches'),_fetchAllW('char_weights')
+  const[costs,picks,matches,saved,csaved]=await Promise.all([
+    _fetchAllW('tournament_costs'),_fetchAllW('match_picks'),_fetchAllW('matches'),_fetchAllW('char_weights'),_fetchAllW('char_const_weights')
   ]);
   const avgCost=_avgCosts(costs), wr=_winrates(picks,matches);
   _W.consts=_constsByChar(picks,matches,costs);
   const savedMap={};saved.forEach(r=>savedMap[r.character_id]=r);
   _W.saved=savedMap;
+  _W.cweights={};csaved.forEach(r=>{(_W.cweights[r.character_id]=_W.cweights[r.character_id]||{})[r.mindscape]=r.manual_weight;});
   _W.rows=D.chars
     .filter(c=>avgCost[c.id]!==undefined||wr[c.id])   // только персонажи с историей
     .map(c=>({
@@ -118,19 +119,36 @@ function _tierOf(power){
 const _ROLES=[['atk','ДД'],['stun','Стан'],['ano','Аном'],['sup','Сап'],['rupt','Разр'],['def','Защ']];
 const _roleLabel=r=>{const x=_ROLES.find(e=>e[0]===r);return x?x[1]:r;};
 
-// разворот: строка деталей с констелляциями (сыгранные майндскейпы + кост/винрейт)
-function _constDetailHtml(r){
+// вес конкретной констелляции (дефолт 50)
+const _cw=(id,ms)=>((_W.cweights&&_W.cweights[id])||{})[ms]??50;
+const _tierBadge=(t,attr)=>`<span ${attr} style="display:inline-flex;align-items:center;justify-content:center;min-width:30px;height:22px;font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;font-size:14px;color:#181820;background:${t.c};border-radius:5px;padding:0 6px">${t.t}</span>`;
+
+// строки констелляций — тот же формат, что у персонажа (со своим ползунком силы)
+function _constRowsHtml(r){
   const cs=(_W.consts&&_W.consts[r.id])||[];
-  if(!cs.length)return `<span style="color:var(--sub);font-size:13px">Нет сыгранных констелляций в матчах.</span>`;
-  const chip=c=>{const wr=c.picks?Math.round(c.wins/c.picks*100):0;
-    return `<div style="display:flex;flex-direction:column;gap:2px;background:var(--field);border:1px solid var(--border);border-radius:8px;padding:8px 11px;min-width:104px">
-      <span style="font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;font-size:15px;color:var(--gold)">M${c.ms}</span>
-      <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--sub)">кост ${c.cost!=null?c.cost:'—'}</span>
-      <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--sub)">пики ${c.picks} · WR ${wr}%</span>
-    </div>`;};
-  return `<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-    <span style="font-size:12px;color:var(--sub);text-transform:uppercase;letter-spacing:.06em;font-weight:600;margin-right:4px">Констелляции на турнирах</span>
-    ${cs.map(chip).join('')}</div>`;
+  if(!cs.length)return `<tr data-detail><td colspan="7" style="padding:8px 14px 12px 46px;background:rgba(255,255,255,.015);color:var(--sub);font-size:13px">Нет сыгранных констелляций в матчах.</td></tr>`;
+  return cs.map(c=>{
+    const cr={cost:c.cost,wr:c.wr,man:_cw(r.id,c.ms)};
+    const power=_powerOf(cr,_W.wman),tier=_tierOf(power),mtier=_tierOf(_manPowerOf(cr));
+    const rawWr=c.picks?Math.round(c.wins/c.picks*100):0;
+    return `<tr data-cw="${r.id}:${c.ms}" style="background:rgba(255,255,255,.015);border-top:1px solid var(--line)">
+      <td style="padding:7px 14px 7px 46px"><span style="font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;font-size:15px;color:var(--gold)">M${c.ms}</span></td>
+      <td style="padding:7px 8px;font-family:'JetBrains Mono',monospace;color:var(--sub)">${c.cost!=null?c.cost:'—'}</td>
+      <td style="padding:7px 8px;font-family:'JetBrains Mono',monospace;color:var(--sub)">${rawWr}% <span style="opacity:.6">(${c.picks})</span></td>
+      <td style="padding:7px 8px;white-space:nowrap">
+        <input type="range" min="0" max="100" step="1" value="${cr.man}" style="width:130px;vertical-align:middle" oninput="_cmanChange('${r.id}',${c.ms},this.value)">
+        <span data-man style="display:inline-block;min-width:30px;text-align:center;font-family:'JetBrains Mono',monospace;font-weight:600;color:var(--sub);margin-left:4px">${cr.man}</span>
+      </td>
+      <td style="padding:7px 8px">${_tierBadge(mtier,'data-mantier')}</td>
+      <td data-power style="padding:7px 8px;text-align:right;font-family:'JetBrains Mono',monospace;font-weight:600;color:#fff">${Math.round(power)}</td>
+      <td style="padding:7px 14px">
+        <div style="display:flex;align-items:center;gap:9px">
+          ${_tierBadge(tier,'data-tierbadge')}
+          <span style="flex:1;height:6px;background:var(--field);border-radius:3px;overflow:hidden;min-width:60px"><span data-tierbar style="display:block;height:100%;width:${Math.round(power)}%;background:${tier.c}"></span></span>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
 }
 
 function _renderWeights(){
@@ -191,7 +209,7 @@ function _renderWeights(){
             <span style="flex:1;height:6px;background:var(--field);border-radius:3px;overflow:hidden;min-width:60px"><span data-tierbar style="display:block;height:100%;width:${Math.round(power)}%;background:${tier.c}"></span></span>
           </div>
         </td>
-      </tr>${open?`<tr><td colspan="7" style="padding:6px 14px 14px 38px;background:rgba(255,255,255,.015)">${_constDetailHtml(r)}</td></tr>`:''}`;
+      </tr>${open?_constRowsHtml(r):''}`;
     }).join('')}
     </tbody>
   </table>
@@ -202,8 +220,14 @@ function _renderWeights(){
 // Точечная перерисовка ячеек строки БЕЗ пересборки таблицы и без пересортировки —
 // иначе тащимый ползунок заменяется новым DOM (застывает), а строка «улетает» при ре-сорте.
 // Позиции обновляются только при новой сортировке (клик по заголовку).
+// row-like объект строки (персонаж или констелляция) для пересчёта силы
+function _rowObj(tr){
+  if(tr.dataset.ri!=null&&tr.dataset.ri!=='')return _W.rows[+tr.dataset.ri];
+  if(tr.dataset.cw){const[id,ms]=tr.dataset.cw.split(':');const c=(_W.consts[id]||[]).find(x=>x.ms==ms);if(c)return{cost:c.cost,wr:c.wr,man:_cw(id,ms)};}
+  return null;
+}
 function _paintRow(tr){
-  const r=_W.rows[+tr.dataset.ri];if(!r)return;
+  const r=_rowObj(tr);if(!r)return;
   const power=_powerOf(r,_W.wman),tier=_tierOf(power),mtier=_tierOf(_manPowerOf(r));
   tr.querySelector('[data-man]').textContent=r.man;
   const mb=tr.querySelector('[data-mantier]');mb.textContent=mtier.t;mb.style.background=mtier.c;
@@ -213,16 +237,26 @@ function _paintRow(tr){
 }
 function _wmanChange(val){
   _W.wman=+val/100;document.getElementById('wman-out').textContent=_W.wman.toFixed(2);
-  document.querySelectorAll('#page-content tbody tr').forEach(_paintRow);
+  document.querySelectorAll('#page-content tbody tr[data-ri],#page-content tbody tr[data-cw]').forEach(_paintRow);
 }
 function _sortW(key){if(_W.sortKey===key)_W.sortDir*=-1;else{_W.sortKey=key;_W.sortDir=-1;}_renderWeights();}
 function _roleFilter(v){_W.roleFilter=v;_renderWeights();}
 function _toggleExpand(id){if(_W.expanded.has(id))_W.expanded.delete(id);else _W.expanded.add(id);_renderWeights();}
 function _manChange(idx,val){_W.rows[idx].man=+val;const tr=document.querySelector(`#page-content tbody tr[data-ri="${idx}"]`);if(tr)_paintRow(tr);}
+function _cmanChange(id,ms,val){(_W.cweights[id]=_W.cweights[id]||{})[ms]=+val;const tr=document.querySelector(`#page-content tbody tr[data-cw="${id}:${ms}"]`);if(tr)_paintRow(tr);}
 
 async function saveWeights(){
-  const payload=_W.rows.map(r=>({character_id:r.id,manual_weight:r.man,updated_at:new Date().toISOString()}));
+  const now=new Date().toISOString();
+  const payload=_W.rows.map(r=>({character_id:r.id,manual_weight:r.man,updated_at:now}));
   const{error}=await sb.from('char_weights').upsert(payload,{onConflict:'character_id'});
   if(dbErr(error,'сохранение весов'))return;
+  // веса констелляций (только реально сыгранные майндскейпы)
+  const cpayload=[];
+  for(const id in (_W.cweights||{}))for(const ms in _W.cweights[id])
+    cpayload.push({character_id:id,mindscape:+ms,manual_weight:_W.cweights[id][ms],updated_at:now});
+  if(cpayload.length){
+    const{error:e2}=await sb.from('char_const_weights').upsert(cpayload,{onConflict:'character_id,mindscape'});
+    if(dbErr(e2,'сохранение весов констелляций'))return;
+  }
   toast('Веса сохранены');
 }
