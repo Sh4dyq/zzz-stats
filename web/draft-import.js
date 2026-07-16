@@ -29,21 +29,26 @@ function dbSigByNameEn(nameEn){
 function charByEnka(key){return D.chars.find(c=>c.id===key)||null;}
 function sigByEngineEnka(key){if(!key)return null;return D.sigs.find(s=>s.id===key)||null;}
 
-// Разбор ссылки: полный эндпоинт /api/drafts/<id>/draftinfo?adminToken=…
-// или любая ссылка того же сайта с /drafts/<id> в пути и adminToken в query.
+// Разбор ссылки → дескриптор {kind}. Поддерживаются ДВА источника в одном поле:
+//   nexus — есть adminToken (эндпоинт /api/drafts/<id>/draftinfo?adminToken=…)
+//   darte — [НЕ ДЛЯ ПЕРЕНОСА] есть draft_id/session_id (shiyu.darte.gg, socket.io)
 function parseDraftLink(url){
   try{
     const u=new URL(url.trim());
     const token=u.searchParams.get('adminToken');
-    if(!token)return null;
-    if(/\/draftinfo$/.test(u.pathname))return u.href;
-    const m=u.pathname.match(/\/drafts?\/([a-z0-9]+)/i);
-    if(m&&m[1]!=='api')return `${u.origin}/api/drafts/${m[1]}/draftinfo?adminToken=${token}`;
+    if(token){
+      if(/\/draftinfo$/.test(u.pathname))return {kind:'nexus',endpoint:u.href};
+      const m=u.pathname.match(/\/drafts?\/([a-z0-9]+)/i);
+      if(m&&m[1]!=='api')return {kind:'nexus',endpoint:`${u.origin}/api/drafts/${m[1]}/draftinfo?adminToken=${token}`};
+      return null;
+    }
+    const id=u.searchParams.get('draft_id')||u.searchParams.get('session_id');
+    if(id)return {kind:'darte',id,key:u.searchParams.get('session_key')};
   }catch(e){}
   return null;
 }
 
-// Разбор ссылки darte (legacy): shiyu.darte.gg/draft?draft_id=…&session_key=… → {id,key}.
+// [НЕ ДЛЯ ПЕРЕНОСА] Отдельный парсер darte для tournaments.js (импорт костов через edge-fn).
 function parseDarteLink(url){
   try{
     const u=new URL(url.trim());
@@ -53,19 +58,88 @@ function parseDarteLink(url){
   }catch(e){return null;}
 }
 
-async function fetchDraftState(endpoint){
+// ===== [НЕ ДЛЯ ПЕРЕНОСА] darte-источник (socket.io + shiyu_ids.json) =====
+// Удалить целиком, когда стата/аналитика полностью переедут на nexus.
+let _shiyuIds=null;            // {agents:{oid:enka}, engines:{oid:enka}, restartRules, defaultRestartRule}
+async function loadShiyuIds(){
+  if(_shiyuIds)return _shiyuIds;
+  const r=await fetch('web/data/shiyu_ids.json?v='+Date.now());
+  if(!r.ok)throw new Error('shiyu_ids.json не загрузился');
+  _shiyuIds=await r.json();return _shiyuIds;
+}
+const baseEnka=e=>e==null?null:String(e).split('_')[0];   // "1381_1" → "1381"
+function _darteCharByEnka(enka){return enka?D.chars.find(c=>baseEnka(c.enka_id)===enka)||null:null;}
+function _darteSigByEnka(enka){return enka?D.sigs.find(s=>baseEnka(s.enka_id)===enka)||null:null;}
+
+// socket.io /draft → init (полное состояние драфта).
+function fetchDarteState(id,key,timeoutMs=12000){
+  return new Promise((resolve,reject)=>{
+    if(typeof io==='undefined')return reject(new Error('socket.io не загружен (нет CDN в admin.html)'));
+    const sock=io('https://shiyu.darte.gg/draft',{
+      path:'/socket.io/draft',transports:['websocket'],
+      query:key?{session_id:id,session_key:key}:{session_id:id},reconnection:false,timeout:timeoutMs});
+    const done=(err,val)=>{try{sock.disconnect();}catch(_){}err?reject(err):resolve(val);};
+    const timer=setTimeout(()=>done(new Error('таймаут: init не пришёл (ссылка истекла?)')),timeoutMs);
+    sock.on('init',d=>{clearTimeout(timer);done(null,d);});
+    sock.on('connect_error',e=>{clearTimeout(timer);done(new Error('connect_error: '+(e?.message||e)));});
+  });
+}
+
+// darte init → тот же db-id контракт, что и nexus (см. normalizeDraft).
+function normalizeDarte(state,ids){
+  const aEnka=o=>baseEnka(ids.agents[o]);
+  const eEnka=o=>baseEnka(ids.engines[o]);
+  const ruleToArr=r=>r?Array(r.free||0).fill(0).concat(r.paid||[]):[];
+  const penalties=ruleToArr((ids.restartRules||{})[state.system]||ids.defaultRestartRule);
+  const penSum=r=>{let s=0;for(let i=0;i<(r||0)&&i<penalties.length;i++)s+=(+penalties[i]||0);return s;};
+  const missing=[];
+  const side=p=>{
+    const ms={},eng={},ref={};
+    (p.roster?.agents||[]).forEach(a=>{const ch=_darteCharByEnka(aEnka(a.agent));if(ch)ms[ch.id]=a.mindscape||0;});
+    (p.teams||[]).forEach(t=>{
+      if(!t.agent||!t.engine)return;
+      const ch=_darteCharByEnka(aEnka(t.agent.agent));if(!ch)return;
+      const sg=_darteSigByEnka(eEnka(t.engine.engine));if(sg)eng[ch.id]=sg.id;
+      ref[ch.id]=t.engine.refinement||1;
+    });
+    return {name:p.fullName,clearTime:p.clearTime??null,
+      finalTime:p.clearTime==null?null:p.clearTime+penSum(p.restarts), // darte без готового finalTime → базируем сами
+      restarts:p.restarts||0,mindscapeByEnka:ms,engineEnkaByAgentEnka:eng,refByAgentEnka:ref};
+  };
+  const players={player0:side(state.players[0]),player1:side(state.players[1])};
+  const slots=(state.selectedAgents||[]).map((s,i)=>{
+    const ch=_darteCharByEnka(aEnka(s.agent));
+    if(!ch&&s.agent)missing.push(`слот ${i+1}: enka ${aEnka(s.agent)} нет в БД`);
+    return {n:i+1,type:s.type==='BAN'?'ban':'pick',actor:s.actor,enka:ch?ch.id:null};
+  });
+  const pIndex=Array.isArray(state.pIndex)&&state.pIndex.length>=2?state.pIndex:[0,1];
+  return {players,slots,firstActor:'player'+pIndex[0],penalties,missing,
+    hasResults:state.players.some(p=>p.clearTime!=null)};
+}
+
+// Загрузка драфта по дескриптору (nexus | darte). Возвращает {kind,state,ids?}.
+async function fetchDraftState(desc){
+  if(desc&&desc.kind==='darte'){                       // [НЕ ДЛЯ ПЕРЕНОСА]
+    const ids=await loadShiyuIds();
+    const state=await fetchDarteState(desc.id,desc.key);
+    if(!state||!state.players)throw new Error('пустой init (darte)');
+    return {kind:'darte',state,ids};
+  }
+  const endpoint=(desc&&desc.endpoint)||desc;          // толерантность к «сырому» endpoint-строке
   let r;
   try{r=await fetch(endpoint,{headers:{Accept:'application/json'}});}
   catch(e){throw new Error('fetch не прошёл (CORS не включён на API? '+e.message+')');}
   if(!r.ok)throw new Error('HTTP '+r.status);
   const d=await r.json();
   if(!d||!d.players)throw new Error('пустой/чужой JSON');
-  return d;
+  return {kind:'nexus',state:d};
 }
 
 // draftinfo → нормализованная структура (тот же контракт, что раньше: см. matches.js).
 // player0 всегда ходит первым (первый шаг sequence) = фп; player1 = дабл.
-function normalizeDraft(d){
+function normalizeDraft(fetched){
+  if(fetched&&fetched.kind==='darte')return normalizeDarte(fetched.state,fetched.ids); // [НЕ ДЛЯ ПЕРЕНОСА]
+  const d=fetched&&fetched.kind?fetched.state:fetched;  // {kind,state} или «сырой» draftinfo
   const missing=[];
   const charInfo={},ampInfo={};
   for(const side of Object.values(d.rosters||{})){
@@ -158,13 +232,13 @@ function applyDraftToForm(norm,pen,penOverride){
 async function importDraftFromLink(){
   const url=v('draft-link');
   if(!url)return toast('Вставь ссылку на драфт','err');
-  const endpoint=parseDraftLink(url);
-  if(!endpoint)return toast('Не разобрал ссылку (нужны /drafts/<id> и adminToken)','err');
+  const desc=parseDraftLink(url);
+  if(!desc)return toast('Не разобрал ссылку (nexus: /drafts/<id>+adminToken; darte: draft_id)','err');
   const status=document.getElementById('draft-import-status');
   if(status)status.textContent='Запрашиваю драфт…';
   try{
-    const state=await fetchDraftState(endpoint);
-    const norm=normalizeDraft(state);
+    const fetched=await fetchDraftState(desc);
+    const norm=normalizeDraft(fetched);
     // Штраф за рестарты: оверрайд турнира → из драфта (уже учтён сайтом в finalTime).
     const ctx=window._matchCtx||{};
     const penOverride=!!(ctx.penalties&&ctx.penalties.length);
