@@ -43,6 +43,16 @@ function parseDraftLink(url){
   return null;
 }
 
+// Разбор ссылки darte (legacy): shiyu.darte.gg/draft?draft_id=…&session_key=… → {id,key}.
+function parseDarteLink(url){
+  try{
+    const u=new URL(url.trim());
+    const id=u.searchParams.get('draft_id')||u.searchParams.get('session_id');
+    if(!id)return null;
+    return {id,key:u.searchParams.get('session_key')};
+  }catch(e){return null;}
+}
+
 async function fetchDraftState(endpoint){
   let r;
   try{r=await fetch(endpoint,{headers:{Accept:'application/json'}});}

@@ -28,7 +28,13 @@ function _avgCosts(costs){
   const acc={};
   for(const t in perTour)for(const ch in perTour[t])(acc[ch]=acc[ch]||[]).push(perTour[t][ch].cost);
   const out={};
-  for(const ch in acc)out[ch]=acc[ch].reduce((a,b)=>a+b,0)/acc[ch].length;
+  for(const ch in acc){
+    // кост 0 в турнире = бесплатный бейслайн (напр. S Anby), а не реальная цена.
+    // Если у перса есть ненулевой кост где-то ещё — усредняем только по ненулевым.
+    const nz=acc[ch].filter(x=>x>0);
+    const use=nz.length?nz:acc[ch];
+    out[ch]=use.reduce((a,b)=>a+b,0)/use.length;
+  }
   return out;
 }
 
@@ -77,6 +83,8 @@ function _zAuto(r){
 }
 const _zMan=m=>(m-50)/25;
 function _powerOf(r,w){const z=w*_zMan(r.man)+(1-w)*_zAuto(r);return 100/(1+Math.exp(-0.6*z));}
+// «сила» чисто ручного веса (wMan=1) — для тира по ручному, сопоставимого со шкалой Силы
+function _manPowerOf(r){return 100/(1+Math.exp(-0.6*_zMan(r.man)));}
 // тир по итоговой Силе (0..100). Центр пула ~50 → B.
 function _tierOf(power){
   if(power>=70)return{t:'S+',c:'#a970ff'};
@@ -110,14 +118,17 @@ function _renderWeights(){
       <th style="padding:10px 14px;cursor:pointer;user-select:none" onclick="_sortW('name')">Персонаж${arrow('name')}</th>
       <th style="padding:10px 8px;cursor:pointer;user-select:none" onclick="_sortW('cost')">Кост ср.${arrow('cost')}</th>
       <th style="padding:10px 8px;cursor:pointer;user-select:none" onclick="_sortW('wr')">Винрейт${arrow('wr')}</th>
-      <th style="padding:10px 8px;width:210px;cursor:pointer;user-select:none" onclick="_sortW('man')">Ручной вес${arrow('man')}</th>
+      <th style="padding:10px 8px;width:190px;cursor:pointer;user-select:none" onclick="_sortW('man')">Ручной вес${arrow('man')}</th>
+      <th style="padding:10px 8px;cursor:pointer;user-select:none" onclick="_sortW('man')">Ручной тир${arrow('man')}</th>
       <th style="padding:10px 8px;text-align:right;cursor:pointer;user-select:none" onclick="_sortW('power')">Сила${arrow('power')}</th>
-      <th style="padding:10px 14px;cursor:pointer;user-select:none" onclick="_sortW('power')">Тир${arrow('power')}</th>
+      <th style="padding:10px 14px;cursor:pointer;user-select:none" onclick="_sortW('power')">Тир Силы${arrow('power')}</th>
     </tr></thead>
     <tbody>
     ${rows.map(({r,power})=>{
       const idx=_W.rows.indexOf(r);
       const tier=_tierOf(power);
+      const mtier=_tierOf(_manPowerOf(r));
+      const badge=(t,attr)=>`<span ${attr} style="display:inline-flex;align-items:center;justify-content:center;min-width:30px;height:22px;font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;font-size:14px;color:#181820;background:${t.c};border-radius:5px;padding:0 6px">${t.t}</span>`;
       return `<tr data-ri="${idx}" style="border-top:1px solid var(--line)">
         <td style="padding:9px 14px"><div style="display:flex;align-items:center;gap:9px">${iconChar(r.c,28)}<span style="font-weight:600">${r.c.name}</span></div></td>
         <td style="padding:9px 8px;font-family:'JetBrains Mono',monospace;color:var(--sub)">${r.cost!=null?r.cost:'—'}</td>
@@ -126,10 +137,11 @@ function _renderWeights(){
           <input type="range" min="0" max="100" step="1" value="${r.man}" style="width:130px;vertical-align:middle" oninput="_manChange(${idx},this.value)">
           <span data-man style="display:inline-block;min-width:30px;text-align:center;font-family:'JetBrains Mono',monospace;font-weight:600;color:var(--sub);margin-left:4px">${r.man}</span>
         </td>
+        <td style="padding:9px 8px">${badge(mtier,'data-mantier')}</td>
         <td data-power style="padding:9px 8px;text-align:right;font-family:'JetBrains Mono',monospace;font-weight:600;color:#fff">${Math.round(power)}</td>
         <td style="padding:9px 14px">
           <div style="display:flex;align-items:center;gap:9px">
-            <span data-tierbadge style="display:inline-flex;align-items:center;justify-content:center;min-width:30px;height:22px;font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;font-size:14px;color:#181820;background:${tier.c};border-radius:5px;padding:0 6px">${tier.t}</span>
+            ${badge(tier,'data-tierbadge')}
             <span style="flex:1;height:6px;background:var(--field);border-radius:3px;overflow:hidden;min-width:60px"><span data-tierbar style="display:block;height:100%;width:${Math.round(power)}%;background:${tier.c}"></span></span>
           </div>
         </td>
@@ -146,8 +158,9 @@ function _renderWeights(){
 // Позиции обновляются только при новой сортировке (клик по заголовку).
 function _paintRow(tr){
   const r=_W.rows[+tr.dataset.ri];if(!r)return;
-  const power=_powerOf(r,_W.wman),tier=_tierOf(power);
+  const power=_powerOf(r,_W.wman),tier=_tierOf(power),mtier=_tierOf(_manPowerOf(r));
   tr.querySelector('[data-man]').textContent=r.man;
+  const mb=tr.querySelector('[data-mantier]');mb.textContent=mtier.t;mb.style.background=mtier.c;
   tr.querySelector('[data-power]').textContent=Math.round(power);
   const badge=tr.querySelector('[data-tierbadge]');badge.textContent=tier.t;badge.style.background=tier.c;
   const bar=tr.querySelector('[data-tierbar]');bar.style.width=Math.round(power)+'%';bar.style.background=tier.c;

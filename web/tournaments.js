@@ -999,6 +999,12 @@ function costsTopControls(tourId,penalties){
       </div>
     </div>
     <div id="rs-status" style="font-size:12px;color:var(--sub);margin-top:8px"></div>
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
+      <span style="font-weight:600;font-size:14px">…или из ссылки darte (legacy):</span>
+      <input id="rs-darte" type="text" placeholder="shiyu.darte.gg/draft?draft_id=…&session_key=…" style="flex:1;min-width:220px;padding:6px 10px;font-size:13px">
+      <button class="btn btn-g" style="font-size:13px;padding:6px 14px" onclick="importDarteRuleset('${tourId}')">Загрузить косты и штрафы</button>
+    </div>
+    <div id="rs-darte-status" style="font-size:12px;color:var(--sub);margin-top:6px"></div>
   </div>
   <div class="card" style="margin-bottom:16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
     <span style="font-weight:600;font-size:14px">Скопировать косты из турнира:</span>
@@ -1211,6 +1217,80 @@ function _importCostTable(table,reports){
     const sec=document.getElementById('cost-sec-amp');if(sec&&sec.hidden)toggleCostSection('amp');
     return;
   }
+}
+
+// --- ИМПОРТ КОСТОВ ИЗ ССЫЛКИ DARTE (legacy) ---
+// Рулсет тянем через Edge Function shiyu-system: она принимает ?draft=<id>&key=<key>,
+// резолвит system через socket-init и возвращает косты/движки/штрафы (ObjectId→enka).
+const _sysCache={};
+async function fetchSystemRuleset(qs){
+  if(_sysCache[qs])return _sysCache[qs];
+  const r=await fetch(`${SB_URL}/functions/v1/shiyu-system?${qs}`,
+    {headers:{apikey:SB_KEY,Authorization:`Bearer ${SB_KEY}`}});
+  const d=await r.json().catch(()=>({}));
+  if(!r.ok||d.error)throw new Error(d.error||`shiyu-system ${r.status}`);
+  _sysCache[qs]=d;return d;
+}
+
+async function importDarteRuleset(tourId){
+  const st=document.getElementById('rs-darte-status');
+  const set=m=>{if(st)st.textContent=m;};
+  const url=document.getElementById('rs-darte')?.value?.trim();
+  if(!url)return set('Вставь ссылку на драфт darte');
+  if(typeof parseDarteLink!=='function')return set('draft-import.js не загружен');
+  const p=parseDarteLink(url);
+  if(!p)return set('Не разобрал ссылку (нужен draft_id)');
+  set('Загружаю рулсет…');
+  try{
+    const qs=`draft=${encodeURIComponent(p.id)}`+(p.key?`&key=${encodeURIComponent(p.key)}`:'');
+    const sys=await fetchSystemRuleset(qs);
+    const base=e=>String(e).split('_')[0];
+    const byEnka={};D.chars.forEach(c=>{if(c.enka_id)byEnka[base(c.enka_id)]=c;});
+    // Косты по персонажу. Два enka-варианта одного перса (напр. S Anby 1381 = нули и
+    // 1381_1 «Buffed» = реальные косты) схлопываются в базе → берём НЕНУЛЕВОЙ вариант.
+    const perChar={};let miss=0;
+    Object.entries(sys.agents||{}).forEach(([enka,costs])=>{
+      const c=byEnka[base(enka)];if(!c){miss++;return;}
+      const cur=perChar[c.id]||(perChar[c.id]={});
+      (costs||[]).forEach((cost,ms)=>{
+        // не перезаписывать уже заполненный ненулевой кост нулём другого варианта
+        if(cur[ms]!=null&&+cur[ms]!==0&&+cost===0)return;
+        cur[ms]=cost;
+      });
+    });
+    let filled=0;
+    Object.entries(perChar).forEach(([cid,byMs])=>{
+      Object.entries(byMs).forEach(([ms,cost])=>{
+        const el=document.querySelector(`.ci-ms[data-c="${cid}"][data-m="${ms}"]`);
+        if(el){el.value=cost;filled++;}
+      });
+    });
+    if(filled){const sec=document.getElementById('cost-sec-char');if(sec&&sec.hidden)toggleCostSection('char');}
+    // Штрафы рестартов: free нулей + paid.
+    const pen=Array(sys.restart?.free||0).fill(0).concat(sys.restart?.paid||[]);
+    document.querySelectorAll('.rp-in').forEach((el,i)=>{el.value=pen[i]??'';});
+    if(typeof updatePenaltyHint==='function')updatePenaltyHint();
+    // Косты амплификаторов: base R1–R5 у владельца сигнатуры; bis → строки-оверрайды.
+    let ampFilled=0;
+    D.sigs.forEach(s=>{
+      const engEnka=s.enka_id?base(s.enka_id):null;
+      const e=engEnka?sys.engines?.[engEnka]:null;if(!e)return;
+      const bs=e.base||[];
+      for(let i=0;i<5;i++){const el=document.querySelector(`.ac-in[data-sig="${s.id}"][data-char="${s.character_id}"][data-r="${i}"]`);if(el&&bs[i]!=null){el.value=bs[i];ampFilled++;}}
+      const offEl=document.querySelector(`.ac-off[data-sig="${s.id}"][data-char="${s.character_id}"]`);
+      if(offEl&&bs[5]!=null){offEl.value=bs[5];ampFilled++;}
+      const cont=document.getElementById('bis-rows-'+s.id);
+      if(cont&&e.bis){
+        cont.innerHTML='';
+        Object.entries(e.bis).forEach(([agentEnka,costs])=>{
+          const bc=byEnka[base(agentEnka)];if(!bc)return;
+          cont.insertAdjacentHTML('beforeend',bisRowHtml(s.id,s.character_id,bc.id,costs||[]));
+          ampFilled++;
+        });
+      }
+    });
+    set(`Заполнено ${filled} костов персонажей + ${ampFilled} ячеек амплификаторов из «${sys.title}» (лимит ${sys.costLimit}), штрафы [${pen.join(',')||'нет'}]`+(miss?` · ${miss} агентов нет в БД`:'')+'. Проверь и «Сохранить всё».');
+  }catch(e){set('Ошибка: '+e.message);}
 }
 
 async function copyCosts(tourId){
