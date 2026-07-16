@@ -118,19 +118,19 @@ function _renderWeights(){
     ${rows.map(({r,power})=>{
       const idx=_W.rows.indexOf(r);
       const tier=_tierOf(power);
-      return `<tr style="border-top:1px solid var(--line)">
+      return `<tr data-ri="${idx}" style="border-top:1px solid var(--line)">
         <td style="padding:9px 14px"><div style="display:flex;align-items:center;gap:9px">${iconChar(r.c,28)}<span style="font-weight:600">${r.c.name}</span></div></td>
         <td style="padding:9px 8px;font-family:'JetBrains Mono',monospace;color:var(--sub)">${r.cost!=null?r.cost:'—'}</td>
         <td style="padding:9px 8px;font-family:'JetBrains Mono',monospace;color:var(--sub)">${r.wr!=null?Math.round(r.wr*100)+'%':'—'}</td>
         <td style="padding:9px 8px;white-space:nowrap">
           <input type="range" min="0" max="100" step="1" value="${r.man}" style="width:130px;vertical-align:middle" oninput="_manChange(${idx},this.value)">
-          <span style="display:inline-block;min-width:30px;text-align:center;font-family:'JetBrains Mono',monospace;font-weight:600;color:var(--sub);margin-left:4px">${r.man}</span>
+          <span data-man style="display:inline-block;min-width:30px;text-align:center;font-family:'JetBrains Mono',monospace;font-weight:600;color:var(--sub);margin-left:4px">${r.man}</span>
         </td>
-        <td style="padding:9px 8px;text-align:right;font-family:'JetBrains Mono',monospace;font-weight:600;color:#fff">${Math.round(power)}</td>
+        <td data-power style="padding:9px 8px;text-align:right;font-family:'JetBrains Mono',monospace;font-weight:600;color:#fff">${Math.round(power)}</td>
         <td style="padding:9px 14px">
           <div style="display:flex;align-items:center;gap:9px">
-            <span style="display:inline-flex;align-items:center;justify-content:center;min-width:30px;height:22px;font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;font-size:14px;color:#181820;background:${tier.c};border-radius:5px;padding:0 6px">${tier.t}</span>
-            <span style="flex:1;height:6px;background:var(--field);border-radius:3px;overflow:hidden;min-width:60px"><span style="display:block;height:100%;width:${Math.round(power)}%;background:${tier.c}"></span></span>
+            <span data-tierbadge style="display:inline-flex;align-items:center;justify-content:center;min-width:30px;height:22px;font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;font-size:14px;color:#181820;background:${tier.c};border-radius:5px;padding:0 6px">${tier.t}</span>
+            <span style="flex:1;height:6px;background:var(--field);border-radius:3px;overflow:hidden;min-width:60px"><span data-tierbar style="display:block;height:100%;width:${Math.round(power)}%;background:${tier.c}"></span></span>
           </div>
         </td>
       </tr>`;
@@ -141,9 +141,23 @@ function _renderWeights(){
   <p style="color:var(--sub);font-size:12px;margin-top:12px;line-height:1.5">Ползунок 0–100: 50 = средний персонаж. «Сила» (0–100) — итог после смешивания руки с авто (кост+винрейт), относительна пулу. Клик по «Кост»/«Винрейт»/«Сила» — сортировка. Не забудь «Сохранить».</p>`);
 }
 
-function _wmanChange(val){_W.wman=+val/100;document.getElementById('wman-out').textContent=_W.wman.toFixed(2);_renderWeights();}
+// Точечная перерисовка ячеек строки БЕЗ пересборки таблицы и без пересортировки —
+// иначе тащимый ползунок заменяется новым DOM (застывает), а строка «улетает» при ре-сорте.
+// Позиции обновляются только при новой сортировке (клик по заголовку).
+function _paintRow(tr){
+  const r=_W.rows[+tr.dataset.ri];if(!r)return;
+  const power=_powerOf(r,_W.wman),tier=_tierOf(power);
+  tr.querySelector('[data-man]').textContent=r.man;
+  tr.querySelector('[data-power]').textContent=Math.round(power);
+  const badge=tr.querySelector('[data-tierbadge]');badge.textContent=tier.t;badge.style.background=tier.c;
+  const bar=tr.querySelector('[data-tierbar]');bar.style.width=Math.round(power)+'%';bar.style.background=tier.c;
+}
+function _wmanChange(val){
+  _W.wman=+val/100;document.getElementById('wman-out').textContent=_W.wman.toFixed(2);
+  document.querySelectorAll('#page-content tbody tr').forEach(_paintRow);
+}
 function _sortW(key){if(_W.sortKey===key)_W.sortDir*=-1;else{_W.sortKey=key;_W.sortDir=-1;}_renderWeights();}
-function _manChange(idx,val){_W.rows[idx].man=+val;_renderWeights();}
+function _manChange(idx,val){_W.rows[idx].man=+val;const tr=document.querySelector(`#page-content tbody tr[data-ri="${idx}"]`);if(tr)_paintRow(tr);}
 
 async function saveWeights(){
   const payload=_W.rows.map(r=>({character_id:r.id,manual_weight:r.man,updated_at:new Date().toISOString()}));
