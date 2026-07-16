@@ -279,9 +279,78 @@ function applyBracketResults(model,parts,encs,plMap){
 }
 // draggable=true → слоты 1-го раунда можно перетаскивать для смены посева (не-Challonge).
 // res={parts,encs,plMap} → подставляет продвинувшихся победителей в поздние раунды (SE).
+// Групповой этап: карточка-стендинг на каждую группу (по стадиям встреч), как на darte.
+// Группы берём из encounters.stage; W:L считаем по winner_id. singleGroup=RR → одна группа.
+function groupStandingsHTML(t,seeds,res,singleGroup){
+  const parts=(res&&res.parts)||[],encs=(res&&res.encs)||[],plMap=(res&&res.plMap)||{};
+  const nickOf=pid=>plMap[pid]?.nickname||'—';
+  // группировка встреч по стадии (для RR — всё в одну «группу»)
+  const byGrp={};
+  encs.forEach(e=>{const k=singleGroup?'Round Robin':(e.stage||'Без группы');(byGrp[k]=byGrp[k]||[]).push(e);});
+  // стендинг группы: {pid, w, l} по встречам этой группы
+  const standOf=list=>{
+    const st={};
+    const seat=pid=>st[pid]||(st[pid]={pid,w:0,l:0});
+    list.forEach(e=>{
+      [e.player1_id,e.player2_id].forEach(pid=>{if(pid)seat(pid);});
+      if(e.winner_id){
+        const lo=e.winner_id===e.player1_id?e.player2_id:e.player1_id;
+        seat(e.winner_id).w++; if(lo)seat(lo).l++;
+      }
+    });
+    return Object.values(st).sort((a,b)=>b.w-a.w||a.l-b.l||nickOf(a.pid).localeCompare(nickOf(b.pid)));
+  };
+  const keys=Object.keys(byGrp).sort();
+  if(!keys.length){
+    return`<p style="color:var(--sub);font-size:13px">Групп ещё нет. Создавай встречи ниже и помечай их стадией «Группа A/B/…» — здесь появятся стендинги.</p>`;
+  }
+  const row=(s,rank,groupPlayed)=>{
+    const nm=nickOf(s.pid),init=(nm||'?').replace(/[^A-Za-zА-Яа-я0-9$]/g,'').slice(0,2).toUpperCase()||'—';
+    const sl=nm.trim().toLowerCase();
+    const decided=s.w||s.l; // сыграл хоть один матч
+    const dot=decided?`<span class="gs-dot ${s.w>=s.l?'gs-up':'gs-dn'}"></span>`:'';
+    return`<div class="gs-row${rank===1&&s.w?' gs-lead':''}">
+      <span class="gs-rk">${rank}</span>
+      <span class="gs-av"><img src="web/players/${escapeHtml(sl)}.webp" alt="" onerror="this.remove()">${init}</span>
+      <span class="gs-nm">${escapeHtml(nm)}</span>
+      ${dot}<span class="gs-sc">${s.w}:${s.l}</span>
+    </div>`;
+  };
+  const cards=keys.map(k=>{
+    const st=standOf(byGrp[k]);
+    const played=byGrp[k].some(e=>e.winner_id);
+    return`<div class="gs-card">
+      <div class="gs-head"><span class="gs-title">${escapeHtml(k)}</span><span class="gs-badge">Групповой этап</span></div>
+      ${st.map((s,i)=>row(s,i+1,played)).join('')||'<div class="gs-row"><span class="gs-nm" style="color:var(--sub)">Нет игроков</span></div>'}
+    </div>`;
+  }).join('');
+  return`<style>
+    .gs-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px}
+    .gs-card{background:linear-gradient(180deg,#15171f,#11131a);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+    .gs-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 14px;border-bottom:1px solid var(--border);background:rgba(255,255,255,.02)}
+    .gs-title{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;text-transform:uppercase;font-size:14px;letter-spacing:.04em}
+    .gs-badge{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#6a6a74}
+    .gs-row{display:flex;align-items:center;gap:10px;padding:8px 14px}
+    .gs-row+.gs-row{border-top:1px solid var(--border)}
+    .gs-lead{background:rgba(255,31,68,.07);box-shadow:inset 3px 0 0 var(--accent)}
+    .gs-rk{font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;color:#7a7a85;width:16px;text-align:center;flex-shrink:0}
+    .gs-lead .gs-rk{color:var(--accent)}
+    .gs-av{width:26px;height:26px;border-radius:7px;background:#1d1d22;display:flex;align-items:center;justify-content:center;font-style:italic;font-size:10px;font-weight:900;color:var(--sub);flex-shrink:0;overflow:hidden}
+    .gs-av img{width:100%;height:100%;object-fit:cover;display:block}
+    .gs-nm{flex:1;font-weight:600;font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .gs-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+    .gs-up{background:var(--win,#46d369);box-shadow:0 0 5px rgba(70,211,105,.7)}
+    .gs-dn{background:var(--accent);box-shadow:0 0 5px rgba(255,31,68,.6)}
+    .gs-sc{font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:700;color:#c9c9d0;min-width:34px;text-align:right}
+  </style>
+  <div class="gs-grid">${cards}</div>`;
+}
 function compactSkeletonHTML(t,seeds,draggable,res){
   if(typeof BracketModel==='undefined')return'';
   const bt=t.bracket_type||'SE';
+  const stage1=String(bt).split(/\s*->\s*/)[0];
+  // групповой этап — не дерево, а стендинги по группам
+  if(stage1==='GROUPS'||stage1==='RR')return groupStandingsHTML(t,seeds,res,stage1==='RR');
   const n=Math.max((seeds&&seeds.length)||0,t.expected_players||0);
   const model=BracketModel.skeletonModel(bt,n,seeds);
   if(!model)return'<p style="color:var(--sub);font-size:13px">Укажи формат и число участников в «⚙ Настройки», либо добавь участников — и тут появится каркас.</p>';
@@ -323,6 +392,9 @@ function compactSkeletonHTML(t,seeds,draggable,res){
 // названия раундов из BracketModel — для дропдауна стадии встречи
 function bracketRoundNames(t,seeds){
   if(typeof BracketModel==='undefined')return[];
+  const stage1=String(t.bracket_type||'SE').split(/\s*->\s*/)[0];
+  if(stage1==='GROUPS')return['Группа A','Группа B','Группа C','Группа D','Группа E','Группа F'];
+  if(stage1==='RR')return['Round Robin'];
   const n=Math.max((seeds&&seeds.length)||0,t.expected_players||0);
   const m=BracketModel.skeletonModel(t.bracket_type||'SE',n,seeds);
   return m?m.rounds.map(r=>r.name):[];
