@@ -1219,17 +1219,18 @@ function _importCostTable(table,reports){
   }
 }
 
-// --- ИМПОРТ КОСТОВ ИЗ ССЫЛКИ DARTE (legacy) ---
-// Рулсет тянем через Edge Function shiyu-system: она принимает ?draft=<id>&key=<key>,
-// резолвит system через socket-init и возвращает косты/движки/штрафы (ObjectId→enka).
+// --- [НЕ ДЛЯ ПЕРЕНОСА] ИМПОРТ КОСТОВ ИЗ ССЫЛКИ DARTE (legacy) ---
+// system_id резолвим в браузере через socket.io (fetchDarteState), затем тянем
+// рулсет через Edge Function shiyu-system по ?system=<id> (косты/движки/штрафы,
+// ObjectId→enka). Так не нужен передеплой функции под ?draft=.
 const _sysCache={};
-async function fetchSystemRuleset(qs){
-  if(_sysCache[qs])return _sysCache[qs];
-  const r=await fetch(`${SB_URL}/functions/v1/shiyu-system?${qs}`,
+async function fetchSystemRuleset(systemId){
+  if(_sysCache[systemId])return _sysCache[systemId];
+  const r=await fetch(`${SB_URL}/functions/v1/shiyu-system?system=${encodeURIComponent(systemId)}`,
     {headers:{apikey:SB_KEY,Authorization:`Bearer ${SB_KEY}`}});
   const d=await r.json().catch(()=>({}));
   if(!r.ok||d.error)throw new Error(d.error||`shiyu-system ${r.status}`);
-  _sysCache[qs]=d;return d;
+  _sysCache[systemId]=d;return d;
 }
 
 async function importDarteRuleset(tourId){
@@ -1237,13 +1238,15 @@ async function importDarteRuleset(tourId){
   const set=m=>{if(st)st.textContent=m;};
   const url=document.getElementById('rs-darte')?.value?.trim();
   if(!url)return set('Вставь ссылку на драфт darte');
-  if(typeof parseDarteLink!=='function')return set('draft-import.js не загружен');
+  if(typeof parseDarteLink!=='function'||typeof fetchDarteState!=='function')return set('draft-import.js не загружен');
   const p=parseDarteLink(url);
   if(!p)return set('Не разобрал ссылку (нужен draft_id)');
-  set('Загружаю рулсет…');
+  set('Резолвлю систему драфта…');
   try{
-    const qs=`draft=${encodeURIComponent(p.id)}`+(p.key?`&key=${encodeURIComponent(p.key)}`:'');
-    const sys=await fetchSystemRuleset(qs);
+    const state=await fetchDarteState(p.id,p.key);
+    if(!state?.system)throw new Error('в драфте нет system (ссылка протухла?)');
+    set('Загружаю рулсет…');
+    const sys=await fetchSystemRuleset(state.system);
     const base=e=>String(e).split('_')[0];
     const byEnka={};D.chars.forEach(c=>{if(c.enka_id)byEnka[base(c.enka_id)]=c;});
     // Косты по персонажу. Два enka-варианта одного перса (напр. S Anby 1381 = нули и
