@@ -169,6 +169,67 @@ function elementMatchup(members,room){
   const pts=Math.max(-MATCHUP_CAP,Math.min(MATCHUP_CAP,MATCHUP_CAP*raw));
   return{pts:+pts.toFixed(3),detail:{profile:prof,weakW,resW,raw:+raw.toFixed(2)}};
 }
+// --- Shiyu frontier buff fit ---
+// Баф ротации бустит команды по элементу и/или архетипу (sheer/anomaly/stun/crit).
+// Возвращает бонус [0..BUFF_CAP]·strength (всегда ≥0 — в предикте берётся как разница A−B,
+// значит важно лишь относительное попадание в баф). Считается ОТДЕЛЬНО от enemy weak/res.
+const BUFF_CAP=0.10;
+function mechMatch(id,mech){
+  const r=TAGS[id].roles||{},gv=TAGS[id].gives||{};
+  if(mech==='sheer')return(r.sheer_dps||0)>=2;
+  if(mech==='anomaly')return(r.main_anomaly||0)>=2||(r.sub_anomaly||0)>=1||
+    ['anomaly_assist','anomaly_buff','abloom'].some(t=>(gv[t]||0)>=1);
+  if(mech==='stun')return(r.stunner||0)>=2;
+  if(mech==='crit')return(r.crit_dps||0)>=2;
+  return false;
+}
+// баф Шиюй как «виртуальный тиммейт»: ценность = Σ по эффектам tagW·mag·gate·need.
+// - mag: сила эффекта, уже нормирована по семейному диапазону при парсинге (parseBuffTag).
+// - gate (кому применимо): element-DMG проходит через долю отряда в баф-элементах (dmg_buff —
+//   частично универсален: RES-shred/DMG-taken помогают всем → пол 0.5); sheer/anomaly-бафы — через
+//   долю архетипа; pen/def/atk — универсальны (=1); crit — пол 0.5 + доля крит-дпс.
+// - need: 0.5 + 0.5·доля дпс-членов, у кого тег в needs (баф, закрывающий дыру, ценнее дубля).
+function buffMatchup(members,tag){
+  if(!tag)return 0;
+  const elems=tag.elems||(tag.elem?[tag.elem]:[]);
+  if(!elems.length&&!tag.mech&&!(tag.effects&&tag.effects.length))return 0;
+  const team=members.map(rid).filter(Boolean);
+  const prof={};let total=0;const mechW={sheer:0,anomaly:0,stun:0,crit:0};
+  team.forEach(c=>{const w=elementWeight(c);if(!w)return;total+=w;
+    const el=((SYN[c]&&SYN[c].element)||TAGS[c].element||'').toLowerCase();
+    if(el)prof[el]=(prof[el]||0)+w;
+    ['sheer','anomaly','stun','crit'].forEach(m=>{if(mechMatch(c,m))mechW[m]+=w;});});
+  if(!total)return 0;
+  const elemFit=elems.reduce((s,e)=>s+(prof[e]||0),0)/total; // доля урона в баф-элементах
+  // фолбэк: старый тег без effects → чистое попадание elem/mech
+  if(!tag.effects||!tag.effects.length){
+    let raw=elemFit;if(tag.mech)raw+=mechW[tag.mech]/total;
+    return +(BUFF_CAP*Math.min(1,raw)*(tag.strength||1)).toFixed(3);
+  }
+  // доли отряда по типу скейла урона (для гейтов по формуле урона ZZZ)
+  const sheerFrac=mechW.sheer/total, critFrac=mechW.crit/total, anomFrac=mechW.anomaly/total;
+  const dmg=team.filter(isDmg);
+  const needFrac=t=>dmg.length?dmg.filter(c=>((TAGS[c].needs||{})[t]||0)>0).length/dmg.length:0;
+  let val=0;
+  tag.effects.forEach(e=>{
+    // нужды элемент/кнопка-DMG берём от базового dmg_buff
+    const needTag=(e.tag==='dmg_buff_elem'||e.tag==='dmg_buff_skill')?'dmg_buff':e.tag;
+    const base=tagW(needTag)||0.3, mag=e.mag||0.5;
+    // gate = доля отряда, кому эффект реально помогает (по мультипликаторам формулы):
+    let gate=1;
+    if(e.tag==='dmg_buff_elem')gate=elemFit;                 // RES/элемент-DMG: только урон баф-элемента
+    else if(e.tag==='dmg_buff')gate=1;                       // универс. DMG-Bonus/RES-shred — всем (в т.ч. шир)
+    else if(e.tag==='dmg_buff_skill')gate=0.5;               // по кнопке: заглушка (нужна раскладка урона per-char)
+    else if(e.tag==='sheer_dmg_buff')gate=sheerFrac;
+    else if(e.tag==='anomaly_buff')gate=anomFrac;            // AP/аномалия-DMG: только аномальный урон
+    else if(e.tag==='crit_buff')gate=critFrac;               // CRIT-множитель ≈1 у аномалы/шир → 0
+    else if(e.tag==='pen_buff'||e.tag==='def_shred')gate=1-sheerFrac; // шир игнорит DEF → PEN/DEF-shred бесполезны
+    // atk_buff, прочее → gate=1 (ATK кормит все формулы: стандарт/аномалия/шир)
+    const need=0.5+0.5*needFrac(needTag);
+    val+=base*mag*gate*need;
+  });
+  return +Math.min(BUFF_CAP,BUFF_CAP*val).toFixed(3);
+}
 // best team-of-3 matchup vs a set of rooms (aggregated): returns best team's pts
 function bestMatchup(members,rooms){
   if(!rooms||!rooms.length)return null;
@@ -192,6 +253,6 @@ async function load(){
   NAME2ID={};for(const id in TAGS)NAME2ID[TAGS[id].name]=id;
 }
 
-g.Synergy={load,score,bestTeam,splitSide,elementMatchup,bestMatchup,rid:x=>rid(x),
+g.Synergy={load,score,bestTeam,splitSide,elementMatchup,bestMatchup,buffMatchup,rid:x=>rid(x),
   get ready(){return !!TAGS;}};
 })(typeof window!=='undefined'?window:globalThis);

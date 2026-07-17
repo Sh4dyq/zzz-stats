@@ -127,7 +127,43 @@ async function openTourSettings(id,name){
     <div id="${p}shiyu-status" style="font-size:13px;margin-bottom:10px">${shiyuStatusHTML(t.shiyu_data)}</div>
     <button class="btn btn-y" onclick="importShiyuRotation('${id}')">📥 Импорт ротации с nanoka</button>
     ${t.shiyu_data?`<button class="btn-r" style="margin-left:8px;font-size:12px;padding:6px 12px" onclick="clearShiyuRotation('${id}')">Очистить ротацию</button>`:''}
+    ${t.shiyu_data?buffTagEditorHTML(id,t.shiyu_data.buff_tag):''}
   </div>`);
+}
+// Тег бафа для формулы предикта (авто-эвристика + ручная правка). Влияет на бонус
+// «попадания в баф ротации» в predict.html (Synergy.buffMatchup). См. память shiyu-rotation.
+function buffTagEditorHTML(id,tag){
+  tag=tag||{elems:[],elem:null,mech:null,strength:0.6,effects:[]};
+  const el0=(tag.elems&&tag.elems[0])||tag.elem||'';
+  const elO=['','ice','fire','electric','ether','physical','wind'].map(e=>`<option value="${e}"${e===el0?' selected':''}>${e||'—'}</option>`).join('');
+  const mO=['','sheer','anomaly','stun','crit'].map(m=>`<option value="${m}"${m===(tag.mech||'')?' selected':''}>${m||'—'}</option>`).join('');
+  // авто-разбор эффектов (только для показа — что модель извлекла из текста бафа)
+  const effTxt=(tag.effects||[]).map(e=>`${e.tag} ${e.pct}${e.flat?'pts':'%'}→${e.mag}${e.cond?'(усл.)':''}`).join(' · ')||'—';
+  const elemsTxt=(tag.elems&&tag.elems.length)?tag.elems.join('/'):(tag.elem||'—');
+  return `<div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--line)">
+    <div style="font-size:12px;color:var(--sub);margin-bottom:6px">Тег бафа для предикта (бустит команды по элементу/архетипу):</div>
+    <div style="font-size:11px;color:var(--sub);margin-bottom:8px">Авто-разбор: элементы <b>${escapeHtml(elemsTxt)}</b> · эффекты <b>${escapeHtml(effTxt)}</b></div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <label style="font-size:12px">Элемент <select id="bt-elem-${id}" style="margin-left:4px">${elO}</select></label>
+      <label style="font-size:12px">Архетип <select id="bt-mech-${id}" style="margin-left:4px">${mO}</select></label>
+      <label style="font-size:12px">Сила <input id="bt-str-${id}" type="number" step="0.05" min="0" max="1" value="${tag.strength??0.6}" style="width:64px;margin-left:4px"></label>
+      <button class="btn btn-y" style="font-size:12px;padding:6px 12px" onclick="saveBuffTag('${id}')">Сохранить тег</button>
+    </div></div>`;
+}
+async function saveBuffTag(id){
+  const t=D.tours.find(x=>x.id===id);if(!t||!t.shiyu_data)return;
+  const prev=t.shiyu_data.buff_tag||{};
+  const elemSel=document.getElementById('bt-elem-'+id).value||null;
+  // если элемент в селекте изменён вручную — переопределяем список; иначе сохраняем авто-elems
+  const elems=elemSel&&elemSel!==(prev.elems&&prev.elems[0])?[elemSel]:(prev.elems||(prev.elem?[prev.elem]:[]));
+  const tag={elems,elem:elems[0]||null,
+    mech:document.getElementById('bt-mech-'+id).value||null,
+    strength:Math.max(0,Math.min(1,parseFloat(document.getElementById('bt-str-'+id).value)||0)),
+    effects:prev.effects||[]}; // авто-эффекты (tag/pct/mag/flat/cond) сохраняем
+  const sd={...t.shiyu_data,buff_tag:tag};
+  const{error}=await sb.from('tournaments').update({shiyu_data:sd}).eq('id',id);
+  if(dbErr(error,'сохранение тега бафа'))return;
+  t.shiyu_data=sd;toast('Тег бафа сохранён');
 }
 // краткий статус сохранённой ротации (для карточки настроек)
 function shiyuStatusHTML(sd){
@@ -145,6 +181,64 @@ const SHIYU_ELEMS=['ice','fire','electric','ether','physical','wind'];
 function _shyImgBase(image){return String(image||'').split('/').pop().replace(/\.(png|webp|jpe?g)$/i,'')||null;}
 function _shyColor(s){ // <color=#hex>txt</color> → подсветка; \n уже разбивается выше
   return String(s||'').replace(/<color=#?[0-9a-fA-F]{6,8}>(.*?)<\/color>/g,'<span class="hl">$1</span>');
+}
+// Эвристика: свободный текст бафа Шиюй → структурированный тег для формулы предикта.
+// {elems:[], elem, mech, strength, effects:[{tag,pct,mag,flat,cond}]}.
+// Эффекты ложатся на теги synergy (см. build_tags_xlsx.py): dmg_buff = универс.DMG%/DMG-taken/
+// RES-shred (RES-игнор от типа урона НЕ зависит → сюда, НЕ в pen); pen_buff = игнор/пробитие DEF;
+// def_shred = снижение DEF врага. mag нормируется по семейному диапазону (мин/макс из реальных
+// ротаций nanoka), пол 0.4; условные строки (when/after/upon) дисконт 0.7. Правится в админке.
+const BUFF_ELEMS=['physical','fire','ice','electric','ether','wind'];
+// [regex(число в группе 1), тег, плоский?] — специфичные выше общих (dmg_buff — фолбэк).
+// dmg_buff = универсальный DMG (все типы: All-Attribute RES-игнор, DMG-taken, общий DMG);
+// dmg_buff_elem = ТИП-СПЕЦИФИЧНЫЙ (element DMG% и «ignore X% <элемент> RES») — режется только для
+// урона этого элемента, потому гейтится по elems (res НЕ всегда для всех типов!).
+// dmg_buff_skill = DMG% по типу атаки (Basic/Special/Chain/Ultimate/Dash) — по формуле это
+// аддитив в DMG-Bonus, работает ТОЛЬКО на урон с этой кнопки, а раскладка урона по кнопкам у
+// персонажей разная (Харумаса — рывок/ульта; Эллен — размазан) → пока дисконт, точная модель = некст.
+const BUFF_PAT=[
+  [/ignore\s+(\d+)%[^.]*\bdef\b/,'pen_buff',false],          // ignore DEF → пробитие DEF (DEF-множитель)
+  [/def[^.]*?(?:drops?|reduc\w*|down|lowered|shred)[^.]*?(\d+)%/,'def_shred',false], // DEF врага −%
+  [/ignore[s]?\s+(\d+)%[^.]*?all[- ]?attribute\s+res\b/,'dmg_buff',false],           // все типы → универс
+  [/ignore[s]?\s+(\d+)%[^.]*?(?:physical|fire|ice|electric|ether|wind)\s+res\b/,'dmg_buff_elem',false], // <эл> RES
+  [/ignore[s]?\s+(\d+)%[^.]*\bres\b/,'dmg_buff',false],       // res без типа → универс (фолбэк)
+  [/sheer dmg[^.]*?(\d+)%/,'sheer_dmg_buff',false],
+  [/crit[^.]*?(\d+)%/,'crit_buff',false],
+  [/anomaly proficiency[^.]*?(\d+)/,'anomaly_buff',true],     // плоские очки AP
+  [/(?:abloom|disorder|vortex|anomaly)[^.]*?dmg[^.]*?(\d+)%/,'anomaly_buff',false],
+  [/\batk[^.]*?(\d+)%/,'atk_buff',false],
+  [/(?:physical|fire|ice|electric|ether|wind)[^.]*?dmg[^.]*?(\d+)%/,'dmg_buff_elem',false],  // element DMG
+  [/(?:basic attack|special attack|ex special|chain attack|dash attack|ultimate)[^.]*?(\d+)%/,'dmg_buff_skill',false], // по кнопке
+  [/(?:dmg|damage)[^.]*?(\d+)%/,'dmg_buff',false]             // общий DMG (универс.)
+];
+// семейные диапазоны % (мин/макс, откалибровано по бафам Шиюй 62045–62052); AP-очки отдельно
+const BUFF_BAND={dmg_buff:[10,40],dmg_buff_elem:[10,40],dmg_buff_skill:[10,40],sheer_dmg_buff:[20,40],crit_buff:[15,40],atk_buff:[10,30],pen_buff:[10,20],def_shred:[10,25],anomaly_buff:[15,40]};
+const BUFF_AP_BAND=[30,60];
+function _buffMag(tag,val,flat){const[mn,mx]=flat?BUFF_AP_BAND:(BUFF_BAND[tag]||[10,40]);
+  const tt=Math.max(0,Math.min(1,(val-mn)/(mx-mn)));return +(0.4+0.6*tt).toFixed(2);}
+function parseBuffTag(desc){
+  const t=String(desc||'').replace(/<color=#?[0-9a-fA-F]{6,8}>|<\/color>/g,' ').toLowerCase();
+  if(!t.trim())return{elems:[],elem:null,mech:null,strength:0,effects:[]};
+  // бустимые элементы урона (обычно 1–2): «<el> DMG … increase», исключая вражеский RES
+  const elems=[];BUFF_ELEMS.forEach(e=>{if(new RegExp(e+'[^.]*?(?:dmg|damage)[^.]*?increase').test(t))elems.push(e);});
+  const mech=/sheer/.test(t)?'sheer':/anomaly|attribute|disorder/.test(t)?'anomaly':
+    /stun|daze/.test(t)?'stun':/\bcrit/.test(t)?'crit':null;
+  // эффекты: по строкам; условная строка (when/after/upon) → дисконт 0.7; берём макс mag на тег.
+  // Найденный фрагмент «съедаем» (заменяем пробелами), чтобы одно и то же % не попало ещё и в
+  // общий dmg_buff (устраняет двойной счёт элемент-DMG).
+  const eff={};
+  t.split(/[\n|]/).forEach(line=>{
+    if(!line.trim())return;
+    const cond=/\b(when|after|upon)\b/.test(line);
+    let s=line;
+    BUFF_PAT.forEach(([re,tag,flat])=>{const m=s.match(re);if(!m)return;
+      const v=+m[1],mag=+(_buffMag(tag,v,flat)*(cond?0.7:1)).toFixed(2);
+      if(!eff[tag]||mag>eff[tag].mag)eff[tag]={pct:v,flat:!!flat,mag,cond};
+      s=s.slice(0,m.index)+' '.repeat(m[0].length)+s.slice(m.index+m[0].length);});
+  });
+  const effects=Object.keys(eff).map(tag=>({tag,...eff[tag]}));
+  const strength=effects.length?Math.max(...effects.map(e=>e.mag)):0;
+  return{elems,elem:elems[0]||null,mech,strength:+strength.toFixed(2),effects};
 }
 // nanoka shiyu JSON → наша модель {id,name,frontier,level,buff,rooms,...}. Берём зону stage_num===4.
 function normalizeShiyu(doc,srcUrl,ver){
@@ -175,7 +269,7 @@ function normalizeShiyu(doc,srcUrl,ver){
     return{waves:room.waves_num||1,weakness,monsters};
   });
   return{id:doc.id,name:doc.name||'',frontier:zone.name||'',level:zone.monster_level||null,
-    buff,rooms,source_url:srcUrl,ver,fetched_at:new Date().toISOString()};
+    buff,buff_tag:parseBuffTag(bEntry.desc),rooms,source_url:srcUrl,ver,fetched_at:new Date().toISOString()};
 }
 async function getNanokaVer(){
   try{

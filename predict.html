@@ -874,6 +874,9 @@ const MS_PRIOR=4,PC_PRIOR=4,PC_W=0.35,ELO_W=0.45;
 const SYN_K=8,SYN_BOOST=1;
 // веса синергии в серой строке (откалибровано на данных); кап тега — в synergy.js
 const SYN_TAG_W=0.6,SYN_LIFT_W=0.3;
+// BUFF_W — вес попадания в баф ротации Шиюй (Synergy.buffMatchup). Считается отдельно от
+// enemy weak/res: баф бустит команды по элементу/архетипу глобально. См. память shiyu-rotation.
+const BUFF_W=0.5;
 function effBwr(p,stats){
   const base=(stats[p.cid]&&stats[p.cid].bwr)||0.5;
   // А-ранги всегда идут на M6 и от майндскейпа не зависят → базовый винрейт без разреза по M
@@ -934,6 +937,16 @@ function rotRooms(rotKey){
     if(rooms&&rooms.length)return rooms;
   } return[];
 }
+// тег бафа выбранной ротации (буст по элементу/архетипу) — первый турнир ротации с buff_tag
+function rotBuffTag(rotKey){
+  if(!rotKey)return null;
+  const rot=rotations().find(r=>r.key===rotKey);if(!rot)return null;
+  for(const tid of rot.tids){
+    const t=D.tours.find(x=>x.id===tid);
+    const bt=t&&t.shiyu_data&&t.shiyu_data.buff_tag;
+    if(bt&&((bt.elems&&bt.elems.length)||bt.elem||bt.mech||(bt.effects&&bt.effects.length)))return bt;
+  } return null;
+}
 // сторона «готова» = собран хотя бы один полный ряд (слоты 0–2 ИЛИ 3–5)
 const rowFull=(arr,lo)=>!!(arr[lo]&&arr[lo+1]&&arr[lo+2]);
 const sideReady=arr=>rowFull(arr,0)||rowFull(arr,3);
@@ -982,12 +995,18 @@ function updateDraft(){
         if(pl&&pl.g>=PL_MIN)s+=pl.lift*(pl.g/(pl.g+PL_K));}
       return n?s/n:0;};
     const sumLift=picks=>rowsOf(picks).reduce((s,[,t])=>s+squadLift(t),0);
+    // баф ротации: попадание отряда в буст-элемент/архетип (отдельно от enemy weak/res)
+    const buffTag=rotBuffTag(tid);
+    const sumBuff=picks=>buffTag?rowsOf(picks).reduce((s,[,t])=>s+Synergy.buffMatchup(nmOf(t),buffTag),0):0;
     if(rowsOf(DR.a).length&&rowsOf(DR.b).length){
-      const anaOf=picks=>sumSyn(picks)*SYN_TAG_W+sumMu(picks)+sumLift(picks)*SYN_LIFT_W;
+      const anaOf=picks=>sumSyn(picks)*SYN_TAG_W+sumMu(picks)+sumLift(picks)*SYN_LIFT_W+sumBuff(picks)*BUFF_W;
       const anaA=anaOf(DR.a),anaB=anaOf(DR.b);
       const delta=Math.max(-0.49,Math.min(0.49,anaA-anaB));
       const pSyn=sigm(L+logit(0.5+delta));
       parts.push(`<span class="syn-wr">с синергией: ${fPct(pSyn)} vs ${fPct(1-pSyn)}</span>`);
+      if(buffTag){const bl=[(buffTag.elems&&buffTag.elems.join('/'))||buffTag.elem,
+        ...(buffTag.effects||[]).map(e=>e.tag)].filter(Boolean).join(', ');
+        parts.push(`<span class="note-micro">Баф ротации (${esc(bl)}): попадание ${sumBuff(DR.a).toFixed(2)} vs ${sumBuff(DR.b).toFixed(2)}</span>`);}
     }
   }
   if(noDataNames.length)parts.push(`<span class="note-micro">Мало статистических данных: ${noDataNames.map(esc).join(', ')}</span>`);

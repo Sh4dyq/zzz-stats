@@ -53,7 +53,8 @@ function _winrates(picks,matches){
   return out;
 }
 
-let _W={rows:[],saved:{},sortKey:'power',sortDir:-1,wman:0.5,roleFilter:'all',expanded:new Set()};
+let _W={rows:[],saved:{},sortKey:'power',sortDir:-1,wman:0.5,roleFilter:'all',expanded:new Set(),
+  section:'power',calib:'solo'}; // section: power|shiyu|consts ; calib (в power): solo|duo|trio
 
 // констелляции (майндскейпы), реально сыгранные на турнирах: пики/винрейт + кост майндскейпа.
 // Только сыгранные — это заодно отсекает мусорные косты незаигранных M (напр. заглушки).
@@ -158,7 +159,34 @@ function _constRowsHtml(r){
   }).join('');
 }
 
+// верхняя навигация раздела «Аналитика»
+function _analyticsTabs(){
+  const secBtn=(v,l)=>`<button class="tbtn" style="${_W.section===v?'border-color:var(--accent);color:#fff':''}" onclick="_anaSection('${v}')">${l}</button>`;
+  let sub='';
+  if(_W.section==='power'){
+    const cb=(v,l,on)=>`<button class="tbtn" style="${_W.calib===v?'border-color:var(--accent);color:#fff':''}${on?'':';opacity:.5;cursor:not-allowed'}" ${on?`onclick="_anaCalib('${v}')"`:'disabled'}>${l}</button>`;
+    sub=`<div style="display:flex;gap:7px;flex-wrap:wrap;margin:0 0 14px">
+      <span style="font-size:12px;color:var(--sub);align-self:center;margin-right:4px">Состав:</span>
+      ${cb('solo','Соло',true)}${cb('duo','Дуо',false)}${cb('trio','Трио',false)}</div>`;
+  }
+  return `<div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:14px">
+    ${secBtn('power','Калибровка силы персонажей')}${secBtn('shiyu','Влияние бафов Шиюй')}${secBtn('consts','Влияние констелляций')}
+  </div>${sub}`;
+}
+function _anaSection(v){_W.section=v;_renderWeights();}
+function _anaCalib(v){_W.calib=v;_renderWeights();}
+// заглушка-раздел (пока не реализован)
+function _anaStub(title,note){
+  html(`${_analyticsTabs()}<div class="card" style="padding:22px"><h3 style="margin:0 0 8px">${title}</h3>
+    <p style="color:var(--sub);font-size:13px;line-height:1.6;margin:0">${note}</p></div>`);
+}
 function _renderWeights(){
+  if(_W.section==='shiyu')return _anaStub('Влияние бафов Шиюй',
+    'Модель уже считает бонус попадания в баф ротации (Synergy.buffMatchup): элемент/архетип, величина % по семейным диапазонам, нужда отряда по тегам, гейты по формуле урона (крит — только крит-сборкам; шир игнорит DEF → pen/def-shred = 0; кнопочные бафы — дисконт). Тег бафа правится в «Турниры → Настройки → Ротация Шиюй». Здесь появится: калибровка BUFF_W/BUFF_CAP на исходах матчей и просмотр вклада по эффектам.');
+  if(_W.section==='consts')return _anaStub('Влияние констелляций',
+    'Следующий этап: теги эффектов констелляций (M1–M6) и их вклад в силу/синергию. Пока веса майндскейпов задаются в «Калибровка силы → Соло» (клик по персонажу).');
+  // section='power'
+  if(_W.calib!=='solo')return _anaStub('Калибровка силы — '+(_W.calib==='duo'?'Дуо':'Трио'),'Раздел в разработке.');
   const w=_W.wman;
   const rf=_W.roleFilter;
   let rows=_W.rows.map(r=>({r,power:_powerOf(r,w)}));
@@ -169,6 +197,7 @@ function _renderWeights(){
   const arrow=key=>k===key?(dir<0?' ↓':' ↑'):'';
   const rbtn=(val,label)=>`<button class="tbtn" style="${rf===val?'border-color:var(--accent);color:#fff':''}" onclick="_roleFilter('${val}')">${label}</button>`;
   html(`
+  ${_analyticsTabs()}
   <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:12px">
     <div class="card" style="display:flex;align-items:center;gap:12px;padding:12px 16px">
       <label style="margin:0;text-transform:none;letter-spacing:0;font-size:13px;color:var(--sub)">Доверие ручному весу</label>
