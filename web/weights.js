@@ -542,93 +542,132 @@ function _renderShiyuBuffs(){
   const th='text-align:left;padding:6px 10px;font-size:11px;color:var(--sub);text-transform:uppercase;border-bottom:1px solid var(--line)';
   const td='padding:7px 10px;border-bottom:1px solid var(--line);font-size:13px';
 
-  // (1) справочник множителей
+  // (1) справочник семейств: авто-разбор из % даёт стартовую силу 0-4, дальше правится руками
   const famRows=_BUFF_FAMILIES.map(([k,l,band,gate,desc])=>`<tr>
     <td style="${td}"><b>${l}</b><div style="font-size:11px;color:var(--sub)">${desc}</div></td>
     <td style="${td};text-align:center;font-family:'JetBrains Mono',monospace">${band[0]}–${band[1]}%</td>
-    <td style="${td};text-align:center;font-family:'JetBrains Mono',monospace">0.40–1.00</td>
+    <td style="${td};text-align:center;font-family:'JetBrains Mono',monospace">2–4</td>
     <td style="${td}">${gate}</td></tr>`).join('');
   const ref=`<div style="${card}">${H('Общие множители всех видов бафов')}
     <div style="overflow-x:auto"><table style="border-collapse:collapse;width:100%;min-width:560px">
       <thead><tr><th style="${th}">Семейство бафа</th><th style="${th};text-align:center">Диапазон %</th>
-        <th style="${th};text-align:center">Множитель (mag)</th><th style="${th}">Кому применяется (гейт)</th></tr></thead>
+        <th style="${th};text-align:center">Сила (0-4)</th><th style="${th}">Кому применяется (гейт)</th></tr></thead>
       <tbody>${famRows}</tbody></table></div>
     <div style="font-size:12px;color:var(--sub);margin-top:10px;line-height:1.6">
-      <b>mag</b> = 0.40 + 0.60·(% − мин)/(макс − мин), нормировано по семейному диапазону.
-      Условная строка бафа (when/after/upon) → ×0.7. Итоговый вклад в предикт ограничен <b>BUFF_CAP = 0.10</b>,
-      вес блока <b>BUFF_W = 0.50</b>, нужда отряда = 0.5 + 0.5·(доля дпс, кому тег нужен).
-      Плоские очки Anomaly Proficiency нормируются по диапазону 30–60.</div></div>`;
+      Сила эффекта — та же шкала <b>0-4</b>, что у тегов. Авто-разбор ставит стартовую силу по % (слабый ≈2, сильный ≈4),
+      дальше правится вручную. В модель эффект идёт как <b>сила/4 × попадание отряда</b> (по элементу/архетипу/формуле урона),
+      условная строка (when/after/upon) → ×0.7, суммарный вклад ≤ <b>BUFF_CAP = 0.10</b>, вес блока <b>BUFF_W = 0.50</b>,
+      нужда отряда = 0.5 + 0.5·(доля дпс, кому эффект нужен).</div></div>`;
 
-  // (2) бафы по турнирам
+  // (2) бафы по турнирам — с описанием ротации
   const bt=t=>{
     const saved=!!(t.shiyu_data&&t.shiyu_data.buff_tag);
     const tag=_shyTag(t);
-    const elems=(tag.elems&&tag.elems.length?tag.elems:(tag.elem?[tag.elem]:[])).join('/')||'—';
-    const eff=(tag.effects||[]).map(e=>`${_tlbl(e.tag)} ${e.pct}${e.flat?'pts':'%'}→${(+e.mag).toFixed(2)}${e.cond?'·усл':''}`).join(' · ')||'—';
+    const b=t.shiyu_data.buff||{};
+    const desc=(b.lines||[]).join('<br>')||escapeHtml(b.title||'—');
+    const elems=(tag.elems&&tag.elems.length?tag.elems:(tag.elem?[tag.elem]:[])).map(_elLbl).join(', ')||'—';
+    const mechs=((tag.mechs&&tag.mechs.length)?tag.mechs:(tag.mech?[tag.mech]:[])).map(_mechLbl).join(', ')||'—';
+    const eff=(tag.effects||[]).map(e=>`${_tlbl(e.tag)} ${_w04(e.mag)}/4`).join(' · ')||'—';
+    const notSaved=saved?'':' <span style="font-size:10px;color:var(--sub);border:1px solid var(--border);border-radius:3px;padding:0 4px">не сохранён</span>';
     return `<tr>
-      <td style="${td}"><b>${escapeHtml(t.name||t.id)}</b>${saved?'':' <span style="font-size:10px;color:var(--sub);border:1px solid var(--border);border-radius:3px;padding:0 4px">тег не сохранён</span>'}</td>
-      <td style="${td}">${escapeHtml((t.shiyu_data.buff&&t.shiyu_data.buff.title)||'—')}</td>
-      <td style="${td};text-align:center">${elems}</td>
-      <td style="${td};text-align:center">${tag.mech||'—'}</td>
-      <td style="${td};text-align:center;font-family:'JetBrains Mono',monospace">${(tag.strength??0).toFixed(2)}</td>
+      <td style="${td};vertical-align:top;min-width:150px"><b>${escapeHtml(t.name||t.id)}</b>${notSaved}
+        <div style="font-size:12px;color:var(--accent);margin-top:2px">${escapeHtml(b.title||'')}</div></td>
+      <td style="${td};font-size:12px;color:var(--sub);max-width:340px;line-height:1.5">${desc}</td>
+      <td style="${td};text-align:center;font-size:12px">${elems}</td>
+      <td style="${td};text-align:center;font-size:12px">${mechs}</td>
       <td style="${td};font-size:12px">${eff}</td></tr>`;
   };
   const perTour=tours.length?`<div style="${card}">${H('Бафы по турнирам')}
-    <div style="overflow-x:auto"><table style="border-collapse:collapse;width:100%;min-width:640px">
-      <thead><tr><th style="${th}">Турнир</th><th style="${th}">Баф ротации</th><th style="${th};text-align:center">Элементы</th>
-        <th style="${th};text-align:center">Архетип</th><th style="${th};text-align:center">Сила</th><th style="${th}">Эффекты → mag</th></tr></thead>
+    <div style="overflow-x:auto"><table style="border-collapse:collapse;width:100%;min-width:720px">
+      <thead><tr><th style="${th}">Турнир · баф</th><th style="${th}">Описание ротации</th><th style="${th};text-align:center">Элементы</th>
+        <th style="${th};text-align:center">Архетипы</th><th style="${th}">Эффекты (сила 0-4)</th></tr></thead>
       <tbody>${tours.map(bt).join('')}</tbody></table></div></div>`
     : `<div style="${card}">${H('Бафы по турнирам')}<div style="color:var(--sub);font-size:13px">Ни у одного турнира не загружена ротация Шиюй. Импорт — в «Турниры → Настройки → Ротация Шиюй».</div></div>`;
 
-  // (3) редактор текущих множителей выбранного турнира
+  // (3) редактор выбранного турнира (мульти-элемент/архетип, сила 0-4, описание)
   let editor='';
   const cur=tours.find(t=>t.id===_W.shyTour);
   const opts=tours.map(t=>`<option value="${t.id}" ${t.id===_W.shyTour?'selected':''}>${escapeHtml(t.name||t.id)}</option>`).join('');
   if(cur){
     const savedTag=!!(cur.shiyu_data&&cur.shiyu_data.buff_tag);
-    const tag=_shyTag(cur);
+    if(!_W.shyDraft||_W.shyDraftFor!==_W.shyTour){_W.shyDraft=_shyDraftFrom(_shyTag(cur));_W.shyDraftFor=_W.shyTour;}
+    const d=_W.shyDraft;
+    const b=cur.shiyu_data.buff||{};
+    const descBlock=`<div style="background:var(--field);border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-bottom:16px">
+      <div style="font-weight:700;color:var(--accent);margin-bottom:4px">${escapeHtml(b.title||'Баф ротации')}</div>
+      <div style="font-size:13px;color:var(--sub);line-height:1.6">${(b.lines||[]).join('<br>')||'—'}</div></div>`;
+    const chip=(on,label,call)=>`<button onclick="${call}" style="font-size:12px;padding:4px 11px;border-radius:14px;cursor:pointer;border:1px solid ${on?'var(--accent)':'var(--border)'};background:${on?'var(--accent)':'transparent'};color:${on?'#181820':'var(--text)'}">${label}</button>`;
+    const elChips=_ELEMS.map(([e,l])=>chip(d.elems.includes(e),l,`_shyTglElem('${e}')`)).join(' ');
+    const mChips=_MECHS.map(([m,l])=>chip(d.mechs.includes(m),l,`_shyTglMech('${m}')`)).join(' ');
     const inSt='background:var(--field);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:4px 7px;font-size:13px';
-    const elO=['','ice','fire','electric','ether','physical','wind'].map(e=>`<option value="${e}" ${e===((tag.elems&&tag.elems[0])||tag.elem||'')?'selected':''}>${e||'—'}</option>`).join('');
-    const mO=['','sheer','anomaly','stun','crit'].map(m=>`<option value="${m}" ${m===(tag.mech||'')?'selected':''}>${m||'—'}</option>`).join('');
-    const effRows=(tag.effects||[]).map((e,i)=>`<tr>
-      <td style="${td}">${_tlbl(e.tag)}<div style="font-size:11px;color:var(--sub)">${e.pct}${e.flat?'pts':'%'}${e.cond?' · условный':''}</div></td>
-      <td style="${td};text-align:center"><input type="number" step="0.05" min="0" max="1" value="${(+e.mag).toFixed(2)}" data-shy-eff="${i}" style="${inSt};width:74px;text-align:center"></td></tr>`).join('')
-      ||`<tr><td colspan="2" style="${td};color:var(--sub)">Эффекты не распознаны из текста бафа.</td></tr>`;
-    editor=`<div style="${card}">${H('Текущие множители — выбор турнира')}
-      ${savedTag?'':'<div style="font-size:12px;color:var(--sub);margin:-4px 0 12px">Тег для этой ротации ещё не сохранён — множители доразобраны из текста бафа. Нажми «Сохранить», чтобы зафиксировать.</div>'}
+    const effRows=d.effects.map((e,i)=>{
+      const opt=[..._TAGVOCAB.map(x=>[x[0],x[1]]),['dmg_buff_elem','DMG элемента'],['dmg_buff_skill','DMG по кнопке']]
+        .map(([k,l])=>`<option value="${k}" ${k===e.tag?'selected':''}>${l}</option>`).join('');
+      return `<tr>
+        <td style="${td}"><select onchange="_shyEffTag(${i},this.value)" style="${inSt};min-width:160px">${opt}</select>
+          <div style="font-size:11px;color:var(--sub);margin-top:2px">${e.pct!=null?e.pct+(e.flat?'pts':'%'):''}${e.cond?' · условный':''}</div></td>
+        <td style="${td};text-align:center">${_seg(_w04(e.mag),`_shyEffW(${i},{v})`)}</td>
+        <td style="${td};text-align:center"><button class="btn" style="padding:2px 9px" onclick="_shyEffDel(${i})">✕</button></td></tr>`;
+    }).join('')||`<tr><td colspan="3" style="${td};color:var(--sub)">Эффекты не заданы.</td></tr>`;
+    editor=`<div style="${card}">${H('Редактор бафа — выбор турнира')}
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px">
         <label style="font-size:13px;color:var(--sub)">Турнир</label>
         <select onchange="_shyPick(this.value)" style="${inSt};min-width:220px">${opts}</select>
+        ${savedTag?'':'<span style="font-size:11px;color:var(--sub);border:1px solid var(--border);border-radius:4px;padding:1px 6px">тег доразобран — сохрани, чтобы зафиксировать</span>'}
       </div>
-      <div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:14px">
-        <label style="font-size:13px;color:var(--sub)">Элемент <select id="shy-elem" style="${inSt};margin-left:5px">${elO}</select></label>
-        <label style="font-size:13px;color:var(--sub)">Архетип <select id="shy-mech" style="${inSt};margin-left:5px">${mO}</select></label>
-        <label style="font-size:13px;color:var(--sub)">Сила <input id="shy-str" type="number" step="0.05" min="0" max="1" value="${(tag.strength??0.6)}" style="${inSt};width:74px;margin-left:5px"></label>
-      </div>
-      <table style="border-collapse:collapse;width:100%;max-width:420px">
-        <thead><tr><th style="${th}">Эффект</th><th style="${th};text-align:center">Множитель (mag)</th></tr></thead>
+      ${descBlock}
+      <div style="margin-bottom:14px"><div style="font-size:12px;color:var(--sub);margin-bottom:6px">Элементы бафа (можно несколько)</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">${elChips}</div></div>
+      <div style="margin-bottom:16px"><div style="font-size:12px;color:var(--sub);margin-bottom:6px">Архетипы (можно несколько)</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">${mChips}</div></div>
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+        <span style="font-size:13px;color:var(--sub)">Общая сила бафа (0-4)</span>${_seg(_w04(d.strength),'_shyStr({v})')}</div>
+      <table style="border-collapse:collapse;width:100%;max-width:520px">
+        <thead><tr><th style="${th}">Эффект</th><th style="${th};text-align:center">Сила (0-4)</th><th style="${th}"></th></tr></thead>
         <tbody>${effRows}</tbody></table>
-      <button class="btn btn-y" style="margin-top:14px" onclick="_shySave()">Сохранить множители</button>
-      <span id="shy-status" style="margin-left:12px;font-size:12px;color:var(--sub)"></span></div>`;
+      <button class="btn" style="padding:3px 12px;margin-top:8px" onclick="_shyEffAdd()">+ эффект</button>
+      <div style="margin-top:16px"><button class="btn btn-y" onclick="_shySave()">Сохранить баф</button>
+        <span id="shy-status" style="margin-left:12px;font-size:12px;color:var(--sub)"></span></div></div>`;
   }
   html(`${_analyticsTabs()}${ref}${perTour}${editor}`);
 }
-function _shyPick(id){_W.shyTour=id;_renderShiyuBuffs();}
+// элементы/архетипы с русскими метками
+const _ELEMS=[['physical','Физика'],['fire','Огонь'],['ice','Лёд'],['electric','Электро'],['ether','Эфир'],['wind','Ветер']];
+const _MECHS=[['sheer','Шир'],['anomaly','Аномалия'],['stun','Стан'],['crit','Крит']];
+const _elLbl=e=>(_ELEMS.find(x=>x[0]===e)||[e,e])[1];
+const _mechLbl=m=>(_MECHS.find(x=>x[0]===m)||[m,m])[1];
+// mag(0-1) <-> сила(0-4). Отображаем 0-4, храним 0-1 (модель читает mag=сила/4).
+const _w04=mag=>Math.max(0,Math.min(4,Math.round((+mag||0)*4)));
+const _magFromW=w=>+((+w||0)/4).toFixed(2);
+// черновик редактора: нормализуем тег к {elems[],mechs[],strength(0-1),effects[]}
+function _shyDraftFrom(tag){
+  return{
+    elems:(tag.elems&&tag.elems.length?tag.elems:(tag.elem?[tag.elem]:[])).slice(),
+    mechs:((tag.mechs&&tag.mechs.length)?tag.mechs:(tag.mech?[tag.mech]:[])).slice(),
+    strength:tag.strength??0.6,
+    effects:(tag.effects||[]).map(e=>({...e}))
+  };
+}
+function _shyPick(id){_W.shyTour=id;_W.shyDraft=null;_renderShiyuBuffs();}
+function _shyTglElem(e){const d=_W.shyDraft;const i=d.elems.indexOf(e);i<0?d.elems.push(e):d.elems.splice(i,1);_renderShiyuBuffs();}
+function _shyTglMech(m){const d=_W.shyDraft;const i=d.mechs.indexOf(m);i<0?d.mechs.push(m):d.mechs.splice(i,1);_renderShiyuBuffs();}
+function _shyStr(w){_W.shyDraft.strength=_magFromW(w);_renderShiyuBuffs();}
+function _shyEffW(i,w){_W.shyDraft.effects[i].mag=_magFromW(w);_renderShiyuBuffs();}
+function _shyEffTag(i,tag){_W.shyDraft.effects[i].tag=tag;_renderShiyuBuffs();}
+function _shyEffDel(i){_W.shyDraft.effects.splice(i,1);_renderShiyuBuffs();}
+function _shyEffAdd(){_W.shyDraft.effects.push({tag:'dmg_buff',pct:null,flat:false,cond:false,mag:0.5});_renderShiyuBuffs();}
 async function _shySave(){
-  const t=(_W.shyTours||[]).find(x=>x.id===_W.shyTour);if(!t||!t.shiyu_data)return;
+  const t=(_W.shyTours||[]).find(x=>x.id===_W.shyTour);if(!t||!t.shiyu_data||!_W.shyDraft)return;
   const st=document.getElementById('shy-status');const set=(s,c)=>{if(st){st.textContent=s;st.style.color=c||'var(--sub)';}};
-  const prev=_shyTag(t); // сохранённый тег либо доразобранный из текста (тогда сохранение его зафиксирует)
-  const elemSel=document.getElementById('shy-elem').value||null;
-  const elems=elemSel?[elemSel]:(prev.elems||(prev.elem?[prev.elem]:[]));
-  const effects=(prev.effects||[]).map((e,i)=>{
-    const inp=document.querySelector(`[data-shy-eff="${i}"]`);
-    return{...e,mag:inp?Math.max(0,Math.min(1,parseFloat(inp.value)||0)):e.mag};
-  });
-  const strength=Math.max(0,Math.min(1,parseFloat(document.getElementById('shy-str').value)||0));
-  const tag={elems,elem:elems[0]||null,mech:document.getElementById('shy-mech').value||null,strength,effects};
+  const d=_W.shyDraft;
+  const tag={elems:d.elems.slice(),elem:d.elems[0]||null,
+    mechs:d.mechs.slice(),mech:d.mechs[0]||null,
+    strength:Math.max(0,Math.min(1,d.strength)),
+    effects:d.effects.map(e=>({...e,mag:Math.max(0,Math.min(1,e.mag))}))};
   const sd={...t.shiyu_data,buff_tag:tag};
   set('сохранение…');
   const{error}=await sb.from('tournaments').update({shiyu_data:sd}).eq('id',_W.shyTour);
-  if(dbErr(error,'сохранение множителей бафа')){set('ошибка','var(--red)');return;}
-  t.shiyu_data=sd;set('✓ сохранено','var(--accent)');toast('Множители бафа сохранены');
+  if(dbErr(error,'сохранение бафа')){set('ошибка','var(--red)');return;}
+  t.shiyu_data=sd;const dt=(D.tours||[]).find(x=>x.id===_W.shyTour);if(dt)dt.shiyu_data=sd;
+  set('✓ сохранено','var(--accent)');toast('Баф сохранён');
 }

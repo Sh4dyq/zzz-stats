@@ -201,9 +201,11 @@ function buffMatchup(members,tag){
     ['sheer','anomaly','stun','crit'].forEach(m=>{if(mechMatch(c,m))mechW[m]+=w;});});
   if(!total)return 0;
   const elemFit=elems.reduce((s,e)=>s+(prof[e]||0),0)/total; // доля урона в баф-элементах
+  // архетипы бафа: мультивыбор (mechs[]) с фолбэком на старый одиночный mech
+  const mechs=(tag.mechs&&tag.mechs.length)?tag.mechs:(tag.mech?[tag.mech]:[]);
   // фолбэк: старый тег без effects → чистое попадание elem/mech
   if(!tag.effects||!tag.effects.length){
-    let raw=elemFit;if(tag.mech)raw+=mechW[tag.mech]/total;
+    let raw=elemFit;mechs.forEach(m=>{if(mechW[m]!=null)raw+=mechW[m]/total;});
     return +(BUFF_CAP*Math.min(1,raw)*(tag.strength||1)).toFixed(3);
   }
   // доли отряда по типу скейла урона (для гейтов по формуле урона ZZZ)
