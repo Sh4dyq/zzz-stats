@@ -170,7 +170,7 @@ function _analyticsTabs(){
       ${cb('solo','Соло',true)}${cb('duo','Дуо',false)}${cb('trio','Трио',false)}</div>`;
   }
   return `<div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:14px">
-    ${secBtn('power','Калибровка силы персонажей')}${secBtn('shiyu','Влияние бафов Шиюй')}${secBtn('consts','Теги + мидскейпы')}
+    ${secBtn('power','Калибровка силы персонажей')}${secBtn('shiyu','Влияние бафов Шиюй')}${secBtn('consts','Теги + майндскейпы')}
   </div>${sub}`;
 }
 function _anaSection(v){_W.section=v;_renderWeights();}
@@ -296,7 +296,7 @@ async function saveWeights(){
   toast('Веса сохранены');
 }
 
-// ===== Редактор тегов синергии + мидскейпов (Аналитика → Теги + мидскейпы) =====
+// ===== Редактор тегов синергии + майндскейпов (Аналитика → Теги + майндскейпы) =====
 // Источник правды — таблица synergy_tags (jsonb на персонажа). Базовые roles/gives/needs
 // = шкала 0-4 (M0); ms.gives_self / ms.gives — мидскейпы (mag вне 0-4 допустим, at = порог M).
 // Автосохранение построчно (debounce), фолбэк-база — web/data/synergy_tags.json.
@@ -328,6 +328,36 @@ const _TAG_ALIAS={dmg_buff_elem:'DMG элемента',dmg_buff_skill:'DMG по 
 const _tlbl=t=>_TAG_ALIAS[t]||(_TAGVOCAB.find(x=>x[0]===t)||[t,t])[1];
 const _ttip=t=>(_TAGVOCAB.find(x=>x[0]===t)||[t,t,''])[2]||'';
 const _rlbl=r=>(_ROLEVOCAB.find(x=>x[0]===r)||[r,r])[1];
+// короткие заголовки для горизонтальной раскладки (полное имя — в title)
+const _TAGSHORT={atk_buff:'ATK',dmg_buff:'DMG',crit_buff:'Крит',anomaly_buff:'Аном',sheer_dmg_buff:'Sheer',
+  pen_buff:'PEN',def_shred:'DEF↓',daze:'Оглуш',amp_on_stun:'AmpST',anomaly_assist:'Разгон',
+  decibel:'Деци',aftershock:'Афт',abloom:'Abloom',ether_veil:'Вуаль'};
+const _ROLESHORT={crit_dps:'КритДПС',sheer_dps:'Шир',sub_dps:'СабДПС',main_anomaly:'МейнАн',
+  sub_anomaly:'СабАн',stunner:'Стан',support:'Сапп',off_field:'ОффФ'};
+// имена в synergy_tags — полные; в D.chars — короткие (см. ALIAS в synergy.js). Матчим по имени,
+// чтобы вытащить настоящую карточку персонажа (иконку). Иначе iconChar не находит файл.
+const _NAME_ALIAS={Nicole:'Nicole Demara',Lycaon:'Von Lycaon',Lucy:'Luciana de Montefio',
+  Astra:'Astra Yao',Alice:'Alice Thymefield',Burnice:'Burnice White',Vivian:'Vivian Banshee',
+  Evelyn:'Evelyn Chevalier',Ellen:'Ellen Joe',Rina:'Alexandrina Sebastiane',
+  Yuzuha:'Ukinami Yuzuha',Orphie:'Orphie Magnusson & Magus',Caesar:'Caesar King',
+  Yidhari:'Yidhari Murphy',Miyabi:'Hoshimi Miyabi',Pulchra:'Pulchra Fellini',
+  'S Anby':'Soldier 0 - Anby',Yanagi:'Tsukishiro Yanagi',Grace:'Grace Howard',
+  Koleda:'Koleda Belobog',Seth:'Seth Lowell',Lucia:'Lucia Elowen',
+  'S Billy':'Starlight - Billy',Harumasa:'Asaba Harumasa',Nekomata:'Nekomiya Mana',
+  Manato:'Komano Manato',Anby:'Anby Demara',Billy:'Billy Kid',
+  Corin:'Corin Wickes',Anton:'Anton Ivanov',Velina:'Velina Airgid',Norma:'Norma Hollowell'};
+function _charByName(name){
+  if(!_W.charIdx){
+    _W.charIdx={};
+    (D.chars||[]).forEach(c=>{if(!c||!c.name)return;_W.charIdx[c.name]=c;
+      const full=_NAME_ALIAS[c.name];if(full)_W.charIdx[full]=c;});
+  }
+  return _W.charIdx[name]||{name};
+}
+function _tagChar(id){
+  const t=_W.tags[id]||{};
+  return _charByName(t.name);
+}
 
 async function _loadTags(){
   const[base,rows]=await Promise.all([
@@ -360,7 +390,7 @@ function _renderTagsEditor(){
     <button class="btn" onclick="_tagImport()" title="Залить текущий web/data/synergy_tags.json в таблицу synergy_tags (перезапишет)">Импорт из файла → БД</button>
     <span id="tag-status" style="font-size:12px;color:var(--sub)"></span>
   </div>
-  <p style="color:var(--sub);font-size:12px;margin:0 0 12px;line-height:1.5">Клик по персонажу — редактор. Базовые роли/даёт/нужно — шкала 0-4 (M0). Мидскейпы: «даёт себе»/«даёт команде» строками (тег · сила · с какого M), сила может быть больше 4. Урон M1–M6 — множитель к M0. Сохраняется автоматически.</p>
+  <p style="color:var(--sub);font-size:12px;margin:0 0 12px;line-height:1.5">Клик по персонажу — редактор. Базовые роли/даёт/нужно — шкала 0-4 (M0). Майндскейпы: «даёт себе»/«даёт команде» строками (тег · сила · с какого M), сила может быть больше 4. Урон M1–M6 — множитель к M0. Сохраняется автоматически.</p>
   <div class="card" style="padding:0;overflow:hidden">${ids.map(_tagRow).join('')}</div>`);
 }
 
@@ -369,7 +399,7 @@ function _tagPill(txt,color){return `<span style="display:inline-block;font-size
 function _tagRow(id){
   const t=_W.tags[id],open=_W.tagExpand===id;
   const inDb=_W.tagDb&&_W.tagDb.has(String(id));
-  const c=(D.charMap&&D.charMap[id])||{name:t.name};
+  const c=_tagChar(id);
   const roles=Object.keys(t.roles||{}).filter(r=>t.roles[r]).sort((a,b)=>t.roles[b]-t.roles[a]);
   const rolePills=roles.length?roles.map(r=>_tagPill(_rlbl(r))).join(''):'<span style="color:var(--sub);font-size:12px">— роли не заданы —</span>';
   const gives=Object.keys(t.gives||{}).filter(k=>t.gives[k]).sort((a,b)=>t.gives[b]-t.gives[a]).slice(0,4);
@@ -381,7 +411,7 @@ function _tagRow(id){
     <div style="min-width:180px;flex-shrink:0"><div style="font-weight:600">${t.name}</div>
       <div style="font-size:11px;color:var(--sub)">${(t.element||'')} ${t.specialty?('· '+t.specialty):''}</div></div>
     <div style="flex:1;min-width:0">${rolePills}${givePreview?`<div style="font-size:11px;color:var(--sub);margin-top:2px">даёт: ${givePreview}</div>`:''}</div>
-    ${msN?_tagPill('мидскейпы: '+msN,'var(--accent)'):''}
+    ${msN?_tagPill('майндскейпы: '+msN,'var(--accent)'):''}
     <span style="flex-shrink:0;font-size:11px;color:${inDb?'var(--accent)':'var(--sub)'}">${inDb?'● в БД':'○ из файла'}</span>
   </div>`;
   return head+(open?_tagForm(id):'');
@@ -403,21 +433,26 @@ function _tagForm(id){
   const cellSt='padding:6px 10px;border-bottom:1px solid var(--line)';
   const H=s=>`<div style="font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;font-size:13px;letter-spacing:.03em;color:var(--text);margin:18px 0 8px">${s}</div>`;
 
-  // Роли
-  const roleGrid=`<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:6px 18px">`
-    +_ROLEVOCAB.map(([k,l])=>`<div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
-      <span style="font-size:13px">${l}</span>${_seg((t.roles||{})[k],`_tagRole('${id}','${k}',{v})`)}</div>`).join('')+`</div>`;
+  // числовое поле 0-4 (сегменты не влезают в 14 колонок → просто цифра)
+  const numIn=(val,call)=>`<input type="number" min="0" max="4" step="1" value="${val!=null&&val!==0?val:''}" onchange="${call}" style="width:40px;background:var(--field);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:3px 4px;font-size:13px;text-align:center">`;
+  const colTh='padding:5px 6px;font-size:11px;color:var(--sub);text-align:center;white-space:nowrap;border-bottom:1px solid var(--line)';
+  const cellC='padding:4px 6px;text-align:center;border-bottom:1px solid var(--line)';
+  const rowLbl='padding:5px 12px 5px 0;font-size:12px;color:var(--text);white-space:nowrap;text-align:right;border-bottom:1px solid var(--line)';
 
-  // Базовые теги: одна таблица Тег | Даёт | Нужно
-  const baseRows=_TAGVOCAB.map(([k,l])=>`<tr>
-    <td style="${cellSt}" title="${_ttip(k)}"><span style="font-size:13px">${l}</span></td>
-    <td style="${cellSt};text-align:center">${_seg((t.gives||{})[k],`_tagBase('${id}','gives','${k}',{v})`)}</td>
-    <td style="${cellSt};text-align:center">${_seg((t.needs||{})[k],`_tagBase('${id}','needs','${k}',{v})`)}</td></tr>`).join('');
-  const baseTable=`<table style="border-collapse:collapse;width:100%;max-width:560px">
-    <thead><tr style="font-size:11px;color:var(--sub);text-transform:uppercase">
-      <th style="text-align:left;padding:4px 10px">Тег</th>
-      <th style="padding:4px 10px">Даёт команде</th><th style="padding:4px 10px">Нужно</th></tr></thead>
-    <tbody>${baseRows}</tbody></table>`;
+  // Роли — в строчку (теги-колонки), значения под ними
+  const roleTable=`<div style="overflow-x:auto"><table style="border-collapse:collapse">
+    <thead><tr><th style="${rowLbl}"></th>${_ROLEVOCAB.map(([k])=>`<th style="${colTh}" title="${_rlbl(k)}">${_ROLESHORT[k]||_rlbl(k)}</th>`).join('')}</tr></thead>
+    <tbody><tr><td style="${rowLbl}">Роль</td>${_ROLEVOCAB.map(([k])=>`<td style="${cellC}">${numIn((t.roles||{})[k],`_tagRole('${id}','${k}',this.value)`)}</td>`).join('')}</tr></tbody>
+  </table></div>`;
+
+  // Базовые теги — теги В СТРОЧКУ (колонки), «Даёт»/«Нужно» В СТОЛБИК (строки)
+  const tagCols=_TAGVOCAB.map(([k])=>`<th style="${colTh}" title="${_tlbl(k)} — ${_ttip(k)}">${_TAGSHORT[k]||k}</th>`).join('');
+  const baseTable=`<div style="overflow-x:auto"><table style="border-collapse:collapse">
+    <thead><tr><th style="${rowLbl}"></th>${tagCols}</tr></thead>
+    <tbody>
+      <tr><td style="${rowLbl}">Даёт команде</td>${_TAGVOCAB.map(([k])=>`<td style="${cellC}">${numIn((t.gives||{})[k],`_tagBase('${id}','gives','${k}',this.value)`)}</td>`).join('')}</tr>
+      <tr><td style="${rowLbl}">Нужно</td>${_TAGVOCAB.map(([k])=>`<td style="${cellC}">${numIn((t.needs||{})[k],`_tagBase('${id}','needs','${k}',this.value)`)}</td>`).join('')}</tr>
+    </tbody></table></div>`;
 
   // Мидскейпы: таблица Тег | Сила | С M | ✕
   const msTable=(which)=>{
@@ -446,28 +481,29 @@ function _tagForm(id){
 
   const noteSt='width:100%;background:var(--field);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:7px 10px;font-size:13px';
   return `<div style="padding:6px 20px 22px 42px;background:var(--field);border-top:1px solid var(--line)">
-    ${H('Роли — насколько исполняет (0-4)')}${roleGrid}
+    ${H('Роли — насколько исполняет (0-4)')}${roleTable}
     ${H('Базовые теги на M0 (0-4)')}
-    <div style="font-size:12px;color:var(--sub);margin:-4px 0 8px">«Даёт команде» — сила эффекта. «Нужно» — насколько критично агенту.</div>
+    <div style="font-size:12px;color:var(--sub);margin:-4px 0 8px">«Даёт команде» — сила эффекта. «Нужно» — насколько критично агенту. Наведи на заголовок — полное название.</div>
     ${baseTable}
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:24px;margin-top:4px">
-      <div>${H('Мидскейпы — даёт себе')}${msTable('gives_self')}</div>
-      <div>${H('Мидскейпы — даёт команде')}${msTable('gives')}</div>
+      <div>${H('Майндскейпы — даёт себе')}${msTable('gives_self')}</div>
+      <div>${H('Майндскейпы — даёт команде')}${msTable('gives')}</div>
     </div>
-    <div style="font-size:12px;color:var(--sub);margin-top:6px">Сила мидскейпов может быть больше 4 (шкала 0-4 — только для базовых тегов M0). «С M» — с какого майндскейпа эффект активен.</div>
-    ${H('Множитель урона по мидскейпам (× к M0)')}${dmgRow}
+    <div style="font-size:12px;color:var(--sub);margin-top:6px">Сила майндскейпов может быть больше 4 (шкала 0-4 — только для базовых тегов M0). «С M» — с какого майндскейпа эффект активен.</div>
+    ${H('Множитель урона по майндскейпам (× к M0)')}${dmgRow}
     <label style="display:inline-flex;align-items:center;gap:7px;font-size:13px;margin-top:16px;cursor:pointer">
       <input type="checkbox" ${ms.a_rank?'checked':''} onchange="_tagARank('${id}',this.checked)"> A-ранг — эффекты считаем как на M6</label>
     ${H('Заметка')}<input value="${(t.note||'').replace(/"/g,'&quot;')}" onchange="_tagNote('${id}','note',this.value)" style="${noteSt}">
-    ${H('Заметка по мидскейпам')}<input value="${(ms.note||'').replace(/"/g,'&quot;')}" onchange="_tagNote('${id}','ms.note',this.value)" style="${noteSt}">
+    ${H('Заметка по майндскейпам')}<input value="${(ms.note||'').replace(/"/g,'&quot;')}" onchange="_tagNote('${id}','ms.note',this.value)" style="${noteSt}">
   </div>`;
 }
 
 // --- state mutations + autosave ---
 function _tagSearch(v){_W.tagQ=v;_renderTagsEditor();}
 function _tagToggle(id){_W.tagExpand=_W.tagExpand===id?null:id;_renderTagsEditor();}
-function _tagRole(id,role,v){const t=_W.tags[id];v=+v;if(v)t.roles[role]=v;else delete t.roles[role];_tagQueueSave(id);_renderTagsEditor();}
-function _tagBase(id,kind,tag,v){const t=_W.tags[id];t[kind]=t[kind]||{};v=+v;if(v)t[kind][tag]=v;else delete t[kind][tag];_tagQueueSave(id);_renderTagsEditor();}
+// числовые поля (onchange по blur) — БЕЗ ре-рендера, иначе теряется фокус
+function _tagRole(id,role,v){const t=_W.tags[id];v=Math.max(0,Math.min(4,+v||0));if(v)t.roles[role]=v;else delete t.roles[role];_tagQueueSave(id);}
+function _tagBase(id,kind,tag,v){const t=_W.tags[id];t[kind]=t[kind]||{};v=Math.max(0,Math.min(4,+v||0));if(v)t[kind][tag]=v;else delete t[kind][tag];_tagQueueSave(id);}
 function _tagMs(id){const t=_W.tags[id];return t.ms||(t.ms={gives_self:{},gives:{},dmg:{},note:'',a_rank:false});}
 function _tagMsAdd(id,which){const m=_tagMs(id);m[which]=m[which]||{};const free=_TAGVOCAB.map(x=>x[0]).find(k=>!(k in m[which]))||'dmg_buff';m[which][free]={mag:1,at:1};_tagQueueSave(id);_renderTagsEditor();}
 function _tagMsKey(id,which,oldTag,newTag){const m=_tagMs(id);if(newTag===oldTag||!m[which])return;m[which][newTag]=m[which][oldTag];delete m[which][oldTag];_tagQueueSave(id);_renderTagsEditor();}
@@ -531,8 +567,12 @@ function _renderShiyuBuffs(){
   // источник — свежий список турниров (D.tours на этой странице может быть ещё не загружен)
   if(!_W.shyLoaded){
     html(`${_analyticsTabs()}<div class="card" style="padding:22px"><span class="spinner"></span> Загружаю ротации…</div>`);
-    _fetchAllW('tournaments').then(rows=>{_W.shyTours=rows;_W.shyLoaded=true;_renderShiyuBuffs();})
-      .catch(e=>html(`${_analyticsTabs()}<div class="card" style="padding:22px;color:var(--red)">Ошибка загрузки турниров: ${e.message}</div>`));
+    Promise.all([_fetchAllW('tournaments'),
+      fetch('web/data/synergy_tags.json?v='+Date.now()).then(r=>r.json()).catch(()=>({}))])
+      .then(([rows,tj])=>{_W.shyTours=rows;
+        _W.shyRoster=Object.entries(tj).map(([id,v])=>({id,name:v.name})).sort((a,b)=>a.name.localeCompare(b.name,'ru'));
+        _W.shyLoaded=true;_renderShiyuBuffs();})
+      .catch(e=>html(`${_analyticsTabs()}<div class="card" style="padding:22px;color:var(--red)">Ошибка загрузки: ${e.message}</div>`));
     return;
   }
   const tours=(_W.shyTours||[]).filter(t=>t.shiyu_data);       // все загруженные ротации
@@ -567,7 +607,10 @@ function _renderShiyuBuffs(){
     const desc=(b.lines||[]).join('<br>')||escapeHtml(b.title||'—');
     const elems=(tag.elems&&tag.elems.length?tag.elems:(tag.elem?[tag.elem]:[])).map(_elLbl).join(', ')||'—';
     const mechs=((tag.mechs&&tag.mechs.length)?tag.mechs:(tag.mech?[tag.mech]:[])).map(_mechLbl).join(', ')||'—';
-    const eff=(tag.effects||[]).map(e=>`${_tlbl(e.tag)} ${_w04(e.mag)}/4`).join(' · ')||'—';
+    const eff=(tag.effects||[]).map(e=>{const w=e.w!=null?e.w:_w04(e.mag);
+      const who=(e.chars&&e.chars.length)?` [${e.chars.length}👤]`:'';
+      const ap=(e.apply!=null&&e.apply!==100)?` ${e.apply}%`:'';
+      return `${_tlbl(e.tag)} ${w}/4${ap}${who}`;}).join(' · ')||'—';
     const notSaved=saved?'':' <span style="font-size:10px;color:var(--sub);border:1px solid var(--border);border-radius:3px;padding:0 4px">не сохранён</span>';
     return `<tr>
       <td style="${td};vertical-align:top;min-width:150px"><b>${escapeHtml(t.name||t.id)}</b>${notSaved}
@@ -600,15 +643,38 @@ function _renderShiyuBuffs(){
     const elChips=_ELEMS.map(([e,l])=>chip(d.elems.includes(e),l,`_shyTglElem('${e}')`)).join(' ');
     const mChips=_MECHS.map(([m,l])=>chip(d.mechs.includes(m),l,`_shyTglMech('${m}')`)).join(' ');
     const inSt='background:var(--field);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:4px 7px;font-size:13px';
-    const effRows=d.effects.map((e,i)=>{
-      const opt=[..._TAGVOCAB.map(x=>[x[0],x[1]]),['dmg_buff_elem','DMG элемента'],['dmg_buff_skill','DMG по кнопке']]
-        .map(([k,l])=>`<option value="${k}" ${k===e.tag?'selected':''}>${l}</option>`).join('');
-      return `<tr>
-        <td style="${td}"><select onchange="_shyEffTag(${i},this.value)" style="${inSt};min-width:160px">${opt}</select>
-          <div style="font-size:11px;color:var(--sub);margin-top:2px">${e.pct!=null?e.pct+(e.flat?'pts':'%'):''}${e.cond?' · условный':''}</div></td>
-        <td style="${td};text-align:center">${_seg(_w04(e.mag),`_shyEffW(${i},{v})`)}</td>
-        <td style="${td};text-align:center"><button class="btn" style="padding:2px 9px" onclick="_shyEffDel(${i})">✕</button></td></tr>`;
-    }).join('')||`<tr><td colspan="3" style="${td};color:var(--sub)">Эффекты не заданы.</td></tr>`;
+    const rosterName={};(_W.shyRoster||[]).forEach(r=>rosterName[r.id]=r.name);
+    const tagOpt=e=>[..._TAGVOCAB.map(x=>[x[0],x[1]]),['dmg_buff_elem','DMG элемента'],['dmg_buff_skill','DMG по кнопке']]
+      .map(([k,l])=>`<option value="${k}" ${k===e.tag?'selected':''}>${l}</option>`).join('');
+    const partCard=(e,i)=>{
+      const chars=e.chars||[];
+      const chips=chars.map(cid=>`<span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;background:rgba(83,74,183,.18);color:#b3aaf0;border-radius:10px;padding:1px 8px;margin:2px 4px 2px 0">${escapeHtml(rosterName[cid]||cid)}<span style="cursor:pointer;opacity:.7" onclick="_shyPartCharTgl(${i},'${cid}')">✕</span></span>`).join('')
+        ||'<span style="font-size:11px;color:var(--sub)">— не выбраны → авто-гейт по элементу/архетипу —</span>';
+      let picker='';
+      if(_W.shyPartOpen===i){
+        const list=(_W.shyRoster||[])
+          .map(r=>`<label style="display:flex;align-items:center;gap:6px;padding:2px 4px;font-size:12px;cursor:pointer">
+            <input type="checkbox" ${chars.map(String).includes(String(r.id))?'checked':''} onchange="_shyPartCharTgl(${i},'${r.id}')">${escapeHtml(r.name)}</label>`).join('');
+        picker=`<div style="margin-top:8px;border:1px solid var(--border);border-radius:8px;padding:10px;background:var(--card)">
+          <input placeholder="поиск…" oninput="_shyFilterPicker(this)" style="${inSt};width:200px;margin-bottom:8px">
+          <div style="max-height:220px;overflow:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:2px 10px">${list}</div>
+          <button class="btn" style="padding:2px 10px;margin-top:8px" onclick="_shyPartTgl(${i})">Готово</button></div>`;
+      }
+      return `<div style="border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:10px;background:var(--card)">
+        <input value="${escapeHtml(e.desc||'')}" onchange="_shyPartField(${i},'desc',this.value)" placeholder="описание части бафа" style="${inSt};width:100%;margin-bottom:10px">
+        <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap">
+          <label style="font-size:12px;color:var(--sub)">Тип <select onchange="_shyPartField(${i},'tag',this.value)" style="${inSt};margin-left:4px">${tagOpt(e)}</select></label>
+          <span style="font-size:12px;color:var(--sub)">Сила ${_seg(e.w!=null?e.w:_w04(e.mag),`_shyEffW(${i},{v})`)}</span>
+          <label style="font-size:12px;color:var(--sub)">Работает <input type="number" min="0" max="100" step="5" value="${e.apply!=null?e.apply:100}" onchange="_shyPartField(${i},'apply',this.value)" style="${inSt};width:60px;text-align:center">%</label>
+          <label style="font-size:12px;color:var(--sub);display:inline-flex;align-items:center;gap:5px"><input type="checkbox" ${e.cond?'checked':''} onchange="_shyPartField(${i},'cond',this.checked)">условный</label>
+          <button class="btn" style="padding:2px 10px;margin-left:auto" onclick="_shyEffDel(${i})">✕ удалить</button>
+        </div>
+        ${e.pct!=null?`<div style="font-size:11px;color:var(--sub);margin-top:6px">из текста: ${e.pct}${e.flat?'pts':'%'}</div>`:''}
+        <div style="margin-top:10px"><div style="font-size:12px;color:var(--sub);margin-bottom:4px">Для кого работает
+          <button class="btn" style="padding:1px 9px;margin-left:6px" onclick="_shyPartTgl(${i})">${_W.shyPartOpen===i?'скрыть':'выбрать'} (${chars.length})</button></div>
+          <div>${chips}</div>${picker}</div></div>`;
+    };
+    const partsHTML=d.effects.length?d.effects.map(partCard).join(''):`<div style="color:var(--sub);font-size:13px">Части не заданы.</div>`;
     editor=`<div style="${card}">${H('Редактор бафа — выбор турнира')}
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px">
         <label style="font-size:13px;color:var(--sub)">Турнир</label>
@@ -620,12 +686,12 @@ function _renderShiyuBuffs(){
         <div style="display:flex;gap:6px;flex-wrap:wrap">${elChips}</div></div>
       <div style="margin-bottom:16px"><div style="font-size:12px;color:var(--sub);margin-bottom:6px">Архетипы (можно несколько)</div>
         <div style="display:flex;gap:6px;flex-wrap:wrap">${mChips}</div></div>
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
         <span style="font-size:13px;color:var(--sub)">Общая сила бафа (0-4)</span>${_seg(_w04(d.strength),'_shyStr({v})')}</div>
-      <table style="border-collapse:collapse;width:100%;max-width:520px">
-        <thead><tr><th style="${th}">Эффект</th><th style="${th};text-align:center">Сила (0-4)</th><th style="${th}"></th></tr></thead>
-        <tbody>${effRows}</tbody></table>
-      <button class="btn" style="padding:3px 12px;margin-top:8px" onclick="_shyEffAdd()">+ эффект</button>
+      <div style="font-size:13px;font-weight:600;margin-bottom:8px">Части бафа</div>
+      <div style="font-size:12px;color:var(--sub);margin:-4px 0 10px;line-height:1.5">Каждую клаузу бафа можно вынести отдельной частью: тип, сила 0-4, «работает» % и список персонажей, для кого она реально применяется (если пусто — авто-гейт по элементу/архетипу/формуле урона).</div>
+      ${partsHTML}
+      <button class="btn" style="padding:3px 12px;margin-top:4px" onclick="_shyEffAdd()">+ часть</button>
       <div style="margin-top:16px"><button class="btn btn-y" onclick="_shySave()">Сохранить баф</button>
         <span id="shy-status" style="margin-left:12px;font-size:12px;color:var(--sub)"></span></div></div>`;
   }
@@ -652,10 +718,22 @@ function _shyPick(id){_W.shyTour=id;_W.shyDraft=null;_renderShiyuBuffs();}
 function _shyTglElem(e){const d=_W.shyDraft;const i=d.elems.indexOf(e);i<0?d.elems.push(e):d.elems.splice(i,1);_renderShiyuBuffs();}
 function _shyTglMech(m){const d=_W.shyDraft;const i=d.mechs.indexOf(m);i<0?d.mechs.push(m):d.mechs.splice(i,1);_renderShiyuBuffs();}
 function _shyStr(w){_W.shyDraft.strength=_magFromW(w);_renderShiyuBuffs();}
-function _shyEffW(i,w){_W.shyDraft.effects[i].mag=_magFromW(w);_renderShiyuBuffs();}
-function _shyEffTag(i,tag){_W.shyDraft.effects[i].tag=tag;_renderShiyuBuffs();}
-function _shyEffDel(i){_W.shyDraft.effects.splice(i,1);_renderShiyuBuffs();}
-function _shyEffAdd(){_W.shyDraft.effects.push({tag:'dmg_buff',pct:null,flat:false,cond:false,mag:0.5});_renderShiyuBuffs();}
+function _shyEffW(i,w){const e=_W.shyDraft.effects[i];e.w=+w||0;e.mag=_magFromW(w);_renderShiyuBuffs();}
+function _shyPartField(i,field,val){const e=_W.shyDraft.effects[i];
+  if(field==='apply')e.apply=Math.max(0,Math.min(100,+val||0));
+  else if(field==='cond')e.cond=!!val;
+  else e[field]=val;
+  if(field==='desc'||field==='apply')return; // текст/число по blur — без ре-рендера
+  _renderShiyuBuffs();}
+function _shyEffDel(i){_W.shyDraft.effects.splice(i,1);if(_W.shyPartOpen===i)_W.shyPartOpen=null;_renderShiyuBuffs();}
+function _shyEffAdd(){_W.shyDraft.effects.push({tag:'dmg_buff',pct:null,flat:false,cond:false,w:2,mag:0.5,apply:100,chars:[],desc:''});_renderShiyuBuffs();}
+// выбор персонажей для части
+function _shyPartTgl(i){_W.shyPartOpen=_W.shyPartOpen===i?null:i;_renderShiyuBuffs();}
+// фильтр списка персонажей без ре-рендера (иначе теряется фокус в поиске)
+function _shyFilterPicker(inp){const q=inp.value.toLowerCase();const grid=inp.parentElement.querySelector('div');
+  if(grid)grid.querySelectorAll('label').forEach(l=>{l.style.display=l.textContent.toLowerCase().includes(q)?'':'none';});}
+function _shyPartCharTgl(i,id){const e=_W.shyDraft.effects[i];e.chars=e.chars||[];
+  const j=e.chars.map(String).indexOf(String(id));j<0?e.chars.push(id):e.chars.splice(j,1);_renderShiyuBuffs();}
 async function _shySave(){
   const t=(_W.shyTours||[]).find(x=>x.id===_W.shyTour);if(!t||!t.shiyu_data||!_W.shyDraft)return;
   const st=document.getElementById('shy-status');const set=(s,c)=>{if(st){st.textContent=s;st.style.color=c||'var(--sub)';}};
@@ -663,7 +741,8 @@ async function _shySave(){
   const tag={elems:d.elems.slice(),elem:d.elems[0]||null,
     mechs:d.mechs.slice(),mech:d.mechs[0]||null,
     strength:Math.max(0,Math.min(1,d.strength)),
-    effects:d.effects.map(e=>({...e,mag:Math.max(0,Math.min(1,e.mag))}))};
+    effects:d.effects.map(e=>{const w=e.w!=null?e.w:_w04(e.mag);
+      return{...e,w,mag:_magFromW(w),apply:e.apply!=null?e.apply:100,chars:(e.chars||[]).slice()};})};
   const sd={...t.shiyu_data,buff_tag:tag};
   set('сохранение…');
   const{error}=await sb.from('tournaments').update({shiyu_data:sd}).eq('id',_W.shyTour);

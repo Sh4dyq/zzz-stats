@@ -212,23 +212,33 @@ function buffMatchup(members,tag){
   const sheerFrac=mechW.sheer/total, critFrac=mechW.crit/total, anomFrac=mechW.anomaly/total;
   const dmg=team.filter(isDmg);
   const needFrac=t=>dmg.length?dmg.filter(c=>((TAGS[c].needs||{})[t]||0)>0).length/dmg.length:0;
+  // множества id отряда для ручного гейта по списку персонажей эффекта
+  const teamSet=new Set(team.map(String));
   let val=0;
   tag.effects.forEach(e=>{
     // нужды элемент/кнопка-DMG берём от базового dmg_buff
     const needTag=(e.tag==='dmg_buff_elem'||e.tag==='dmg_buff_skill')?'dmg_buff':e.tag;
-    const base=tagW(needTag)||0.3, mag=e.mag||0.5;
-    // gate = доля отряда, кому эффект реально помогает (по мультипликаторам формулы):
-    let gate=1;
-    if(e.tag==='dmg_buff_elem')gate=elemFit;                 // RES/элемент-DMG: только урон баф-элемента
-    else if(e.tag==='dmg_buff')gate=1;                       // универс. DMG-Bonus/RES-shred — всем (в т.ч. шир)
-    else if(e.tag==='dmg_buff_skill')gate=0.5;               // по кнопке: заглушка (нужна раскладка урона per-char)
-    else if(e.tag==='sheer_dmg_buff')gate=sheerFrac;
-    else if(e.tag==='anomaly_buff')gate=anomFrac;            // AP/аномалия-DMG: только аномальный урон
-    else if(e.tag==='crit_buff')gate=critFrac;               // CRIT-множитель ≈1 у аномалы/шир → 0
-    else if(e.tag==='pen_buff'||e.tag==='def_shred')gate=1-sheerFrac; // шир игнорит DEF → PEN/DEF-shred бесполезны
-    // atk_buff, прочее → gate=1 (ATK кормит все формулы: стандарт/аномалия/шир)
+    const base=tagW(needTag)||0.3, mag=(e.w!=null?e.w/4:(e.mag||0.5));
+    let gate;
+    if(e.chars&&e.chars.length){
+      // РУЧНОЙ гейт: доля урона отряда среди явно выбранных для этой части персонажей
+      let g=0;e.chars.forEach(cid=>{if(teamSet.has(String(cid)))g+=elementWeight(cid);});
+      gate=total?g/total:0;
+    }else{
+      // авто-гейт по мультипликаторам формулы урона:
+      gate=1;
+      if(e.tag==='dmg_buff_elem')gate=elemFit;               // RES/элемент-DMG: только урон баф-элемента
+      else if(e.tag==='dmg_buff')gate=1;                     // универс. DMG-Bonus/RES-shred — всем (в т.ч. шир)
+      else if(e.tag==='dmg_buff_skill')gate=0.5;             // по кнопке: заглушка (нужна раскладка урона per-char)
+      else if(e.tag==='sheer_dmg_buff')gate=sheerFrac;
+      else if(e.tag==='anomaly_buff')gate=anomFrac;          // AP/аномалия-DMG: только аномальный урон
+      else if(e.tag==='crit_buff')gate=critFrac;             // CRIT-множитель ≈1 у аномалы/шир → 0
+      else if(e.tag==='pen_buff'||e.tag==='def_shred')gate=1-sheerFrac; // шир игнорит DEF → PEN/DEF-shred бесполезны
+      // atk_buff, прочее → gate=1 (ATK кормит все формулы: стандарт/аномалия/шир)
+    }
+    const apply=(e.apply!=null?e.apply/100:1);  // «насколько работает» (ручной коэффициент части, %)
     const need=0.5+0.5*needFrac(needTag);
-    val+=base*mag*gate*need;
+    val+=base*mag*gate*need*apply;
   });
   return +Math.min(BUFF_CAP,BUFF_CAP*val).toFixed(3);
 }

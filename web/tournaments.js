@@ -217,28 +217,29 @@ const BUFF_AP_BAND=[30,60];
 function _buffMag(tag,val,flat){const[mn,mx]=flat?BUFF_AP_BAND:(BUFF_BAND[tag]||[10,40]);
   const tt=Math.max(0,Math.min(1,(val-mn)/(mx-mn)));return +(0.4+0.6*tt).toFixed(2);}
 function parseBuffTag(desc){
-  const t=String(desc||'').replace(/<color=#?[0-9a-fA-F]{6,8}>|<\/color>/g,' ').toLowerCase();
-  if(!t.trim())return{elems:[],elem:null,mech:null,strength:0,effects:[]};
+  const src=String(desc||'').replace(/<color=#?[0-9a-fA-F]{6,8}>|<\/color>/g,' ');
+  const t=src.toLowerCase();
+  if(!t.trim())return{elems:[],elem:null,mech:null,mechs:[],strength:0,effects:[]};
   // бустимые элементы урона (обычно 1–2): «<el> DMG … increase», исключая вражеский RES
   const elems=[];BUFF_ELEMS.forEach(e=>{if(new RegExp(e+'[^.]*?(?:dmg|damage)[^.]*?increase').test(t))elems.push(e);});
   const mech=/sheer/.test(t)?'sheer':/anomaly|attribute|disorder/.test(t)?'anomaly':
     /stun|daze/.test(t)?'stun':/\bcrit/.test(t)?'crit':null;
-  // эффекты: по строкам; условная строка (when/after/upon) → дисконт 0.7; берём макс mag на тег.
-  // Найденный фрагмент «съедаем» (заменяем пробелами), чтобы одно и то же % не попало ещё и в
-  // общий dmg_buff (устраняет двойной счёт элемент-DMG).
-  const eff={};
-  t.split(/[\n|]/).forEach(line=>{
-    if(!line.trim())return;
+  // ОДНА часть на КАЖДУЮ распознанную клаузу (раньше схлопывали по тегу → сложные бафы
+  // теряли RES-игнор/кнопочные клаузы). desc = исходная строка для читаемости и ручной правки.
+  // Найденный фрагмент «съедаем» (пробелы), чтобы то же % не попало ещё и в общий dmg_buff.
+  const effects=[];
+  src.split(/[\n|]/).forEach(raw=>{
+    const line=raw.toLowerCase();if(!line.trim())return;
     const cond=/\b(when|after|upon)\b/.test(line);
     let s=line;
     BUFF_PAT.forEach(([re,tag,flat])=>{const m=s.match(re);if(!m)return;
       const v=+m[1],mag=+(_buffMag(tag,v,flat)*(cond?0.7:1)).toFixed(2);
-      if(!eff[tag]||mag>eff[tag].mag)eff[tag]={pct:v,flat:!!flat,mag,cond};
+      const w=Math.max(1,Math.min(4,Math.round(mag*4)));
+      effects.push({tag,pct:v,flat:!!flat,mag,w,cond,apply:100,chars:[],desc:raw.trim()});
       s=s.slice(0,m.index)+' '.repeat(m[0].length)+s.slice(m.index+m[0].length);});
   });
-  const effects=Object.keys(eff).map(tag=>({tag,...eff[tag]}));
   const strength=effects.length?Math.max(...effects.map(e=>e.mag)):0;
-  return{elems,elem:elems[0]||null,mech,strength:+strength.toFixed(2),effects};
+  return{elems,elem:elems[0]||null,mech,mechs:mech?[mech]:[],strength:+strength.toFixed(2),effects};
 }
 // nanoka shiyu JSON → наша модель {id,name,frontier,level,buff,rooms,...}. Берём зону stage_num===4.
 function normalizeShiyu(doc,srcUrl,ver){
