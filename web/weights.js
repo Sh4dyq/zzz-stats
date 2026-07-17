@@ -181,8 +181,7 @@ function _anaStub(title,note){
     <p style="color:var(--sub);font-size:13px;line-height:1.6;margin:0">${note}</p></div>`);
 }
 function _renderWeights(){
-  if(_W.section==='shiyu')return _anaStub('Влияние бафов Шиюй',
-    'Модель уже считает бонус попадания в баф ротации (Synergy.buffMatchup): элемент/архетип, величина % по семейным диапазонам, нужда отряда по тегам, гейты по формуле урона (крит — только крит-сборкам; шир игнорит DEF → pen/def-shred = 0; кнопочные бафы — дисконт). Тег бафа правится в «Турниры → Настройки → Ротация Шиюй». Здесь появится: калибровка BUFF_W/BUFF_CAP на исходах матчей и просмотр вклада по эффектам.');
+  if(_W.section==='shiyu')return _renderShiyuBuffs();
   if(_W.section==='consts')return _renderTagsEditor();
   // section='power'
   if(_W.calib!=='solo')return _anaStub('Калибровка силы — '+(_W.calib==='duo'?'Дуо':'Трио'),'Раздел в разработке.');
@@ -301,14 +300,34 @@ async function saveWeights(){
 // Источник правды — таблица synergy_tags (jsonb на персонажа). Базовые roles/gives/needs
 // = шкала 0-4 (M0); ms.gives_self / ms.gives — мидскейпы (mag вне 0-4 допустим, at = порог M).
 // Автосохранение построчно (debounce), фолбэк-база — web/data/synergy_tags.json.
-const _TAGVOCAB=[['atk_buff','ATK'],['dmg_buff','DMG/RES↓'],['crit_buff','КРИТ'],
-  ['anomaly_buff','Аном'],['sheer_dmg_buff','Шир'],['pen_buff','PEN'],['def_shred','DEF↓'],
-  ['daze','Оглуш'],['amp_on_stun','Stun-множ'],['anomaly_assist','Аном-ассист'],
-  ['decibel','Децибел'],['aftershock','Aftershock'],['abloom','Расцвет'],['ether_veil','Вуаль']];
-const _ROLEVOCAB=[['crit_dps','крит DPS'],['sheer_dps','sheer'],['sub_dps','саб DPS'],
-  ['main_anomaly','мейн аном'],['sub_anomaly','саб аном'],['stunner','стан'],
-  ['support','саппорт'],['off_field','оф-филд']];
-const _tlbl=t=>(_TAGVOCAB.find(x=>x[0]===t)||[t,t])[1];
+// Единый словарь тегов: [ключ, короткая метка, полное описание]. Метки приведены к
+// одному виду (Существительное + игровой термин), описания — в тултип.
+const _TAGVOCAB=[
+  ['atk_buff','Баф ATK','Повышение ATK команде (ширикам ~0.5, скейлятся от HP)'],
+  ['dmg_buff','Общий DMG','Универсальный DMG% / DMG-taken / снижение всех RES — полезен всем'],
+  ['crit_buff','Крит','Крит-шанс / крит-урон (CRIT Rate / DMG)'],
+  ['anomaly_buff','Аномалия','Баф аномалий: Buildup / Proficiency / урон Disorder'],
+  ['sheer_dmg_buff','Sheer-урон','Баф Sheer-урона / Sheer Force (разрушение)'],
+  ['pen_buff','Пробитие (PEN)','Повышение PEN команде — пробитие DEF'],
+  ['def_shred','Снижение DEF','Снижение DEF врага'],
+  ['daze','Оглушение','Накопление оглушения / Daze'],
+  ['amp_on_stun','Множитель по стану','Множитель урона по застанненному + продление стана'],
+  ['anomaly_assist','Разгон аномалий','Разгон аномалий / Disorder союзникам'],
+  ['decibel','Децибелы','Генерация децибелов (полезно, редко «нужно»)'],
+  ['aftershock','Афтершок','Aftershock: количество и бафы'],
+  ['abloom','Расцвет (Abloom)','Abloom для аномалистов: количество и бафы'],
+  ['ether_veil','Эфирная вуаль','Ether Veil'],
+];
+const _ROLEVOCAB=[
+  ['crit_dps','Крит-ДПС'],['sheer_dps','Шир-ДПС (Sheer)'],['sub_dps','Саб-ДПС'],
+  ['main_anomaly','Мейн-аномалист'],['sub_anomaly','Саб-аномалист'],['stunner','Станер'],
+  ['support','Саппорт'],['off_field','Офф-филд'],
+];
+// внутренние под-теги бафов Шиюй (не входят в редактируемый словарь, но встречаются в эффектах)
+const _TAG_ALIAS={dmg_buff_elem:'DMG элемента',dmg_buff_skill:'DMG по кнопке'};
+const _tlbl=t=>_TAG_ALIAS[t]||(_TAGVOCAB.find(x=>x[0]===t)||[t,t])[1];
+const _ttip=t=>(_TAGVOCAB.find(x=>x[0]===t)||[t,t,''])[2]||'';
+const _rlbl=r=>(_ROLEVOCAB.find(x=>x[0]===r)||[r,r])[1];
 
 async function _loadTags(){
   const[base,rows]=await Promise.all([
@@ -345,69 +364,110 @@ function _renderTagsEditor(){
   <div class="card" style="padding:0;overflow:hidden">${ids.map(_tagRow).join('')}</div>`);
 }
 
+function _tagPill(txt,color){return `<span style="display:inline-block;font-size:11px;color:${color||'var(--sub)'};border:1px solid var(--border);border-radius:4px;padding:1px 7px;margin:0 4px 2px 0;white-space:nowrap">${txt}</span>`;}
+
 function _tagRow(id){
   const t=_W.tags[id],open=_W.tagExpand===id;
   const inDb=_W.tagDb&&_W.tagDb.has(String(id));
-  const roleTxt=Object.keys(t.roles||{}).filter(r=>t.roles[r]).map(r=>(_ROLEVOCAB.find(x=>x[0]===r)||[r,r])[1]).join(', ')||'—';
   const c=(D.charMap&&D.charMap[id])||{name:t.name};
-  const head=`<div onclick="_tagToggle('${id}')" style="display:flex;align-items:center;gap:10px;padding:9px 14px;cursor:pointer;border-top:1px solid var(--line)">
-    <span style="color:var(--sub);width:12px;transition:transform .15s;${open?'transform:rotate(90deg)':''}">▶</span>
-    ${iconChar(c,26)}<span style="font-weight:600;min-width:150px">${t.name}</span>
-    <span style="font-size:11px;color:var(--sub);border:1px solid var(--border);border-radius:4px;padding:0 6px">${roleTxt}</span>
-    ${t.ms?`<span style="font-size:11px;color:var(--accent)">M-слой</span>`:''}
-    <span style="margin-left:auto;font-size:11px;color:${inDb?'var(--accent)':'var(--sub)'}">${inDb?'в БД':'из файла'}</span>
+  const roles=Object.keys(t.roles||{}).filter(r=>t.roles[r]).sort((a,b)=>t.roles[b]-t.roles[a]);
+  const rolePills=roles.length?roles.map(r=>_tagPill(_rlbl(r))).join(''):'<span style="color:var(--sub);font-size:12px">— роли не заданы —</span>';
+  const gives=Object.keys(t.gives||{}).filter(k=>t.gives[k]).sort((a,b)=>t.gives[b]-t.gives[a]).slice(0,4);
+  const givePreview=gives.length?gives.map(k=>`${_tlbl(k)} ${t.gives[k]}`).join(' · '):'';
+  const msN=t.ms?(Object.keys(t.ms.gives_self||{}).length+Object.keys(t.ms.gives||{}).length):0;
+  const head=`<div onclick="_tagToggle('${id}')" style="display:flex;align-items:center;gap:12px;padding:11px 16px;cursor:pointer;border-top:1px solid var(--line);${open?'background:var(--field)':''}">
+    <span style="color:var(--sub);width:12px;flex-shrink:0;transition:transform .15s;${open?'transform:rotate(90deg)':''}">▶</span>
+    ${iconChar(c,30)}
+    <div style="min-width:180px;flex-shrink:0"><div style="font-weight:600">${t.name}</div>
+      <div style="font-size:11px;color:var(--sub)">${(t.element||'')} ${t.specialty?('· '+t.specialty):''}</div></div>
+    <div style="flex:1;min-width:0">${rolePills}${givePreview?`<div style="font-size:11px;color:var(--sub);margin-top:2px">даёт: ${givePreview}</div>`:''}</div>
+    ${msN?_tagPill('мидскейпы: '+msN,'var(--accent)'):''}
+    <span style="flex-shrink:0;font-size:11px;color:${inDb?'var(--accent)':'var(--sub)'}">${inDb?'● в БД':'○ из файла'}</span>
   </div>`;
   return head+(open?_tagForm(id):'');
 }
 
-function _numSel(val,onCh,max){ // 0..max select (пусто=0)
-  let o='<option value="0"></option>';for(let i=1;i<=(max||4);i++)o+=`<option value="${i}" ${+val===i?'selected':''}>${i}</option>`;
-  return `<select onchange="${onCh}" style="background:var(--field);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:2px 4px;font-size:12px">${o}</select>`;
+// сегментированный контрол 0..4 (пусто=0). call — JS с плейсхолдером {v}.
+function _seg(cur,call,max){
+  cur=+cur||0;let b='';
+  for(let i=0;i<=(max||4);i++){
+    const on=cur===i;
+    b+=`<button onclick="${call.replace('{v}',i)}" style="width:24px;height:24px;font-size:12px;font-weight:600;border:1px solid ${on?'var(--accent)':'var(--border)'};background:${on?'var(--accent)':'transparent'};color:${on?'#181820':(i===0?'var(--sub)':'var(--text)')};border-radius:5px;cursor:pointer;padding:0">${i}</button>`;
+  }
+  return `<span style="display:inline-flex;gap:3px">${b}</span>`;
 }
 
 function _tagForm(id){
   const t=_W.tags[id];
   const ms=t.ms||(t.ms={gives_self:{},gives:{},dmg:{},note:'',a_rank:false});
-  const tagCell=(kind)=>_TAGVOCAB.map(([k,l])=>`<label style="display:inline-flex;align-items:center;gap:3px;margin:2px 6px 2px 0;font-size:12px;color:var(--sub)">${l}${_numSel((t[kind]||{})[k],`_tagBase('${id}','${kind}','${k}',this.value)`)}</label>`).join('');
-  const roleCell=_ROLEVOCAB.map(([k,l])=>`<label style="display:inline-flex;align-items:center;gap:3px;margin:2px 6px 2px 0;font-size:12px;color:var(--sub)">${l}${_numSel((t.roles||{})[k],`_tagRole('${id}','${k}',this.value)`)}</label>`).join('');
-  const msRows=(which)=>{
+  const cellSt='padding:6px 10px;border-bottom:1px solid var(--line)';
+  const H=s=>`<div style="font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;font-size:13px;letter-spacing:.03em;color:var(--text);margin:18px 0 8px">${s}</div>`;
+
+  // Роли
+  const roleGrid=`<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:6px 18px">`
+    +_ROLEVOCAB.map(([k,l])=>`<div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+      <span style="font-size:13px">${l}</span>${_seg((t.roles||{})[k],`_tagRole('${id}','${k}',{v})`)}</div>`).join('')+`</div>`;
+
+  // Базовые теги: одна таблица Тег | Даёт | Нужно
+  const baseRows=_TAGVOCAB.map(([k,l])=>`<tr>
+    <td style="${cellSt}" title="${_ttip(k)}"><span style="font-size:13px">${l}</span></td>
+    <td style="${cellSt};text-align:center">${_seg((t.gives||{})[k],`_tagBase('${id}','gives','${k}',{v})`)}</td>
+    <td style="${cellSt};text-align:center">${_seg((t.needs||{})[k],`_tagBase('${id}','needs','${k}',{v})`)}</td></tr>`).join('');
+  const baseTable=`<table style="border-collapse:collapse;width:100%;max-width:560px">
+    <thead><tr style="font-size:11px;color:var(--sub);text-transform:uppercase">
+      <th style="text-align:left;padding:4px 10px">Тег</th>
+      <th style="padding:4px 10px">Даёт команде</th><th style="padding:4px 10px">Нужно</th></tr></thead>
+    <tbody>${baseRows}</tbody></table>`;
+
+  // Мидскейпы: таблица Тег | Сила | С M | ✕
+  const msTable=(which)=>{
     const obj=ms[which]||{};const keys=Object.keys(obj);
-    const rows=keys.map((tag,i)=>{
+    const rows=keys.map(tag=>{
       const v=obj[tag]||{mag:1,at:1};
       const tagOpts=_TAGVOCAB.map(([k,l])=>`<option value="${k}" ${k===tag?'selected':''}>${l}</option>`).join('');
       const atOpts=[1,2,3,4,5,6].map(m=>`<option value="${m}" ${+v.at===m?'selected':''}>M${m}</option>`).join('');
-      return `<div style="display:flex;align-items:center;gap:6px;margin:3px 0">
-        <select onchange="_tagMsKey('${id}','${which}','${tag}',this.value)" style="background:var(--field);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:2px 4px;font-size:12px">${tagOpts}</select>
-        <input type="number" step="0.5" value="${v.mag}" onchange="_tagMsSet('${id}','${which}','${tag}','mag',this.value)" title="сила" style="width:56px;background:var(--field);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:2px 5px;font-size:12px">
-        <select onchange="_tagMsSet('${id}','${which}','${tag}','at',this.value)" style="background:var(--field);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:2px 4px;font-size:12px">${atOpts}</select>
-        <button class="btn" style="padding:1px 8px" onclick="_tagMsDel('${id}','${which}','${tag}')">✕</button>
-      </div>`;}).join('');
-    return rows+`<button class="btn" style="padding:2px 10px;margin-top:4px" onclick="_tagMsAdd('${id}','${which}')">+ строка</button>`;
+      const inSt='background:var(--field);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:3px 6px;font-size:12px';
+      return `<tr>
+        <td style="${cellSt}"><select onchange="_tagMsKey('${id}','${which}','${tag}',this.value)" style="${inSt};min-width:150px">${tagOpts}</select></td>
+        <td style="${cellSt};text-align:center"><input type="number" step="0.5" value="${v.mag}" onchange="_tagMsSet('${id}','${which}','${tag}','mag',this.value)" style="${inSt};width:60px;text-align:center"></td>
+        <td style="${cellSt};text-align:center"><select onchange="_tagMsSet('${id}','${which}','${tag}','at',this.value)" style="${inSt}">${atOpts}</select></td>
+        <td style="${cellSt};text-align:center"><button class="btn" style="padding:2px 9px" onclick="_tagMsDel('${id}','${which}','${tag}')">✕</button></td></tr>`;}).join('')
+      ||`<tr><td colspan="4" style="${cellSt};color:var(--sub);font-size:12px">— пусто —</td></tr>`;
+    return `<table style="border-collapse:collapse;width:100%">
+      <thead><tr style="font-size:11px;color:var(--sub);text-transform:uppercase">
+        <th style="text-align:left;padding:4px 10px">Тег</th><th style="padding:4px 10px">Сила</th>
+        <th style="padding:4px 10px">С M</th><th style="padding:4px 10px"></th></tr></thead>
+      <tbody>${rows}</tbody></table>
+      <button class="btn" style="padding:3px 12px;margin-top:6px" onclick="_tagMsAdd('${id}','${which}')">+ добавить</button>`;
   };
+
   const dmg=ms.dmg||{};
-  const dmgCells=[1,2,3,4,5,6].map(m=>`<label style="display:inline-flex;flex-direction:column;font-size:11px;color:var(--sub);margin-right:8px">M${m}<input type="number" step="0.01" value="${dmg[m]!=null?dmg[m]:''}" onchange="_tagDmg('${id}',${m},this.value)" style="width:64px;background:var(--field);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:2px 5px;font-size:12px"></label>`).join('');
-  const H=s=>`<div style="font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;font-size:12px;letter-spacing:.03em;color:var(--sub);margin:14px 0 6px">${s}</div>`;
-  return `<div style="padding:10px 18px 20px 40px;background:var(--field);border-top:1px solid var(--line)">
-    ${H('Роли (0-4)')}<div>${roleCell}</div>
-    ${H('Даёт команде (0-4, M0)')}<div>${tagCell('gives')}</div>
-    ${H('Нужно от команды (0-4)')}<div>${tagCell('needs')}</div>
-    <div style="display:flex;gap:34px;flex-wrap:wrap">
-      <div style="min-width:280px">${H('Мидскейпы — даёт СЕБЕ')}${msRows('gives_self')}</div>
-      <div style="min-width:280px">${H('Мидскейпы — даёт КОМАНДЕ')}${msRows('gives')}</div>
+  const dmgRow=`<div style="display:flex;gap:10px;flex-wrap:wrap">`+[1,2,3,4,5,6].map(m=>`<label style="display:inline-flex;flex-direction:column;gap:3px;font-size:12px;color:var(--sub)">M${m}<input type="number" step="0.01" placeholder="1.00" value="${dmg[m]!=null?dmg[m]:''}" onchange="_tagDmg('${id}',${m},this.value)" style="width:70px;background:var(--field);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:4px 6px;font-size:13px;text-align:center"></label>`).join('')+`</div>`;
+
+  const noteSt='width:100%;background:var(--field);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:7px 10px;font-size:13px';
+  return `<div style="padding:6px 20px 22px 42px;background:var(--field);border-top:1px solid var(--line)">
+    ${H('Роли — насколько исполняет (0-4)')}${roleGrid}
+    ${H('Базовые теги на M0 (0-4)')}
+    <div style="font-size:12px;color:var(--sub);margin:-4px 0 8px">«Даёт команде» — сила эффекта. «Нужно» — насколько критично агенту.</div>
+    ${baseTable}
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:24px;margin-top:4px">
+      <div>${H('Мидскейпы — даёт себе')}${msTable('gives_self')}</div>
+      <div>${H('Мидскейпы — даёт команде')}${msTable('gives')}</div>
     </div>
-    ${H('Урон по мидскейпам (× к M0)')}<div>${dmgCells}</div>
-    <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--sub);margin-top:12px">
-      <input type="checkbox" ${ms.a_rank?'checked':''} onchange="_tagARank('${id}',this.checked)"> A-ранг (эффекты как M6)</label>
-    ${H('Заметка')}<input value="${(t.note||'').replace(/"/g,'&quot;')}" onchange="_tagNote('${id}','note',this.value)" style="width:100%;background:var(--field);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:5px 9px;font-size:12px">
-    ${H('Заметка мидскейпов')}<input value="${(ms.note||'').replace(/"/g,'&quot;')}" onchange="_tagNote('${id}','ms.note',this.value)" style="width:100%;background:var(--field);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:5px 9px;font-size:12px">
+    <div style="font-size:12px;color:var(--sub);margin-top:6px">Сила мидскейпов может быть больше 4 (шкала 0-4 — только для базовых тегов M0). «С M» — с какого майндскейпа эффект активен.</div>
+    ${H('Множитель урона по мидскейпам (× к M0)')}${dmgRow}
+    <label style="display:inline-flex;align-items:center;gap:7px;font-size:13px;margin-top:16px;cursor:pointer">
+      <input type="checkbox" ${ms.a_rank?'checked':''} onchange="_tagARank('${id}',this.checked)"> A-ранг — эффекты считаем как на M6</label>
+    ${H('Заметка')}<input value="${(t.note||'').replace(/"/g,'&quot;')}" onchange="_tagNote('${id}','note',this.value)" style="${noteSt}">
+    ${H('Заметка по мидскейпам')}<input value="${(ms.note||'').replace(/"/g,'&quot;')}" onchange="_tagNote('${id}','ms.note',this.value)" style="${noteSt}">
   </div>`;
 }
 
 // --- state mutations + autosave ---
 function _tagSearch(v){_W.tagQ=v;_renderTagsEditor();}
 function _tagToggle(id){_W.tagExpand=_W.tagExpand===id?null:id;_renderTagsEditor();}
-function _tagRole(id,role,v){const t=_W.tags[id];v=+v;if(v)t.roles[role]=v;else delete t.roles[role];_tagQueueSave(id);}
-function _tagBase(id,kind,tag,v){const t=_W.tags[id];t[kind]=t[kind]||{};v=+v;if(v)t[kind][tag]=v;else delete t[kind][tag];_tagQueueSave(id);}
+function _tagRole(id,role,v){const t=_W.tags[id];v=+v;if(v)t.roles[role]=v;else delete t.roles[role];_tagQueueSave(id);_renderTagsEditor();}
+function _tagBase(id,kind,tag,v){const t=_W.tags[id];t[kind]=t[kind]||{};v=+v;if(v)t[kind][tag]=v;else delete t[kind][tag];_tagQueueSave(id);_renderTagsEditor();}
 function _tagMs(id){const t=_W.tags[id];return t.ms||(t.ms={gives_self:{},gives:{},dmg:{},note:'',a_rank:false});}
 function _tagMsAdd(id,which){const m=_tagMs(id);m[which]=m[which]||{};const free=_TAGVOCAB.map(x=>x[0]).find(k=>!(k in m[which]))||'dmg_buff';m[which][free]={mag:1,at:1};_tagQueueSave(id);_renderTagsEditor();}
 function _tagMsKey(id,which,oldTag,newTag){const m=_tagMs(id);if(newTag===oldTag||!m[which])return;m[which][newTag]=m[which][oldTag];delete m[which][oldTag];_tagQueueSave(id);_renderTagsEditor();}
@@ -441,4 +501,134 @@ async function _tagImport(){
   const{error}=await sb.from('synergy_tags').upsert(payload,{onConflict:'character_id'});
   if(dbErr(error,'импорт тегов')){_tagStatus('ошибка','var(--red)');return;}
   _W.tagsLoaded=false;_tagStatus('✓ импортировано '+payload.length);toast('Теги импортированы в БД');_renderTagsEditor();
+}
+
+// ===== Влияние бафов Шиюй (Аналитика → Влияние бафов Шиюй) =====
+// Три блока: (1) справочник множителей всех семейств бафов, (2) какие бафы у турниров,
+// (3) редактор текущих множителей выбранного турнира. Константы зеркалят tournaments.js
+// (BUFF_BAND) и synergy.js (гейты buffMatchup). mag = 0.4 + 0.6·норм; условие ×0.7.
+const _BUFF_FAMILIES=[
+  ['dmg_buff','Общий DMG',[10,40],'всем','DMG% / DMG-taken / снижение всех RES — универсально'],
+  ['dmg_buff_elem','DMG элемента',[10,40],'доля урона в баф-элементах','DMG% элемента и «ignore <эл> RES» — только урон этого элемента'],
+  ['dmg_buff_skill','DMG по кнопке',[10,40],'≈0.5 (заглушка)','DMG% по типу атаки (Basic/EX/Chain/Ult) — нужна раскладка урона'],
+  ['atk_buff','Баф ATK',[10,30],'всем','ATK кормит все формулы (стандарт/аномалия/шир)'],
+  ['sheer_dmg_buff','Sheer-урон',[20,40],'доля Sheer-ДПС','Sheer DMG / Sheer Force'],
+  ['crit_buff','Крит',[15,40],'доля крит-ДПС','CRIT множитель ≈1 у аномалы/шир → им не идёт'],
+  ['anomaly_buff','Аномалия',[15,40],'доля аномалии','Buildup / Proficiency / урон Disorder (AP плоские очки: 30–60)'],
+  ['pen_buff','Пробитие (PEN)',[10,20],'1 − доля Sheer','Sheer игнорит DEF → PEN бесполезен ширикам'],
+  ['def_shred','Снижение DEF',[10,25],'1 − доля Sheer','Снижение DEF врага — ширикам не нужно'],
+];
+// тег бафа турнира: сохранённый buff_tag, иначе доразбор из текста ротации на лету
+// (старые ротации грузились до появления парсера — тега нет, но buff.lines есть).
+function _shyTag(t){
+  const sd=t.shiyu_data||{};
+  if(sd.buff_tag)return sd.buff_tag;
+  const raw=(sd.buff&&sd.buff.lines&&sd.buff.lines.join('\n'))||(sd.buff&&sd.buff.title)||'';
+  const txt=String(raw).replace(/<[^>]+>/g,' ');
+  return (typeof parseBuffTag==='function')?parseBuffTag(txt):{elems:[],elem:null,mech:null,strength:0,effects:[]};
+}
+function _renderShiyuBuffs(){
+  // источник — свежий список турниров (D.tours на этой странице может быть ещё не загружен)
+  if(!_W.shyLoaded){
+    html(`${_analyticsTabs()}<div class="card" style="padding:22px"><span class="spinner"></span> Загружаю ротации…</div>`);
+    _fetchAllW('tournaments').then(rows=>{_W.shyTours=rows;_W.shyLoaded=true;_renderShiyuBuffs();})
+      .catch(e=>html(`${_analyticsTabs()}<div class="card" style="padding:22px;color:var(--red)">Ошибка загрузки турниров: ${e.message}</div>`));
+    return;
+  }
+  const tours=(_W.shyTours||[]).filter(t=>t.shiyu_data);       // все загруженные ротации
+  if(_W.shyTour===undefined||!tours.some(t=>t.id===_W.shyTour))_W.shyTour=tours.length?tours[0].id:null;
+  const card='background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px 18px;margin-bottom:16px';
+  const H=s=>`<div style="font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;font-size:14px;letter-spacing:.03em;color:var(--text);margin:0 0 10px">${s}</div>`;
+  const th='text-align:left;padding:6px 10px;font-size:11px;color:var(--sub);text-transform:uppercase;border-bottom:1px solid var(--line)';
+  const td='padding:7px 10px;border-bottom:1px solid var(--line);font-size:13px';
+
+  // (1) справочник множителей
+  const famRows=_BUFF_FAMILIES.map(([k,l,band,gate,desc])=>`<tr>
+    <td style="${td}"><b>${l}</b><div style="font-size:11px;color:var(--sub)">${desc}</div></td>
+    <td style="${td};text-align:center;font-family:'JetBrains Mono',monospace">${band[0]}–${band[1]}%</td>
+    <td style="${td};text-align:center;font-family:'JetBrains Mono',monospace">0.40–1.00</td>
+    <td style="${td}">${gate}</td></tr>`).join('');
+  const ref=`<div style="${card}">${H('Общие множители всех видов бафов')}
+    <div style="overflow-x:auto"><table style="border-collapse:collapse;width:100%;min-width:560px">
+      <thead><tr><th style="${th}">Семейство бафа</th><th style="${th};text-align:center">Диапазон %</th>
+        <th style="${th};text-align:center">Множитель (mag)</th><th style="${th}">Кому применяется (гейт)</th></tr></thead>
+      <tbody>${famRows}</tbody></table></div>
+    <div style="font-size:12px;color:var(--sub);margin-top:10px;line-height:1.6">
+      <b>mag</b> = 0.40 + 0.60·(% − мин)/(макс − мин), нормировано по семейному диапазону.
+      Условная строка бафа (when/after/upon) → ×0.7. Итоговый вклад в предикт ограничен <b>BUFF_CAP = 0.10</b>,
+      вес блока <b>BUFF_W = 0.50</b>, нужда отряда = 0.5 + 0.5·(доля дпс, кому тег нужен).
+      Плоские очки Anomaly Proficiency нормируются по диапазону 30–60.</div></div>`;
+
+  // (2) бафы по турнирам
+  const bt=t=>{
+    const saved=!!(t.shiyu_data&&t.shiyu_data.buff_tag);
+    const tag=_shyTag(t);
+    const elems=(tag.elems&&tag.elems.length?tag.elems:(tag.elem?[tag.elem]:[])).join('/')||'—';
+    const eff=(tag.effects||[]).map(e=>`${_tlbl(e.tag)} ${e.pct}${e.flat?'pts':'%'}→${(+e.mag).toFixed(2)}${e.cond?'·усл':''}`).join(' · ')||'—';
+    return `<tr>
+      <td style="${td}"><b>${escapeHtml(t.name||t.id)}</b>${saved?'':' <span style="font-size:10px;color:var(--sub);border:1px solid var(--border);border-radius:3px;padding:0 4px">тег не сохранён</span>'}</td>
+      <td style="${td}">${escapeHtml((t.shiyu_data.buff&&t.shiyu_data.buff.title)||'—')}</td>
+      <td style="${td};text-align:center">${elems}</td>
+      <td style="${td};text-align:center">${tag.mech||'—'}</td>
+      <td style="${td};text-align:center;font-family:'JetBrains Mono',monospace">${(tag.strength??0).toFixed(2)}</td>
+      <td style="${td};font-size:12px">${eff}</td></tr>`;
+  };
+  const perTour=tours.length?`<div style="${card}">${H('Бафы по турнирам')}
+    <div style="overflow-x:auto"><table style="border-collapse:collapse;width:100%;min-width:640px">
+      <thead><tr><th style="${th}">Турнир</th><th style="${th}">Баф ротации</th><th style="${th};text-align:center">Элементы</th>
+        <th style="${th};text-align:center">Архетип</th><th style="${th};text-align:center">Сила</th><th style="${th}">Эффекты → mag</th></tr></thead>
+      <tbody>${tours.map(bt).join('')}</tbody></table></div></div>`
+    : `<div style="${card}">${H('Бафы по турнирам')}<div style="color:var(--sub);font-size:13px">Ни у одного турнира не загружена ротация Шиюй. Импорт — в «Турниры → Настройки → Ротация Шиюй».</div></div>`;
+
+  // (3) редактор текущих множителей выбранного турнира
+  let editor='';
+  const cur=tours.find(t=>t.id===_W.shyTour);
+  const opts=tours.map(t=>`<option value="${t.id}" ${t.id===_W.shyTour?'selected':''}>${escapeHtml(t.name||t.id)}</option>`).join('');
+  if(cur){
+    const savedTag=!!(cur.shiyu_data&&cur.shiyu_data.buff_tag);
+    const tag=_shyTag(cur);
+    const inSt='background:var(--field);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:4px 7px;font-size:13px';
+    const elO=['','ice','fire','electric','ether','physical','wind'].map(e=>`<option value="${e}" ${e===((tag.elems&&tag.elems[0])||tag.elem||'')?'selected':''}>${e||'—'}</option>`).join('');
+    const mO=['','sheer','anomaly','stun','crit'].map(m=>`<option value="${m}" ${m===(tag.mech||'')?'selected':''}>${m||'—'}</option>`).join('');
+    const effRows=(tag.effects||[]).map((e,i)=>`<tr>
+      <td style="${td}">${_tlbl(e.tag)}<div style="font-size:11px;color:var(--sub)">${e.pct}${e.flat?'pts':'%'}${e.cond?' · условный':''}</div></td>
+      <td style="${td};text-align:center"><input type="number" step="0.05" min="0" max="1" value="${(+e.mag).toFixed(2)}" data-shy-eff="${i}" style="${inSt};width:74px;text-align:center"></td></tr>`).join('')
+      ||`<tr><td colspan="2" style="${td};color:var(--sub)">Эффекты не распознаны из текста бафа.</td></tr>`;
+    editor=`<div style="${card}">${H('Текущие множители — выбор турнира')}
+      ${savedTag?'':'<div style="font-size:12px;color:var(--sub);margin:-4px 0 12px">Тег для этой ротации ещё не сохранён — множители доразобраны из текста бафа. Нажми «Сохранить», чтобы зафиксировать.</div>'}
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px">
+        <label style="font-size:13px;color:var(--sub)">Турнир</label>
+        <select onchange="_shyPick(this.value)" style="${inSt};min-width:220px">${opts}</select>
+      </div>
+      <div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:14px">
+        <label style="font-size:13px;color:var(--sub)">Элемент <select id="shy-elem" style="${inSt};margin-left:5px">${elO}</select></label>
+        <label style="font-size:13px;color:var(--sub)">Архетип <select id="shy-mech" style="${inSt};margin-left:5px">${mO}</select></label>
+        <label style="font-size:13px;color:var(--sub)">Сила <input id="shy-str" type="number" step="0.05" min="0" max="1" value="${(tag.strength??0.6)}" style="${inSt};width:74px;margin-left:5px"></label>
+      </div>
+      <table style="border-collapse:collapse;width:100%;max-width:420px">
+        <thead><tr><th style="${th}">Эффект</th><th style="${th};text-align:center">Множитель (mag)</th></tr></thead>
+        <tbody>${effRows}</tbody></table>
+      <button class="btn btn-y" style="margin-top:14px" onclick="_shySave()">Сохранить множители</button>
+      <span id="shy-status" style="margin-left:12px;font-size:12px;color:var(--sub)"></span></div>`;
+  }
+  html(`${_analyticsTabs()}${ref}${perTour}${editor}`);
+}
+function _shyPick(id){_W.shyTour=id;_renderShiyuBuffs();}
+async function _shySave(){
+  const t=(_W.shyTours||[]).find(x=>x.id===_W.shyTour);if(!t||!t.shiyu_data)return;
+  const st=document.getElementById('shy-status');const set=(s,c)=>{if(st){st.textContent=s;st.style.color=c||'var(--sub)';}};
+  const prev=_shyTag(t); // сохранённый тег либо доразобранный из текста (тогда сохранение его зафиксирует)
+  const elemSel=document.getElementById('shy-elem').value||null;
+  const elems=elemSel?[elemSel]:(prev.elems||(prev.elem?[prev.elem]:[]));
+  const effects=(prev.effects||[]).map((e,i)=>{
+    const inp=document.querySelector(`[data-shy-eff="${i}"]`);
+    return{...e,mag:inp?Math.max(0,Math.min(1,parseFloat(inp.value)||0)):e.mag};
+  });
+  const strength=Math.max(0,Math.min(1,parseFloat(document.getElementById('shy-str').value)||0));
+  const tag={elems,elem:elems[0]||null,mech:document.getElementById('shy-mech').value||null,strength,effects};
+  const sd={...t.shiyu_data,buff_tag:tag};
+  set('сохранение…');
+  const{error}=await sb.from('tournaments').update({shiyu_data:sd}).eq('id',_W.shyTour);
+  if(dbErr(error,'сохранение множителей бафа')){set('ошибка','var(--red)');return;}
+  t.shiyu_data=sd;set('✓ сохранено','var(--accent)');toast('Множители бафа сохранены');
 }
