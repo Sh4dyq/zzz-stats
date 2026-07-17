@@ -170,7 +170,7 @@ function _analyticsTabs(){
       ${cb('solo','Соло',true)}${cb('duo','Дуо',false)}${cb('trio','Трио',false)}</div>`;
   }
   return `<div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:14px">
-    ${secBtn('power','Калибровка силы персонажей')}${secBtn('shiyu','Влияние бафов Шиюй')}${secBtn('consts','Влияние констелляций')}
+    ${secBtn('power','Калибровка силы персонажей')}${secBtn('shiyu','Влияние бафов Шиюй')}${secBtn('consts','Теги + мидскейпы')}
   </div>${sub}`;
 }
 function _anaSection(v){_W.section=v;_renderWeights();}
@@ -183,8 +183,7 @@ function _anaStub(title,note){
 function _renderWeights(){
   if(_W.section==='shiyu')return _anaStub('Влияние бафов Шиюй',
     'Модель уже считает бонус попадания в баф ротации (Synergy.buffMatchup): элемент/архетип, величина % по семейным диапазонам, нужда отряда по тегам, гейты по формуле урона (крит — только крит-сборкам; шир игнорит DEF → pen/def-shred = 0; кнопочные бафы — дисконт). Тег бафа правится в «Турниры → Настройки → Ротация Шиюй». Здесь появится: калибровка BUFF_W/BUFF_CAP на исходах матчей и просмотр вклада по эффектам.');
-  if(_W.section==='consts')return _anaStub('Влияние констелляций',
-    'Следующий этап: теги эффектов констелляций (M1–M6) и их вклад в силу/синергию. Пока веса майндскейпов задаются в «Калибровка силы → Соло» (клик по персонажу).');
+  if(_W.section==='consts')return _renderTagsEditor();
   // section='power'
   if(_W.calib!=='solo')return _anaStub('Калибровка силы — '+(_W.calib==='duo'?'Дуо':'Трио'),'Раздел в разработке.');
   const w=_W.wman;
@@ -296,4 +295,150 @@ async function saveWeights(){
     if(dbErr(e2,'сохранение весов констелляций'))return;
   }
   toast('Веса сохранены');
+}
+
+// ===== Редактор тегов синергии + мидскейпов (Аналитика → Теги + мидскейпы) =====
+// Источник правды — таблица synergy_tags (jsonb на персонажа). Базовые roles/gives/needs
+// = шкала 0-4 (M0); ms.gives_self / ms.gives — мидскейпы (mag вне 0-4 допустим, at = порог M).
+// Автосохранение построчно (debounce), фолбэк-база — web/data/synergy_tags.json.
+const _TAGVOCAB=[['atk_buff','ATK'],['dmg_buff','DMG/RES↓'],['crit_buff','КРИТ'],
+  ['anomaly_buff','Аном'],['sheer_dmg_buff','Шир'],['pen_buff','PEN'],['def_shred','DEF↓'],
+  ['daze','Оглуш'],['amp_on_stun','Stun-множ'],['anomaly_assist','Аном-ассист'],
+  ['decibel','Децибел'],['aftershock','Aftershock'],['abloom','Расцвет'],['ether_veil','Вуаль']];
+const _ROLEVOCAB=[['crit_dps','крит DPS'],['sheer_dps','sheer'],['sub_dps','саб DPS'],
+  ['main_anomaly','мейн аном'],['sub_anomaly','саб аном'],['stunner','стан'],
+  ['support','саппорт'],['off_field','оф-филд']];
+const _tlbl=t=>(_TAGVOCAB.find(x=>x[0]===t)||[t,t])[1];
+
+async function _loadTags(){
+  const[base,rows]=await Promise.all([
+    fetch('web/data/synergy_tags.json?v='+Date.now()).then(r=>r.json()).catch(()=>({})),
+    _fetchAllW('synergy_tags')
+  ]);
+  const map={};
+  for(const cid in base)map[cid]=JSON.parse(JSON.stringify(base[cid]));
+  _W.tagDb=new Set();
+  rows.forEach(r=>{map[r.character_id]=r.data;_W.tagDb.add(String(r.character_id));});
+  _W.tags=map;_W.tagsLoaded=true;
+}
+
+function _renderTagsEditor(){
+  if(!_W.tagsLoaded){
+    html(`${_analyticsTabs()}<div class="card" style="padding:22px"><span class="spinner"></span> Загружаю теги…</div>`);
+    _loadTags().then(_renderTagsEditor).catch(e=>{_W.tagsLoaded=false;html(`${_analyticsTabs()}<div class="card" style="padding:22px;color:var(--red)">Ошибка загрузки тегов: ${e.message}</div>`);});
+    return;
+  }
+  const q=(_W.tagQ||'').toLowerCase();
+  const ids=Object.keys(_W.tags).sort((a,b)=>(_W.tags[a].name||'').localeCompare(_W.tags[b].name||'','ru'))
+    .filter(id=>!q||(_W.tags[id].name||'').toLowerCase().includes(q));
+  const dbN=_W.tagDb?_W.tagDb.size:0;
+  html(`${_analyticsTabs()}
+  <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px">
+    <input placeholder="фильтр по имени…" value="${_W.tagQ||''}" oninput="_tagSearch(this.value)"
+      style="background:var(--field);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:7px 11px;font-size:13px;min-width:200px">
+    <span class="count-chip">${ids.length} персонажей</span>
+    <span style="font-size:12px;color:var(--sub)">в БД: ${dbN}/57</span>
+    <button class="btn" onclick="_tagImport()" title="Залить текущий web/data/synergy_tags.json в таблицу synergy_tags (перезапишет)">Импорт из файла → БД</button>
+    <span id="tag-status" style="font-size:12px;color:var(--sub)"></span>
+  </div>
+  <p style="color:var(--sub);font-size:12px;margin:0 0 12px;line-height:1.5">Клик по персонажу — редактор. Базовые роли/даёт/нужно — шкала 0-4 (M0). Мидскейпы: «даёт себе»/«даёт команде» строками (тег · сила · с какого M), сила может быть больше 4. Урон M1–M6 — множитель к M0. Сохраняется автоматически.</p>
+  <div class="card" style="padding:0;overflow:hidden">${ids.map(_tagRow).join('')}</div>`);
+}
+
+function _tagRow(id){
+  const t=_W.tags[id],open=_W.tagExpand===id;
+  const inDb=_W.tagDb&&_W.tagDb.has(String(id));
+  const roleTxt=Object.keys(t.roles||{}).filter(r=>t.roles[r]).map(r=>(_ROLEVOCAB.find(x=>x[0]===r)||[r,r])[1]).join(', ')||'—';
+  const c=(D.charMap&&D.charMap[id])||{name:t.name};
+  const head=`<div onclick="_tagToggle('${id}')" style="display:flex;align-items:center;gap:10px;padding:9px 14px;cursor:pointer;border-top:1px solid var(--line)">
+    <span style="color:var(--sub);width:12px;transition:transform .15s;${open?'transform:rotate(90deg)':''}">▶</span>
+    ${iconChar(c,26)}<span style="font-weight:600;min-width:150px">${t.name}</span>
+    <span style="font-size:11px;color:var(--sub);border:1px solid var(--border);border-radius:4px;padding:0 6px">${roleTxt}</span>
+    ${t.ms?`<span style="font-size:11px;color:var(--accent)">M-слой</span>`:''}
+    <span style="margin-left:auto;font-size:11px;color:${inDb?'var(--accent)':'var(--sub)'}">${inDb?'в БД':'из файла'}</span>
+  </div>`;
+  return head+(open?_tagForm(id):'');
+}
+
+function _numSel(val,onCh,max){ // 0..max select (пусто=0)
+  let o='<option value="0"></option>';for(let i=1;i<=(max||4);i++)o+=`<option value="${i}" ${+val===i?'selected':''}>${i}</option>`;
+  return `<select onchange="${onCh}" style="background:var(--field);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:2px 4px;font-size:12px">${o}</select>`;
+}
+
+function _tagForm(id){
+  const t=_W.tags[id];
+  const ms=t.ms||(t.ms={gives_self:{},gives:{},dmg:{},note:'',a_rank:false});
+  const tagCell=(kind)=>_TAGVOCAB.map(([k,l])=>`<label style="display:inline-flex;align-items:center;gap:3px;margin:2px 6px 2px 0;font-size:12px;color:var(--sub)">${l}${_numSel((t[kind]||{})[k],`_tagBase('${id}','${kind}','${k}',this.value)`)}</label>`).join('');
+  const roleCell=_ROLEVOCAB.map(([k,l])=>`<label style="display:inline-flex;align-items:center;gap:3px;margin:2px 6px 2px 0;font-size:12px;color:var(--sub)">${l}${_numSel((t.roles||{})[k],`_tagRole('${id}','${k}',this.value)`)}</label>`).join('');
+  const msRows=(which)=>{
+    const obj=ms[which]||{};const keys=Object.keys(obj);
+    const rows=keys.map((tag,i)=>{
+      const v=obj[tag]||{mag:1,at:1};
+      const tagOpts=_TAGVOCAB.map(([k,l])=>`<option value="${k}" ${k===tag?'selected':''}>${l}</option>`).join('');
+      const atOpts=[1,2,3,4,5,6].map(m=>`<option value="${m}" ${+v.at===m?'selected':''}>M${m}</option>`).join('');
+      return `<div style="display:flex;align-items:center;gap:6px;margin:3px 0">
+        <select onchange="_tagMsKey('${id}','${which}','${tag}',this.value)" style="background:var(--field);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:2px 4px;font-size:12px">${tagOpts}</select>
+        <input type="number" step="0.5" value="${v.mag}" onchange="_tagMsSet('${id}','${which}','${tag}','mag',this.value)" title="сила" style="width:56px;background:var(--field);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:2px 5px;font-size:12px">
+        <select onchange="_tagMsSet('${id}','${which}','${tag}','at',this.value)" style="background:var(--field);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:2px 4px;font-size:12px">${atOpts}</select>
+        <button class="btn" style="padding:1px 8px" onclick="_tagMsDel('${id}','${which}','${tag}')">✕</button>
+      </div>`;}).join('');
+    return rows+`<button class="btn" style="padding:2px 10px;margin-top:4px" onclick="_tagMsAdd('${id}','${which}')">+ строка</button>`;
+  };
+  const dmg=ms.dmg||{};
+  const dmgCells=[1,2,3,4,5,6].map(m=>`<label style="display:inline-flex;flex-direction:column;font-size:11px;color:var(--sub);margin-right:8px">M${m}<input type="number" step="0.01" value="${dmg[m]!=null?dmg[m]:''}" onchange="_tagDmg('${id}',${m},this.value)" style="width:64px;background:var(--field);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:2px 5px;font-size:12px"></label>`).join('');
+  const H=s=>`<div style="font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;font-size:12px;letter-spacing:.03em;color:var(--sub);margin:14px 0 6px">${s}</div>`;
+  return `<div style="padding:10px 18px 20px 40px;background:var(--field);border-top:1px solid var(--line)">
+    ${H('Роли (0-4)')}<div>${roleCell}</div>
+    ${H('Даёт команде (0-4, M0)')}<div>${tagCell('gives')}</div>
+    ${H('Нужно от команды (0-4)')}<div>${tagCell('needs')}</div>
+    <div style="display:flex;gap:34px;flex-wrap:wrap">
+      <div style="min-width:280px">${H('Мидскейпы — даёт СЕБЕ')}${msRows('gives_self')}</div>
+      <div style="min-width:280px">${H('Мидскейпы — даёт КОМАНДЕ')}${msRows('gives')}</div>
+    </div>
+    ${H('Урон по мидскейпам (× к M0)')}<div>${dmgCells}</div>
+    <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--sub);margin-top:12px">
+      <input type="checkbox" ${ms.a_rank?'checked':''} onchange="_tagARank('${id}',this.checked)"> A-ранг (эффекты как M6)</label>
+    ${H('Заметка')}<input value="${(t.note||'').replace(/"/g,'&quot;')}" onchange="_tagNote('${id}','note',this.value)" style="width:100%;background:var(--field);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:5px 9px;font-size:12px">
+    ${H('Заметка мидскейпов')}<input value="${(ms.note||'').replace(/"/g,'&quot;')}" onchange="_tagNote('${id}','ms.note',this.value)" style="width:100%;background:var(--field);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:5px 9px;font-size:12px">
+  </div>`;
+}
+
+// --- state mutations + autosave ---
+function _tagSearch(v){_W.tagQ=v;_renderTagsEditor();}
+function _tagToggle(id){_W.tagExpand=_W.tagExpand===id?null:id;_renderTagsEditor();}
+function _tagRole(id,role,v){const t=_W.tags[id];v=+v;if(v)t.roles[role]=v;else delete t.roles[role];_tagQueueSave(id);}
+function _tagBase(id,kind,tag,v){const t=_W.tags[id];t[kind]=t[kind]||{};v=+v;if(v)t[kind][tag]=v;else delete t[kind][tag];_tagQueueSave(id);}
+function _tagMs(id){const t=_W.tags[id];return t.ms||(t.ms={gives_self:{},gives:{},dmg:{},note:'',a_rank:false});}
+function _tagMsAdd(id,which){const m=_tagMs(id);m[which]=m[which]||{};const free=_TAGVOCAB.map(x=>x[0]).find(k=>!(k in m[which]))||'dmg_buff';m[which][free]={mag:1,at:1};_tagQueueSave(id);_renderTagsEditor();}
+function _tagMsKey(id,which,oldTag,newTag){const m=_tagMs(id);if(newTag===oldTag||!m[which])return;m[which][newTag]=m[which][oldTag];delete m[which][oldTag];_tagQueueSave(id);_renderTagsEditor();}
+function _tagMsSet(id,which,tag,field,v){const m=_tagMs(id);if(!m[which]||!m[which][tag])return;m[which][tag][field]=field==='at'?+v:parseFloat(v);_tagQueueSave(id);}
+function _tagMsDel(id,which,tag){const m=_tagMs(id);if(m[which])delete m[which][tag];_tagQueueSave(id);_renderTagsEditor();}
+function _tagDmg(id,mval,v){const m=_tagMs(id);m.dmg=m.dmg||{};if(v==='')delete m.dmg[mval];else m.dmg[mval]=parseFloat(v);_tagQueueSave(id);}
+function _tagARank(id,on){_tagMs(id).a_rank=!!on;_tagQueueSave(id);}
+function _tagNote(id,path,v){const t=_W.tags[id];if(path==='ms.note')_tagMs(id).note=v;else t.note=v;_tagQueueSave(id);}
+
+function _tagStatus(s,color){const el=document.getElementById('tag-status');if(el){el.textContent=s;el.style.color=color||'var(--sub)';}}
+_W.tagSaveT={};
+function _tagQueueSave(id){
+  _tagStatus('изменено…','var(--sub)');
+  clearTimeout(_W.tagSaveT[id]);
+  _W.tagSaveT[id]=setTimeout(()=>_tagSave(id),700);
+}
+async function _tagSave(id){
+  const{error}=await sb.from('synergy_tags').upsert(
+    {character_id:+id,data:_W.tags[id],updated_at:new Date().toISOString()},{onConflict:'character_id'});
+  if(error){_tagStatus('ошибка сохранения','var(--red)');dbErr(error,'сохранение тегов');return;}
+  if(_W.tagDb)_W.tagDb.add(String(id));
+  _tagStatus('✓ сохранено '+(_W.tags[id].name||id),'var(--accent)');
+}
+async function _tagImport(){
+  if(!confirm('Залить web/data/synergy_tags.json в таблицу synergy_tags? Перезапишет существующие строки.'))return;
+  _tagStatus('импорт…');
+  const base=await fetch('web/data/synergy_tags.json?v='+Date.now()).then(r=>r.json()).catch(()=>null);
+  if(!base){_tagStatus('файл не найден','var(--red)');return;}
+  const now=new Date().toISOString();
+  const payload=Object.keys(base).map(cid=>({character_id:+cid,data:base[cid],updated_at:now}));
+  const{error}=await sb.from('synergy_tags').upsert(payload,{onConflict:'character_id'});
+  if(dbErr(error,'импорт тегов')){_tagStatus('ошибка','var(--red)');return;}
+  _W.tagsLoaded=false;_tagStatus('✓ импортировано '+payload.length);toast('Теги импортированы в БД');_renderTagsEditor();
 }

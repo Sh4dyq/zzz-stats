@@ -18,7 +18,33 @@
    "decibel": 1
   },
   "note": "",
-  "passive_use": 3
+  "passive_use": 3,
+  "ms": {
+   "gives_self": {
+    "crit_buff": {
+     "mag": 3,
+     "at": 1
+    },
+    "pen_buff": {
+     "mag": 2,
+     "at": 6
+    },
+    "dmg_buff": {
+     "mag": 3,
+     "at": 6
+    }
+   },
+   "gives": {},
+   "dmg": {
+    "1": 1.05,
+    "2": 1.176,
+    "3": 1.211,
+    "4": 1.284,
+    "5": 1.323,
+    "6": 1.746
+   },
+   "note": "M1 CR-стаки, M2 +60% CD на EX, M6 PEN 20% + 250% burst"
+  }
  },
  "1251": {
   "name": "Qingyi",
@@ -34,7 +60,46 @@
   },
   "needs": {},
   "note": "",
-  "passive_use": 1
+  "passive_use": 1,
+  "ms": {
+   "gives_self": {
+    "crit_buff": {
+     "mag": 2,
+     "at": 1
+    },
+    "dmg_buff": {
+     "mag": 2,
+     "at": 6
+    }
+   },
+   "gives": {
+    "daze": {
+     "mag": 1,
+     "at": 2
+    },
+    "def_shred": {
+     "mag": 1,
+     "at": 1
+    },
+    "dmg_buff": {
+     "mag": 2,
+     "at": 6
+    },
+    "amp_on_stun": {
+     "mag": 1,
+     "at": 2
+    }
+   },
+   "dmg": {
+    "1": 1.03,
+    "2": 1.082,
+    "3": 1.114,
+    "4": 1.114,
+    "5": 1.147,
+    "6": 1.262
+   },
+   "note": "стан; M2 +35% Stun-множ, M6 -20% Attr RES цели (командный dmg_buff) + CD"
+  }
  },
  "1261": {
   "name": "Jane Doe",
@@ -58,7 +123,42 @@
    "abloom": 1
   },
   "note": "может быть sub_anomaly, но только под Alice (парная связка, не общий кейс)",
-  "passive_use": 3
+  "passive_use": 3,
+  "ms": {
+   "gives_self": {
+    "crit_buff": {
+     "mag": 3,
+     "at": 6
+    },
+    "anomaly_buff": {
+     "mag": 2,
+     "at": 1
+    },
+    "pen_buff": {
+     "mag": 1,
+     "at": 2
+    }
+   },
+   "gives": {
+    "anomaly_buff": {
+     "mag": 2,
+     "at": 4
+    },
+    "def_shred": {
+     "mag": 1,
+     "at": 2
+    }
+   },
+   "dmg": {
+    "1": 1.06,
+    "2": 1.166,
+    "3": 1.201,
+    "4": 1.261,
+    "5": 1.299,
+    "6": 1.663
+   },
+   "note": "M2 team DEF-ignore на Assault, M4 +18% team Anomaly DMG, M6 CR20/CD40 + доп.атака"
+  }
  },
  "1311": {
   "name": "Astra Yao",
@@ -76,7 +176,38 @@
   },
   "needs": {},
   "note": "",
-  "passive_use": null
+  "passive_use": null,
+  "ms": {
+   "gives_self": {
+    "crit_buff": {
+     "mag": 2,
+     "at": 6
+    }
+   },
+   "gives": {
+    "dmg_buff": {
+     "mag": 2,
+     "at": 1
+    },
+    "atk_buff": {
+     "mag": 2,
+     "at": 2
+    },
+    "decibel": {
+     "mag": 2,
+     "at": 1
+    }
+   },
+   "dmg": {
+    "1": 1.02,
+    "2": 1.071,
+    "3": 1.103,
+    "4": 1.136,
+    "5": 1.17,
+    "6": 1.287
+   },
+   "note": "саппорт; M1 -18% Attr RES + Decibel, M2 +19% ATK-кор, M6 +80% CR follow-up"
+  }
  },
  "1091": {
   "name": "Hoshimi Miyabi",
@@ -101,7 +232,38 @@
    "anomaly_assist": 4
   },
   "note": "",
-  "passive_use": 4
+  "passive_use": 4,
+  "ms": {
+   "gives_self": {
+    "crit_buff": {
+     "mag": 2,
+     "at": 2
+    },
+    "pen_buff": {
+     "mag": 2,
+     "at": 1
+    },
+    "dmg_buff": {
+     "mag": 2,
+     "at": 6
+    }
+   },
+   "gives": {
+    "anomaly_assist": {
+     "mag": 1,
+     "at": 1
+    }
+   },
+   "dmg": {
+    "1": 1.06,
+    "2": 1.187,
+    "3": 1.223,
+    "4": 1.321,
+    "5": 1.361,
+    "6": 1.66
+   },
+   "note": "M1 DEF-ignore стаки, M2 +30% BA + 15% CR, M4 +30% Break, M6 +30% BA DMG"
+  }
  },
  "1431": {
   "name": "Ye Shunguang",
@@ -122,7 +284,38 @@
    "ether_veil": 4
   },
   "note": "",
-  "passive_use": 4
+  "passive_use": 4,
+  "ms": {
+   "gives_self": {
+    "pen_buff": {
+     "mag": 3,
+     "at": 1
+    },
+    "dmg_buff": {
+     "mag": 2,
+     "at": 1
+    }
+   },
+   "gives": {
+    "decibel": {
+     "mag": 2,
+     "at": 4
+    },
+    "dmg_buff": {
+     "mag": 2,
+     "at": 4
+    }
+   },
+   "dmg": {
+    "1": 1.08,
+    "2": 1.188,
+    "3": 1.224,
+    "4": 1.285,
+    "5": 1.324,
+    "6": 1.615
+   },
+   "note": "M1 +10% DMG & 20% DEF-ignore, M2 40% DEF-ignore, M4 Ether Veil Vuln до 200%, M6 1500% ATK"
+  }
  },
  "1011": {
   "name": "Anby Demara",
@@ -137,7 +330,31 @@
   },
   "needs": {},
   "note": "",
-  "passive_use": null
+  "passive_use": null,
+  "ms": {
+   "gives_self": {
+    "dmg_buff": {
+     "mag": 2,
+     "at": 6
+    }
+   },
+   "gives": {
+    "daze": {
+     "mag": 1,
+     "at": 6
+    }
+   },
+   "dmg": {
+    "1": 1.0,
+    "2": 1.0,
+    "3": 1.0,
+    "4": 1.0,
+    "5": 1.0,
+    "6": 1.15
+   },
+   "a_rank": true,
+   "note": "A@M6: +45% урон по стакам Charge (M6)"
+  }
  },
  "1021": {
   "name": "Nekomiya Mana",
@@ -158,7 +375,29 @@
    "decibel": 1
   },
   "note": "",
-  "passive_use": 3
+  "passive_use": 3,
+  "ms": {
+   "gives_self": {
+    "crit_buff": {
+     "mag": 3,
+     "at": 4
+    },
+    "pen_buff": {
+     "mag": 2,
+     "at": 1
+    }
+   },
+   "gives": {},
+   "dmg": {
+    "1": 1.05,
+    "2": 1.082,
+    "3": 1.114,
+    "4": 1.203,
+    "5": 1.239,
+    "6": 1.462
+   },
+   "note": "M1 16% Phys RES-ignore сзади, M4 +CR стаки, M6 +18%/стак CD"
+  }
  },
  "1031": {
   "name": "Nicole Demara",
@@ -182,7 +421,34 @@
    "def_shred": 2
   },
   "note": "",
-  "passive_use": null
+  "passive_use": null,
+  "ms": {
+   "gives_self": {},
+   "gives": {
+    "crit_buff": {
+     "mag": 2,
+     "at": 6
+    },
+    "def_shred": {
+     "mag": 1,
+     "at": 6
+    },
+    "dmg_buff": {
+     "mag": 1,
+     "at": 6
+    }
+   },
+   "dmg": {
+    "1": 1.0,
+    "2": 1.0,
+    "3": 1.0,
+    "4": 1.0,
+    "5": 1.0,
+    "6": 1.05
+   },
+   "a_rank": true,
+   "note": "A@M6: team +15% CR по полю Николь (M6)"
+  }
  },
  "1041": {
   "name": "Soldier 11",
@@ -203,7 +469,29 @@
    "decibel": 1
   },
   "note": "",
-  "passive_use": 4
+  "passive_use": 4,
+  "ms": {
+   "gives_self": {
+    "dmg_buff": {
+     "mag": 2,
+     "at": 2
+    },
+    "pen_buff": {
+     "mag": 2,
+     "at": 6
+    }
+   },
+   "gives": {},
+   "dmg": {
+    "1": 1.02,
+    "2": 1.102,
+    "3": 1.135,
+    "4": 1.192,
+    "5": 1.228,
+    "6": 1.412
+   },
+   "note": "M2 +DMG стаки Fire Suppression, M6 -25% Fire RES"
+  }
  },
  "1051": {
   "name": "Yidhari Murphy",
@@ -226,7 +514,33 @@
    "ether_veil": 2
   },
   "note": "HP-скейл; AA-гейт: Stun/Support",
-  "passive_use": 3
+  "passive_use": 3,
+  "ms": {
+   "gives_self": {
+    "crit_buff": {
+     "mag": 2,
+     "at": 2
+    },
+    "pen_buff": {
+     "mag": 2,
+     "at": 1
+    },
+    "sheer_dmg_buff": {
+     "mag": 2,
+     "at": 6
+    }
+   },
+   "gives": {},
+   "dmg": {
+    "1": 1.06,
+    "2": 1.166,
+    "3": 1.201,
+    "4": 1.249,
+    "5": 1.286,
+    "6": 1.543
+   },
+   "note": "шир; M1 -20% Ice RES, M2 +40% CD, M6 +25% Sheer в Wellspring"
+  }
  },
  "1061": {
   "name": "Corin Wickes",
@@ -247,7 +561,30 @@
    "decibel": 1
   },
   "note": "",
-  "passive_use": 1
+  "passive_use": 1,
+  "ms": {
+   "gives_self": {
+    "dmg_buff": {
+     "mag": 2,
+     "at": 6
+    },
+    "pen_buff": {
+     "mag": 2,
+     "at": 6
+    }
+   },
+   "gives": {},
+   "dmg": {
+    "1": 1.0,
+    "2": 1.0,
+    "3": 1.0,
+    "4": 1.0,
+    "5": 1.0,
+    "6": 1.25
+   },
+   "a_rank": true,
+   "note": "A@M6: +12% DMG (M1), -Phys RES стаки (M2), 3% ATK/стак Charge (M6)"
+  }
  },
  "1071": {
   "name": "Caesar King",
@@ -263,7 +600,38 @@
   },
   "needs": {},
   "note": "щит + DMG-taken debuff 25%",
-  "passive_use": 2
+  "passive_use": 2,
+  "ms": {
+   "gives_self": {
+    "crit_buff": {
+     "mag": 3,
+     "at": 6
+    },
+    "atk_buff": {
+     "mag": 1,
+     "at": 2
+    }
+   },
+   "gives": {
+    "atk_buff": {
+     "mag": 3,
+     "at": 2
+    },
+    "dmg_buff": {
+     "mag": 2,
+     "at": 1
+    }
+   },
+   "dmg": {
+    "1": 1.02,
+    "2": 1.051,
+    "3": 1.083,
+    "4": 1.083,
+    "5": 1.115,
+    "6": 1.282
+   },
+   "note": "щит-саппорт; M1 -15% Attr RES, M2 ATK-баф щита ×1.5, M6 гарант-крит себе"
+  }
  },
  "1081": {
   "name": "Billy Kid",
@@ -285,7 +653,30 @@
    "decibel": 1
   },
   "note": "",
-  "passive_use": 4
+  "passive_use": 4,
+  "ms": {
+   "gives_self": {
+    "crit_buff": {
+     "mag": 2,
+     "at": 6
+    },
+    "dmg_buff": {
+     "mag": 2,
+     "at": 6
+    }
+   },
+   "gives": {},
+   "dmg": {
+    "1": 1.0,
+    "2": 1.0,
+    "3": 1.0,
+    "4": 1.0,
+    "5": 1.0,
+    "6": 1.2
+   },
+   "a_rank": true,
+   "note": "A@M6: +25% Dodge Counter (M2), +CR EX (M4), +6%/стак DMG (M6)"
+  }
  },
  "1101": {
   "name": "Koleda Belobog",
@@ -299,7 +690,34 @@
   },
   "needs": {},
   "note": "",
-  "passive_use": 1
+  "passive_use": 1,
+  "ms": {
+   "gives_self": {
+    "dmg_buff": {
+     "mag": 2,
+     "at": 4
+    }
+   },
+   "gives": {
+    "daze": {
+     "mag": 1,
+     "at": 1
+    },
+    "amp_on_stun": {
+     "mag": 1,
+     "at": 1
+    }
+   },
+   "dmg": {
+    "1": 1.03,
+    "2": 1.03,
+    "3": 1.061,
+    "4": 1.125,
+    "5": 1.159,
+    "6": 1.333
+   },
+   "note": "стан; M1/M4 daze & +18%/стак, M6 360% ATK взрыв"
+  }
  },
  "1111": {
   "name": "Anton Ivanov",
@@ -318,7 +736,31 @@
    "decibel": 1
   },
   "note": "",
-  "passive_use": null
+  "passive_use": null,
+  "ms": {
+   "gives_self": {
+    "dmg_buff": {
+     "mag": 2,
+     "at": 6
+    }
+   },
+   "gives": {
+    "crit_buff": {
+     "mag": 2,
+     "at": 6
+    }
+   },
+   "dmg": {
+    "1": 1.0,
+    "2": 1.0,
+    "3": 1.0,
+    "4": 1.0,
+    "5": 1.0,
+    "6": 1.18
+   },
+   "a_rank": true,
+   "note": "A@M6: team +10% CR (M4), +4%/стак DMG до 24% (M6)"
+  }
  },
  "1121": {
   "name": "Ben Bigger",
@@ -333,7 +775,26 @@
   },
   "needs": {},
   "note": "щит + CRIT Rate +16%",
-  "passive_use": 2
+  "passive_use": 2,
+  "ms": {
+   "gives_self": {},
+   "gives": {
+    "daze": {
+     "mag": 1,
+     "at": 6
+    }
+   },
+   "dmg": {
+    "1": 1.0,
+    "2": 1.0,
+    "3": 1.0,
+    "4": 1.0,
+    "5": 1.0,
+    "6": 1.05
+   },
+   "a_rank": true,
+   "note": "A@M6: деф; +20% Daze BA (M6), урон от DEF"
+  }
  },
  "1131": {
   "name": "Soukaku",
@@ -358,7 +819,31 @@
    "anomaly_buff": 1
   },
   "note": "",
-  "passive_use": 1
+  "passive_use": 1,
+  "ms": {
+   "gives_self": {
+    "dmg_buff": {
+     "mag": 2,
+     "at": 6
+    }
+   },
+   "gives": {
+    "def_shred": {
+     "mag": 1,
+     "at": 6
+    }
+   },
+   "dmg": {
+    "1": 1.0,
+    "2": 1.0,
+    "3": 1.0,
+    "4": 1.0,
+    "5": 1.0,
+    "6": 1.15
+   },
+   "a_rank": true,
+   "note": "A@M6: саппорт; -10% Ice RES (M4), +45% enhanced BA (M6)"
+  }
  },
  "1141": {
   "name": "Von Lycaon",
@@ -375,7 +860,34 @@
   },
   "needs": {},
   "note": "Ice RES -25%",
-  "passive_use": 3
+  "passive_use": 3,
+  "ms": {
+   "gives_self": {
+    "daze": {
+     "mag": 1,
+     "at": 1
+    }
+   },
+   "gives": {
+    "daze": {
+     "mag": 1,
+     "at": 1
+    },
+    "dmg_buff": {
+     "mag": 2,
+     "at": 6
+    }
+   },
+   "dmg": {
+    "1": 1.02,
+    "2": 1.02,
+    "3": 1.051,
+    "4": 1.051,
+    "5": 1.083,
+    "6": 1.137
+   },
+   "note": "стан; M1 +daze, M6 +10%/стак урона от Лайкаона (команде, до 50%)"
+  }
  },
  "1151": {
   "name": "Luciana de Montefio",
@@ -393,7 +905,26 @@
   },
   "needs": {},
   "note": "",
-  "passive_use": null
+  "passive_use": null,
+  "ms": {
+   "gives_self": {},
+   "gives": {
+    "crit_buff": {
+     "mag": 2,
+     "at": 6
+    }
+   },
+   "dmg": {
+    "1": 1.0,
+    "2": 1.0,
+    "3": 1.0,
+    "4": 1.0,
+    "5": 1.0,
+    "6": 1.05
+   },
+   "a_rank": true,
+   "note": "A@M6: саппорт; team +10% CD в Cheer On (M4), guard boar (M6)"
+  }
  },
  "1161": {
   "name": "Lighter",
@@ -410,7 +941,38 @@
   },
   "needs": {},
   "note": "",
-  "passive_use": 3
+  "passive_use": 3,
+  "ms": {
+   "gives_self": {
+    "dmg_buff": {
+     "mag": 1,
+     "at": 1
+    }
+   },
+   "gives": {
+    "amp_on_stun": {
+     "mag": 1,
+     "at": 2
+    },
+    "dmg_buff": {
+     "mag": 2,
+     "at": 1
+    },
+    "daze": {
+     "mag": 1,
+     "at": 1
+    }
+   },
+   "dmg": {
+    "1": 1.03,
+    "2": 1.061,
+    "3": 1.093,
+    "4": 1.093,
+    "5": 1.126,
+    "6": 1.351
+   },
+   "note": "стан; M1 -Ice/Fire RES, M2 +25% Stun-множ & Elation ×1.2, M6 Blazing Impact"
+  }
  },
  "1171": {
   "name": "Burnice White",
@@ -436,7 +998,34 @@
    "anomaly_assist": 3
   },
   "note": "",
-  "passive_use": 2
+  "passive_use": 2,
+  "ms": {
+   "gives_self": {
+    "anomaly_buff": {
+     "mag": 2,
+     "at": 1
+    },
+    "pen_buff": {
+     "mag": 1,
+     "at": 6
+    }
+   },
+   "gives": {
+    "pen_buff": {
+     "mag": 2,
+     "at": 2
+    }
+   },
+   "dmg": {
+    "1": 1.1,
+    "2": 1.155,
+    "3": 1.19,
+    "4": 1.261,
+    "5": 1.299,
+    "6": 1.689
+   },
+   "note": "аном; M1 +Afterburn/Heat, M2 team PEN до 20%, M6 -25% Fire RES + 1800% burn"
+  }
  },
  "1181": {
   "name": "Grace Howard",
@@ -459,7 +1048,34 @@
    "anomaly_assist": 3
   },
   "note": "",
-  "passive_use": 1
+  "passive_use": 1,
+  "ms": {
+   "gives_self": {
+    "anomaly_buff": {
+     "mag": 2,
+     "at": 6
+    },
+    "pen_buff": {
+     "mag": 1,
+     "at": 2
+    }
+   },
+   "gives": {
+    "def_shred": {
+     "mag": 1,
+     "at": 2
+    }
+   },
+   "dmg": {
+    "1": 1.03,
+    "2": 1.092,
+    "3": 1.125,
+    "4": 1.181,
+    "5": 1.216,
+    "6": 1.52
+   },
+   "note": "аном; M2 -Electric RES/AnomRES, M6 +грената ×2 DMG"
+  }
  },
  "1201": {
   "name": "Asaba Harumasa",
@@ -481,7 +1097,29 @@
    "decibel": 1
   },
   "note": "AA: Stun/Anomaly",
-  "passive_use": 3
+  "passive_use": 3,
+  "ms": {
+   "gives_self": {
+    "dmg_buff": {
+     "mag": 2,
+     "at": 2
+    },
+    "pen_buff": {
+     "mag": 2,
+     "at": 6
+    }
+   },
+   "gives": {},
+   "dmg": {
+    "1": 1.05,
+    "2": 1.176,
+    "3": 1.211,
+    "4": 1.272,
+    "5": 1.31,
+    "6": 1.572
+   },
+   "note": "M2 +50% Dash, M4 Decibel/Prison, M6 -15% Electric RES + взрыв"
+  }
  },
  "1211": {
   "name": "Alexandrina Sebastiane",
@@ -499,7 +1137,30 @@
   },
   "needs": {},
   "note": "",
-  "passive_use": 1
+  "passive_use": 1,
+  "ms": {
+   "gives_self": {
+    "dmg_buff": {
+     "mag": 2,
+     "at": 2
+    }
+   },
+   "gives": {
+    "dmg_buff": {
+     "mag": 2,
+     "at": 6
+    }
+   },
+   "dmg": {
+    "1": 1.02,
+    "2": 1.122,
+    "3": 1.156,
+    "4": 1.156,
+    "5": 1.191,
+    "6": 1.31
+   },
+   "note": "off-field саппорт; M2 +15% личн. DMG, M6 +15% Electric DMG всей команде"
+  }
  },
  "1221": {
   "name": "Tsukishiro Yanagi",
@@ -524,7 +1185,34 @@
    "anomaly_assist": 4
   },
   "note": "Disorder mult +125%",
-  "passive_use": 2
+  "passive_use": 2,
+  "ms": {
+   "gives_self": {
+    "anomaly_buff": {
+     "mag": 3,
+     "at": 1
+    },
+    "pen_buff": {
+     "mag": 2,
+     "at": 4
+    }
+   },
+   "gives": {
+    "pen_buff": {
+     "mag": 2,
+     "at": 4
+    }
+   },
+   "dmg": {
+    "1": 1.08,
+    "2": 1.21,
+    "3": 1.246,
+    "4": 1.321,
+    "5": 1.361,
+    "6": 1.633
+   },
+   "note": "M1 +80 AP, M2 Disorder-множ, M4 team Expose +16% PEN, M6 +20% EX DMG"
+  }
  },
  "1241": {
   "name": "Zhu Yuan",
@@ -545,7 +1233,29 @@
    "decibel": 1
   },
   "note": "AA-гейт: Support",
-  "passive_use": 3
+  "passive_use": 3,
+  "ms": {
+   "gives_self": {
+    "dmg_buff": {
+     "mag": 2,
+     "at": 2
+    },
+    "pen_buff": {
+     "mag": 2,
+     "at": 4
+    }
+   },
+   "gives": {},
+   "dmg": {
+    "1": 1.04,
+    "2": 1.165,
+    "3": 1.2,
+    "4": 1.32,
+    "5": 1.36,
+    "6": 1.564
+   },
+   "note": "M2 +10%/стак Ether, M4 -25% Ether RES, M6 доп. Ether Buckshot"
+  }
  },
  "1271": {
   "name": "Seth Lowell",
@@ -563,7 +1273,35 @@
   },
   "needs": {},
   "note": "Anomaly Buildup RES -20%",
-  "passive_use": null
+  "passive_use": null,
+  "ms": {
+   "gives_self": {
+    "crit_buff": {
+     "mag": 2,
+     "at": 6
+    },
+    "anomaly_buff": {
+     "mag": 1,
+     "at": 6
+    }
+   },
+   "gives": {
+    "daze": {
+     "mag": 1,
+     "at": 6
+    }
+   },
+   "dmg": {
+    "1": 1.0,
+    "2": 1.0,
+    "3": 1.0,
+    "4": 1.0,
+    "5": 1.0,
+    "6": 1.15
+   },
+   "a_rank": true,
+   "note": "A@M6: деф/аном-саппорт; +Daze (M4), 500% ATK гарант-крит (M6)"
+  }
  },
  "1281": {
   "name": "Piper",
@@ -587,7 +1325,30 @@
    "anomaly_assist": 2
   },
   "note": "squad DMG +18%",
-  "passive_use": 1
+  "passive_use": 1,
+  "ms": {
+   "gives_self": {
+    "anomaly_buff": {
+     "mag": 1,
+     "at": 6
+    },
+    "dmg_buff": {
+     "mag": 1,
+     "at": 6
+    }
+   },
+   "gives": {},
+   "dmg": {
+    "1": 1.0,
+    "2": 1.0,
+    "3": 1.0,
+    "4": 1.0,
+    "5": 1.0,
+    "6": 1.1
+   },
+   "a_rank": true,
+   "note": "A@M6: аном; +Power стаки (M1), +10%+ downward (M2/M6)"
+  }
  },
  "1291": {
   "name": "Hugo Vlad",
@@ -608,7 +1369,33 @@
    "decibel": 1
   },
   "note": "ATK масштаб от кол-ва Stun в отряде",
-  "passive_use": 3
+  "passive_use": 3,
+  "ms": {
+   "gives_self": {
+    "crit_buff": {
+     "mag": 2,
+     "at": 1
+    },
+    "pen_buff": {
+     "mag": 2,
+     "at": 2
+    },
+    "dmg_buff": {
+     "mag": 3,
+     "at": 6
+    }
+   },
+   "gives": {},
+   "dmg": {
+    "1": 1.08,
+    "2": 1.166,
+    "3": 1.201,
+    "4": 1.273,
+    "5": 1.311,
+    "6": 1.77
+   },
+   "note": "M1 CR12/CD30 на Totalize, M2 DEF-ignore, M4 -Ice RES, M6 +60% Totalize + 1000% burst"
+  }
  },
  "1301": {
   "name": "Orphie Magnusson & Magus",
@@ -635,7 +1422,42 @@
    "aftershock": 2
   },
   "note": "AA: Stun/Support; aftershock DEF ignore",
-  "passive_use": 2
+  "passive_use": 2,
+  "ms": {
+   "gives_self": {
+    "pen_buff": {
+     "mag": 2,
+     "at": 1
+    },
+    "atk_buff": {
+     "mag": 2,
+     "at": 2
+    },
+    "dmg_buff": {
+     "mag": 2,
+     "at": 4
+    }
+   },
+   "gives": {
+    "decibel": {
+     "mag": 1,
+     "at": 2
+    },
+    "dmg_buff": {
+     "mag": 2,
+     "at": 1
+    }
+   },
+   "dmg": {
+    "1": 1.08,
+    "2": 1.166,
+    "3": 1.201,
+    "4": 1.321,
+    "5": 1.361,
+    "6": 1.633
+   },
+   "note": "M1 -15% Fire RES & +20% DMG для Zeroed-In, M2 +20% ATK, M4 +40% скиллы, M6 laser"
+  }
  },
  "1321": {
   "name": "Evelyn Chevalier",
@@ -656,7 +1478,33 @@
    "decibel": 2
   },
   "note": "AA-гейт: Stun/Support",
-  "passive_use": 3
+  "passive_use": 3,
+  "ms": {
+   "gives_self": {
+    "atk_buff": {
+     "mag": 2,
+     "at": 2
+    },
+    "crit_buff": {
+     "mag": 2,
+     "at": 4
+    },
+    "pen_buff": {
+     "mag": 1,
+     "at": 1
+    }
+   },
+   "gives": {},
+   "dmg": {
+    "1": 1.05,
+    "2": 1.197,
+    "3": 1.233,
+    "4": 1.356,
+    "5": 1.397,
+    "6": 1.788
+   },
+   "note": "M1 DEF-ignore Bound, M2 +15% ATK, M4 +40% CD (щит), M6 Lunalux follow-up ×16"
+  }
  },
  "1331": {
   "name": "Vivian Banshee",
@@ -680,7 +1528,38 @@
    "anomaly_assist": 4
   },
   "note": "ТОЛЬКО саб-аномалист (user)",
-  "passive_use": 3
+  "passive_use": 3,
+  "ms": {
+   "gives_self": {
+    "anomaly_buff": {
+     "mag": 3,
+     "at": 2
+    },
+    "dmg_buff": {
+     "mag": 3,
+     "at": 6
+    },
+    "abloom": {
+     "mag": 2,
+     "at": 6
+    }
+   },
+   "gives": {
+    "dmg_buff": {
+     "mag": 2,
+     "at": 1
+    }
+   },
+   "dmg": {
+    "1": 1.06,
+    "2": 1.187,
+    "3": 1.223,
+    "4": 1.321,
+    "5": 1.361,
+    "6": 1.837
+   },
+   "note": "M1 +16% Anom/Disorder taken (команде), M2 Abloom ×1.3 + -15% RES, M6 +40% Ether + Abloom ×5"
+  }
  },
  "1341": {
   "name": "Zhao",
@@ -699,7 +1578,46 @@
    "ether_veil": 1
   },
   "note": "squad DMG +10..40% внутри Ether Veil — нужен Ether Veil",
-  "passive_use": 4
+  "passive_use": 4,
+  "ms": {
+   "gives_self": {
+    "crit_buff": {
+     "mag": 2,
+     "at": 4
+    },
+    "atk_buff": {
+     "mag": 1,
+     "at": 2
+    }
+   },
+   "gives": {
+    "dmg_buff": {
+     "mag": 3,
+     "at": 1
+    },
+    "atk_buff": {
+     "mag": 2,
+     "at": 2
+    },
+    "decibel": {
+     "mag": 1,
+     "at": 4
+    },
+    "crit_buff": {
+     "mag": 2,
+     "at": 6
+    }
+   },
+   "dmg": {
+    "1": 1.02,
+    "2": 1.051,
+    "3": 1.083,
+    "4": 1.137,
+    "5": 1.171,
+    "6": 1.288
+   },
+   "note": "деф-саппорт; M1 -15% Attr RES команде, M2 +15% team ATK, M6 team CR ×1.25"
+  }
  },
  "1351": {
   "name": "Pulchra Fellini",
@@ -721,7 +1639,34 @@
    "crit_buff": 1
   },
   "note": "AA: Attack/Rupture",
-  "passive_use": 3
+  "passive_use": 3,
+  "ms": {
+   "gives_self": {
+    "crit_buff": {
+     "mag": 2,
+     "at": 6
+    },
+    "atk_buff": {
+     "mag": 1,
+     "at": 6
+    },
+    "dmg_buff": {
+     "mag": 1,
+     "at": 6
+    }
+   },
+   "gives": {},
+   "dmg": {
+    "1": 1.0,
+    "2": 1.0,
+    "3": 1.0,
+    "4": 1.0,
+    "5": 1.0,
+    "6": 1.12
+   },
+   "a_rank": true,
+   "note": "A@M6: стан; +10% CR (M1), +10% ATK (M2), +15% Nightmare (M6)"
+  }
  },
  "1361": {
   "name": "Trigger",
@@ -749,7 +1694,38 @@
    "aftershock": 1
   },
   "note": "",
-  "passive_use": 2
+  "passive_use": 2,
+  "ms": {
+   "gives_self": {
+    "amp_on_stun": {
+     "mag": 1,
+     "at": 1
+    },
+    "dmg_buff": {
+     "mag": 2,
+     "at": 6
+    }
+   },
+   "gives": {
+    "crit_buff": {
+     "mag": 2,
+     "at": 2
+    },
+    "amp_on_stun": {
+     "mag": 1,
+     "at": 1
+    }
+   },
+   "dmg": {
+    "1": 1.03,
+    "2": 1.061,
+    "3": 1.093,
+    "4": 1.148,
+    "5": 1.182,
+    "6": 1.478
+   },
+   "note": "стан; M2 team +CD (до 24%), M4 Disconnect, M6 Armor Break 1200% ATK"
+  }
  },
  "1371": {
   "name": "Yixuan",
@@ -770,7 +1746,33 @@
    "ether_veil": 1
   },
   "note": "AA: Stun/Support/Defense; HP-скейл",
-  "passive_use": 3
+  "passive_use": 3,
+  "ms": {
+   "gives_self": {
+    "crit_buff": {
+     "mag": 2,
+     "at": 1
+    },
+    "pen_buff": {
+     "mag": 2,
+     "at": 2
+    },
+    "sheer_dmg_buff": {
+     "mag": 2,
+     "at": 6
+    }
+   },
+   "gives": {},
+   "dmg": {
+    "1": 1.08,
+    "2": 1.21,
+    "3": 1.246,
+    "4": 1.371,
+    "5": 1.412,
+    "6": 1.666
+   },
+   "note": "шир; M1 +10% CR + lightning, M2 -15% Ether RES, M4 +30%/стак EX, M6 +20% Sheer"
+  }
  },
  "1381": {
   "name": "Soldier 0 - Anby",
@@ -795,7 +1797,33 @@
    "aftershock": 4
   },
   "note": "AA: Stun/Support; squad Aftershock +25%",
-  "passive_use": 4
+  "passive_use": 4,
+  "ms": {
+   "gives_self": {
+    "crit_buff": {
+     "mag": 2,
+     "at": 2
+    },
+    "pen_buff": {
+     "mag": 2,
+     "at": 4
+    },
+    "dmg_buff": {
+     "mag": 2,
+     "at": 6
+    }
+   },
+   "gives": {},
+   "dmg": {
+    "1": 1.1,
+    "2": 1.254,
+    "3": 1.292,
+    "4": 1.37,
+    "5": 1.411,
+    "6": 1.693
+   },
+   "note": "M1 White Thunder ×3, M2 +12% CR, M4 -12% Electric RES, M6 1000% vortex"
+  }
  },
  "1391": {
   "name": "Ju Fufu",
@@ -814,7 +1842,38 @@
   },
   "needs": {},
   "note": "max Decibel +1000",
-  "passive_use": 2
+  "passive_use": 2,
+  "ms": {
+   "gives_self": {
+    "crit_buff": {
+     "mag": 3,
+     "at": 1
+    },
+    "dmg_buff": {
+     "mag": 2,
+     "at": 6
+    }
+   },
+   "gives": {
+    "crit_buff": {
+     "mag": 2,
+     "at": 2
+    },
+    "amp_on_stun": {
+     "mag": 1,
+     "at": 1
+    }
+   },
+   "dmg": {
+    "1": 1.06,
+    "2": 1.145,
+    "3": 1.179,
+    "4": 1.297,
+    "5": 1.336,
+    "6": 1.603
+   },
+   "note": "стан/крит-гибрид; M1 +12% CR & Stun-множ, M2 team CD +22%, M4 +35% CD, M6 +30% Chain"
+  }
  },
  "1401": {
   "name": "Alice Thymefield",
@@ -838,7 +1897,42 @@
    "anomaly_assist": 3
   },
   "note": "связка с Jane",
-  "passive_use": 4
+  "passive_use": 4,
+  "ms": {
+   "gives_self": {
+    "anomaly_buff": {
+     "mag": 3,
+     "at": 6
+    },
+    "pen_buff": {
+     "mag": 2,
+     "at": 1
+    },
+    "def_shred": {
+     "mag": 2,
+     "at": 1
+    }
+   },
+   "gives": {
+    "dmg_buff": {
+     "mag": 2,
+     "at": 2
+    },
+    "def_shred": {
+     "mag": 1,
+     "at": 1
+    }
+   },
+   "dmg": {
+    "1": 1.05,
+    "2": 1.155,
+    "3": 1.19,
+    "4": 1.261,
+    "5": 1.299,
+    "6": 1.754
+   },
+   "note": "аном; M1 -20% DEF цели, M2 +15% team Assault/Disorder, M4 -10% Phys RES, M6 доп.атака 3300% AP"
+  }
  },
  "1411": {
   "name": "Ukinami Yuzuha",
@@ -857,7 +1951,33 @@
   },
   "needs": {},
   "note": "нет прозы скиллов на nanoka — размечено по амплуа, проверить",
-  "passive_use": 2
+  "passive_use": 2,
+  "ms": {
+   "gives_self": {},
+   "gives": {
+    "dmg_buff": {
+     "mag": 2,
+     "at": 1
+    },
+    "anomaly_assist": {
+     "mag": 2,
+     "at": 1
+    },
+    "abloom": {
+     "mag": 2,
+     "at": 6
+    }
+   },
+   "dmg": {
+    "1": 1.02,
+    "2": 1.071,
+    "3": 1.103,
+    "4": 1.158,
+    "5": 1.193,
+    "6": 1.288
+   },
+   "note": "саппорт; M1 -10% RES & Anom-баф ×1.3, M2 +15% team DMG & AnomRate, M6 +105% Disorder-множ"
+  }
  },
  "1421": {
   "name": "Pan Yinhu",
@@ -872,7 +1992,31 @@
   },
   "needs": {},
   "note": "Sheer Force бафф + Depleted Qi +20%",
-  "passive_use": 2
+  "passive_use": 2,
+  "ms": {
+   "gives_self": {
+    "sheer_dmg_buff": {
+     "mag": 1,
+     "at": 6
+    }
+   },
+   "gives": {
+    "dmg_buff": {
+     "mag": 1,
+     "at": 6
+    }
+   },
+   "dmg": {
+    "1": 1.0,
+    "2": 1.0,
+    "3": 1.0,
+    "4": 1.0,
+    "5": 1.0,
+    "6": 1.08
+   },
+   "a_rank": true,
+   "note": "A@M6: деф/шир-саппорт; team +10% DMG на Depleted Qi (M1), +Sheer Force (M6)"
+  }
  },
  "1441": {
   "name": "Komano Manato",
@@ -892,7 +2036,30 @@
    "ether_veil": 1
   },
   "note": "AA: Support/Stun; HP-скейл",
-  "passive_use": 2
+  "passive_use": 2,
+  "ms": {
+   "gives_self": {
+    "pen_buff": {
+     "mag": 1,
+     "at": 6
+    },
+    "dmg_buff": {
+     "mag": 2,
+     "at": 6
+    }
+   },
+   "gives": {},
+   "dmg": {
+    "1": 1.0,
+    "2": 1.0,
+    "3": 1.0,
+    "4": 1.0,
+    "5": 1.0,
+    "6": 1.15
+   },
+   "a_rank": true,
+   "note": "A@M6: шир; +20% Fire по HP-loss (M1), -8% Fire RES (M2), +3%/стак (M6)"
+  }
  },
  "1451": {
   "name": "Lucia Elowen",
@@ -910,7 +2077,46 @@
   },
   "needs": {},
   "note": "активирует Ether Veil: Wellspring — ключ для sheer",
-  "passive_use": 2
+  "passive_use": 2,
+  "ms": {
+   "gives_self": {
+    "sheer_dmg_buff": {
+     "mag": 1,
+     "at": 2
+    },
+    "atk_buff": {
+     "mag": 1,
+     "at": 6
+    },
+    "crit_buff": {
+     "mag": 2,
+     "at": 6
+    }
+   },
+   "gives": {
+    "dmg_buff": {
+     "mag": 2,
+     "at": 1
+    },
+    "sheer_dmg_buff": {
+     "mag": 2,
+     "at": 2
+    },
+    "decibel": {
+     "mag": 1,
+     "at": 4
+    }
+   },
+   "dmg": {
+    "1": 1.03,
+    "2": 1.092,
+    "3": 1.125,
+    "4": 1.159,
+    "5": 1.194,
+    "6": 1.337
+   },
+   "note": "шир-саппорт; M1 -18% RES, M2 +15% Sheer в Wellspring, M6 ATK от HP + гарант-крит Harmony"
+  }
  },
  "1461": {
   "name": "Seed",
@@ -937,7 +2143,33 @@
    "decibel": 1
   },
   "note": "бафает Vanguard (Attack-напарника)",
-  "passive_use": 4
+  "passive_use": 4,
+  "ms": {
+   "gives_self": {
+    "crit_buff": {
+     "mag": 2,
+     "at": 1
+    },
+    "pen_buff": {
+     "mag": 2,
+     "at": 2
+    },
+    "dmg_buff": {
+     "mag": 2,
+     "at": 6
+    }
+   },
+   "gives": {},
+   "dmg": {
+    "1": 1.06,
+    "2": 1.166,
+    "3": 1.201,
+    "4": 1.273,
+    "5": 1.311,
+    "6": 1.599
+   },
+   "note": "M1 +30% CD, M2 DEF-ignore Besiege 20%, M4 +20% Ult, M6 +50% CD + 3 laser"
+  }
  },
  "1471": {
   "name": "Banyue",
@@ -957,7 +2189,38 @@
    "decibel": 1
   },
   "note": "нет прозы скиллов на nanoka — размечено по амплуа, проверить",
-  "passive_use": 1
+  "passive_use": 1,
+  "ms": {
+   "gives_self": {
+    "crit_buff": {
+     "mag": 2,
+     "at": 2
+    },
+    "sheer_dmg_buff": {
+     "mag": 2,
+     "at": 1
+    },
+    "dmg_buff": {
+     "mag": 2,
+     "at": 4
+    }
+   },
+   "gives": {
+    "dmg_buff": {
+     "mag": 1,
+     "at": 1
+    }
+   },
+   "dmg": {
+    "1": 1.06,
+    "2": 1.166,
+    "3": 1.201,
+    "4": 1.321,
+    "5": 1.361,
+    "6": 1.633
+   },
+   "note": "шир; M1 -10% Fire RES & +10% Sheer, M2 +15% CD/Fire, M4 +30% скиллы, M6 Vidyaraja 600%"
+  }
  },
  "1481": {
   "name": "Dialyn",
@@ -980,7 +2243,38 @@
    "crit_buff": 1
   },
   "note": "нет прозы скиллов на nanoka — размечено по амплуа, проверить",
-  "passive_use": 4
+  "passive_use": 4,
+  "ms": {
+   "gives_self": {
+    "atk_buff": {
+     "mag": 2,
+     "at": 4
+    },
+    "dmg_buff": {
+     "mag": 2,
+     "at": 6
+    }
+   },
+   "gives": {
+    "dmg_buff": {
+     "mag": 2,
+     "at": 2
+    },
+    "amp_on_stun": {
+     "mag": 1,
+     "at": 2
+    }
+   },
+   "dmg": {
+    "1": 1.03,
+    "2": 1.061,
+    "3": 1.093,
+    "4": 1.148,
+    "5": 1.182,
+    "6": 1.359
+   },
+   "note": "стан; M1 -15% Attr RES, M2 +20% Stun-множ & +15% DMG команде, M4 +500 ATK, M6 Aftertone"
+  }
  },
  "1491": {
   "name": "Sunna",
@@ -998,7 +2292,38 @@
   },
   "needs": {},
   "note": "нет прозы скиллов на nanoka — размечено по амплуа, проверить",
-  "passive_use": 4
+  "passive_use": 4,
+  "ms": {
+   "gives_self": {
+    "crit_buff": {
+     "mag": 3,
+     "at": 6
+    }
+   },
+   "gives": {
+    "atk_buff": {
+     "mag": 1,
+     "at": 2
+    },
+    "dmg_buff": {
+     "mag": 2,
+     "at": 4
+    },
+    "def_shred": {
+     "mag": 1,
+     "at": 1
+    }
+   },
+   "dmg": {
+    "1": 1.02,
+    "2": 1.051,
+    "3": 1.083,
+    "4": 1.115,
+    "5": 1.148,
+    "6": 1.286
+   },
+   "note": "саппорт; M1 -DEF, M2 +10% team ATK, M4 +18% team DMG, M6 гарант-крит + Cat's Gaze"
+  }
  },
  "1501": {
   "name": "Aria",
@@ -1025,7 +2350,33 @@
    "ether_veil": 2
   },
   "note": "нет прозы скиллов на nanoka — размечено по амплуа, проверить",
-  "passive_use": 3
+  "passive_use": 3,
+  "ms": {
+   "gives_self": {
+    "crit_buff": {
+     "mag": 2,
+     "at": 1
+    },
+    "pen_buff": {
+     "mag": 2,
+     "at": 2
+    },
+    "anomaly_buff": {
+     "mag": 2,
+     "at": 6
+    }
+   },
+   "gives": {},
+   "dmg": {
+    "1": 1.06,
+    "2": 1.166,
+    "3": 1.201,
+    "4": 1.261,
+    "5": 1.299,
+    "6": 1.559
+   },
+   "note": "аном; M1 Abloom-крит, M2 DEF-ignore 24%, M6 +40% Ether + non-exit Delusion"
+  }
  },
  "1511": {
   "name": "Nangong Yu",
@@ -1053,7 +2404,42 @@
    "anomaly_assist": 2
   },
   "note": "нет прозы скиллов на nanoka — размечено по амплуа, проверить",
-  "passive_use": 4
+  "passive_use": 4,
+  "ms": {
+   "gives_self": {
+    "daze": {
+     "mag": 1,
+     "at": 6
+    },
+    "anomaly_buff": {
+     "mag": 2,
+     "at": 4
+    }
+   },
+   "gives": {
+    "dmg_buff": {
+     "mag": 2,
+     "at": 1
+    },
+    "amp_on_stun": {
+     "mag": 2,
+     "at": 2
+    },
+    "abloom": {
+     "mag": 2,
+     "at": 6
+    }
+   },
+   "dmg": {
+    "1": 1.03,
+    "2": 1.092,
+    "3": 1.125,
+    "4": 1.17,
+    "5": 1.205,
+    "6": 1.422
+   },
+   "note": "стан/аном; M1 -18% Attr RES, M2 Stun-множ +30% + Disorder, M6 Vibrato Abloom"
+  }
  },
  "1521": {
   "name": "Cissia",
@@ -1081,7 +2467,38 @@
    "amp_on_stun": 3
   },
   "note": "нет прозы скиллов на nanoka — размечено по амплуа, проверить",
-  "passive_use": 3
+  "passive_use": 3,
+  "ms": {
+   "gives_self": {
+    "pen_buff": {
+     "mag": 2,
+     "at": 1
+    },
+    "dmg_buff": {
+     "mag": 2,
+     "at": 2
+    }
+   },
+   "gives": {
+    "pen_buff": {
+     "mag": 1,
+     "at": 1
+    },
+    "def_shred": {
+     "mag": 1,
+     "at": 1
+    }
+   },
+   "dmg": {
+    "1": 1.06,
+    "2": 1.166,
+    "3": 1.201,
+    "4": 1.261,
+    "5": 1.299,
+    "6": 1.533
+   },
+   "note": "M1 DEF-ignore ×1.4 & team -5% Electric RES, M2 +35% BA, M6 Corrode Bone спред"
+  }
  },
  "1531": {
   "name": "Starlight - Billy",
@@ -1102,7 +2519,33 @@
    "ether_veil": 1
   },
   "note": "нет прозы скиллов на nanoka — размечено по амплуа, проверить",
-  "passive_use": 3
+  "passive_use": 3,
+  "ms": {
+   "gives_self": {
+    "pen_buff": {
+     "mag": 2,
+     "at": 1
+    },
+    "crit_buff": {
+     "mag": 2,
+     "at": 2
+    },
+    "sheer_dmg_buff": {
+     "mag": 2,
+     "at": 6
+    }
+   },
+   "gives": {},
+   "dmg": {
+    "1": 1.06,
+    "2": 1.208,
+    "3": 1.244,
+    "4": 1.306,
+    "5": 1.345,
+    "6": 1.614
+   },
+   "note": "шир; M1 -18% Phys RES, M2 +50% скиллы + 50% CD, M4 +CD стаки, M6 +18% Sheer + burst"
+  }
  },
  "1541": {
   "name": "Promeia",
@@ -1131,7 +2574,38 @@
    "abloom": 4
   },
   "note": "Abloom DMG squad; frostbite extend",
-  "passive_use": 4
+  "passive_use": 4,
+  "ms": {
+   "gives_self": {
+    "anomaly_buff": {
+     "mag": 3,
+     "at": 2
+    },
+    "dmg_buff": {
+     "mag": 2,
+     "at": 6
+    }
+   },
+   "gives": {
+    "def_shred": {
+     "mag": 2,
+     "at": 1
+    },
+    "dmg_buff": {
+     "mag": 2,
+     "at": 6
+    }
+   },
+   "dmg": {
+    "1": 1.06,
+    "2": 1.187,
+    "3": 1.223,
+    "4": 1.284,
+    "5": 1.323,
+    "6": 1.693
+   },
+   "note": "аном; M1 team -20% DEF на Abloom, M2 +40 AP + Abloom ×1.2, M6 special Abloom + -15% RES"
+  }
  },
  "1551": {
   "name": "Pyrois",
@@ -1152,7 +2626,30 @@
    "decibel": 3
   },
   "note": "AA: Stun/Support",
-  "passive_use": 4
+  "passive_use": 4,
+  "ms": {
+   "gives_self": {
+    "crit_buff": {
+     "mag": 1,
+     "at": 1
+    }
+   },
+   "gives": {
+    "decibel": {
+     "mag": 2,
+     "at": 1
+    }
+   },
+   "dmg": {
+    "1": 1.03,
+    "2": 1.061,
+    "3": 1.093,
+    "4": 1.126,
+    "5": 1.16,
+    "6": 1.276
+   },
+   "note": "M1 +8% CR & 1000 Decibel, M2 +Decibel лимит, M6 скрыт (датамайн неполон)"
+  }
  },
  "1561": {
   "name": "Velina Airgid",
@@ -1178,7 +2675,29 @@
    "anomaly_assist": 4
   },
   "note": "нет прозы скиллов на nanoka — размечено по амплуа, проверить",
-  "passive_use": 3
+  "passive_use": 3,
+  "ms": {
+   "gives_self": {
+    "anomaly_buff": {
+     "mag": 2,
+     "at": 2
+    },
+    "atk_buff": {
+     "mag": 2,
+     "at": 4
+    }
+   },
+   "gives": {},
+   "dmg": {
+    "1": 1.03,
+    "2": 1.133,
+    "3": 1.167,
+    "4": 1.26,
+    "5": 1.298,
+    "6": 1.532
+   },
+   "note": "аном (Wind); M2 +15% Windswept/Vortex, M4 +15% ATK, M6 +20% Wind buildup"
+  }
  },
  "1571": {
   "name": "Norma Hollowell",
@@ -1201,7 +2720,29 @@
    "sheer_dmg_buff": 2
   },
   "note": "нет прозы скиллов на nanoka — размечено по амплуа, проверить",
-  "passive_use": 4
+  "passive_use": 4,
+  "ms": {
+   "gives_self": {},
+   "gives": {
+    "amp_on_stun": {
+     "mag": 2,
+     "at": 2
+    },
+    "daze": {
+     "mag": 1,
+     "at": 6
+    }
+   },
+   "dmg": {
+    "1": 1.02,
+    "2": 1.071,
+    "3": 1.103,
+    "4": 1.136,
+    "5": 1.17,
+    "6": 1.264
+   },
+   "note": "стан (Fire); M2 Tech Divide Stun-множ 6%, M4 Decibel, датамайн частично скрыт"
+  }
  },
  "1591": {
   "name": "Sigrid",
@@ -1221,6 +2762,32 @@
    "amp_on_stun": 3
   },
   "note": "AA: Support/Stun; Contamination",
-  "passive_use": 3
+  "passive_use": 3,
+  "ms": {
+   "gives_self": {
+    "atk_buff": {
+     "mag": 2,
+     "at": 1
+    },
+    "pen_buff": {
+     "mag": 2,
+     "at": 2
+    },
+    "dmg_buff": {
+     "mag": 2,
+     "at": 4
+    }
+   },
+   "gives": {},
+   "dmg": {
+    "1": 1.08,
+    "2": 1.188,
+    "3": 1.224,
+    "4": 1.371,
+    "5": 1.412,
+    "6": 1.694
+   },
+   "note": "M1 +25% ATK, M2 +24% Ice PEN, M4 +24% DMG, M6 доп. Ice DMG"
+  }
  }
 }

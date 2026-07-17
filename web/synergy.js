@@ -243,16 +243,17 @@ function bestMatchup(members,rooms){
   } return best;
 }
 
-async function load(){
+// pre — необязательный уже загруженный объект тегов (напр. из Supabase synergy_tags).
+// Без него берём статический web/data/synergy_tags.json (фолбэк/офлайн).
+async function load(pre){
   if(TAGS)return;
-  const[t,s]=await Promise.all([
-    fetch('web/data/synergy_tags.json').then(r=>r.json()),
-    fetch('web/data/characters_synergy.json').then(r=>r.json())
-  ]);
+  const sP=fetch('web/data/characters_synergy.json').then(r=>r.json());
+  const t=pre||await fetch('web/data/synergy_tags.json').then(r=>r.json());
+  const s=await sP;
   TAGS=t;SYN=s.agents||s;
   NAME2ID={};for(const id in TAGS)NAME2ID[TAGS[id].name]=id;
 }
 
 g.Synergy={load,score,bestTeam,splitSide,elementMatchup,bestMatchup,buffMatchup,rid:x=>rid(x),
-  get ready(){return !!TAGS;}};
+  get ready(){return !!TAGS;},get tags(){return TAGS;}};
 })(typeof window!=='undefined'?window:globalThis);
