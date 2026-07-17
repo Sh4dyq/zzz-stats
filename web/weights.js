@@ -123,10 +123,17 @@ const _roleLabel=r=>{const x=_ROLES.find(e=>e[0]===r);return x?x[1]:r;};
 const _cw=(id,ms)=>((_W.cweights&&_W.cweights[id])||{})[ms]??50;
 const _tierBadge=(t,attr)=>`<span ${attr} style="display:inline-flex;align-items:center;justify-content:center;min-width:30px;height:22px;font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;font-size:14px;color:#181820;background:${t.c};border-radius:5px;padding:0 6px">${t.t}</span>`;
 
+// констелляции для показа: M0 — база (S-ранги: строка персонажа=M0, A-ранги: =M6),
+// поэтому M0 не отдельная строка; у A-рангов констелляций вообще нет.
+function _displayConsts(r){
+  if(r.c.rarity==='A')return [];
+  return ((_W.consts&&_W.consts[r.id])||[]).filter(c=>c.ms>0);
+}
+
 // строки констелляций — тот же формат, что у персонажа (со своим ползунком силы)
 function _constRowsHtml(r){
-  const cs=(_W.consts&&_W.consts[r.id])||[];
-  if(!cs.length)return `<tr data-detail><td colspan="7" style="padding:8px 14px 12px 46px;background:rgba(255,255,255,.015);color:var(--sub);font-size:13px">Нет сыгранных констелляций в матчах.</td></tr>`;
+  const cs=_displayConsts(r);
+  if(!cs.length)return `<tr data-detail><td colspan="7" style="padding:8px 14px 12px 46px;background:rgba(255,255,255,.015);color:var(--sub);font-size:13px">Нет сыгранных констелляций (M1+) в матчах.</td></tr>`;
   return cs.map(c=>{
     const cr={cost:c.cost,wr:c.wr,man:_cw(r.id,c.ms)};
     const power=_powerOf(cr,_W.wman),tier=_tierOf(power),mtier=_tierOf(_manPowerOf(cr));
@@ -192,9 +199,10 @@ function _renderWeights(){
       const tier=_tierOf(power);
       const mtier=_tierOf(_manPowerOf(r));
       const open=_W.expanded.has(r.id);
+      const hasC=_displayConsts(r).length>0;
       const badge=(t,attr)=>`<span ${attr} style="display:inline-flex;align-items:center;justify-content:center;min-width:30px;height:22px;font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;font-size:14px;color:#181820;background:${t.c};border-radius:5px;padding:0 6px">${t.t}</span>`;
       return `<tr data-ri="${idx}" style="border-top:1px solid var(--line)">
-        <td style="padding:9px 14px"><div style="display:flex;align-items:center;gap:9px;cursor:pointer" onclick="_toggleExpand('${r.id}')" title="Показать констелляции"><span style="color:var(--sub);width:12px;display:inline-block;transition:transform .15s;${open?'transform:rotate(90deg)':''}">▶</span>${iconChar(r.c,28)}<span style="font-weight:600">${r.c.name}</span><span style="font-size:11px;color:var(--sub);border:1px solid var(--border);border-radius:4px;padding:0 5px">${_roleLabel(r.role)}</span></div></td>
+        <td style="padding:9px 14px"><div style="display:flex;align-items:center;gap:9px;${hasC?'cursor:pointer':''}" ${hasC?`onclick="_toggleExpand('${r.id}')" title="Показать констелляции"`:''}><span style="color:var(--sub);width:12px;display:inline-block;transition:transform .15s;${open?'transform:rotate(90deg)':''};${hasC?'':'visibility:hidden'}">▶</span>${iconChar(r.c,28)}<span style="font-weight:600">${r.c.name}</span><span style="font-size:11px;color:var(--sub);border:1px solid var(--border);border-radius:4px;padding:0 5px">${_roleLabel(r.role)}</span></div></td>
         <td style="padding:9px 8px;font-family:'JetBrains Mono',monospace;color:var(--sub)">${r.cost!=null?r.cost:'—'}</td>
         <td style="padding:9px 8px;font-family:'JetBrains Mono',monospace;color:var(--sub)">${r.wr!=null?Math.round(r.wr*100)+'%':'—'}</td>
         <td style="padding:9px 8px;white-space:nowrap">
