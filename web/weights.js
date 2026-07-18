@@ -77,6 +77,15 @@ function _constsByChar(picks,matches,costs){
 
 async function pgWeights(){
   html(`<div class="card"><span class="spinner"></span> Считаю косты и винрейты…</div>`);
+  await _cmpLoadSolo();
+  _renderWeights();
+}
+// загрузка соло-данных (выделена из pgWeights: нужна и «Сравнению»)
+async function _cmpLoadSolo(){
+  if(!D.chars||!D.chars.length){ // прямой заход в «Сравнение» — D.chars ещё не загружен
+    D.chars=await _fetchAllW('characters');
+    D.charMap={};D.chars.forEach(c=>D.charMap[c.id]=c);
+  }
   const[costs,picks,matches,saved,csaved]=await Promise.all([
     _fetchAllW('tournament_costs'),_fetchAllW('match_picks'),_fetchAllW('matches'),_fetchAllW('char_weights'),_fetchAllW('char_const_weights')
   ]);
@@ -94,7 +103,6 @@ async function pgWeights(){
       picks:wr[c.id]?wr[c.id].picks:0,
       man:savedMap[c.id]?savedMap[c.id].manual_weight:50
     }));
-  _renderWeights();
 }
 
 // авто-z из коста и винрейта (грубая нормировка под шкалу; финальная калибровка — в predict.js)
@@ -164,13 +172,13 @@ function _analyticsTabs(){
   const secBtn=(v,l)=>`<button class="tbtn" style="${_W.section===v?'border-color:var(--accent);color:#fff':''}" onclick="_anaSection('${v}')">${l}</button>`;
   let sub='';
   if(_W.section==='power'){
-    const cb=(v,l,on)=>`<button class="tbtn" style="${_W.calib===v?'border-color:var(--accent);color:#fff':''}${on?'':';opacity:.5;cursor:not-allowed'}" ${on?`onclick="_anaCalib('${v}')"`:'disabled'}>${l}</button>`;
+    const cb=(v,l)=>`<button class="tbtn" style="${_W.calib===v?'border-color:var(--accent);color:#fff':''}" onclick="_anaCalib('${v}')">${l}</button>`;
     sub=`<div style="display:flex;gap:7px;flex-wrap:wrap;margin:0 0 14px">
       <span style="font-size:12px;color:var(--sub);align-self:center;margin-right:4px">Состав:</span>
-      ${cb('solo','Соло',true)}${cb('duo','Дуо',false)}${cb('trio','Трио',false)}</div>`;
+      ${cb('solo','Соло')}${cb('duo','Дуо')}${cb('trio','Трио')}${cb('cmp','Сравнение')}</div>`;
   }
   return `<div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:14px">
-    ${secBtn('power','Калибровка силы персонажей')}${secBtn('shiyu','Влияние бафов Шиюй')}${secBtn('consts','Теги + майндскейпы')}
+    ${secBtn('power','Калибровка силы персонажей')}${secBtn('spar','Спарринг')}${secBtn('shiyu','Влияние бафов Шиюй')}${secBtn('consts','Теги + майндскейпы')}
   </div>${sub}`;
 }
 function _anaSection(v){_W.section=v;_renderWeights();}
@@ -183,8 +191,11 @@ function _anaStub(title,note){
 function _renderWeights(){
   if(_W.section==='shiyu')return _renderShiyuBuffs();
   if(_W.section==='consts')return _renderTagsEditor();
+  if(_W.section==='spar')return _renderSparring();
   // section='power'
-  if(_W.calib!=='solo')return _anaStub('Калибровка силы — '+(_W.calib==='duo'?'Дуо':'Трио'),'Раздел в разработке.');
+  if(_W.calib==='duo')return _renderTeams(2);
+  if(_W.calib==='trio')return _renderTeams(3);
+  if(_W.calib==='cmp')return _renderCompare();
   const w=_W.wman;
   const rf=_W.roleFilter;
   let rows=_W.rows.map(r=>({r,power:_powerOf(r,w)}));
@@ -539,6 +550,69 @@ async function _tagImport(){
   _W.tagsLoaded=false;_tagStatus('✓ импортировано '+payload.length);toast('Теги импортированы в БД');_renderTagsEditor();
 }
 
+// ===== Ключевые слова бафов Шиюй: таксономия + автоматч + уверенность =====
+// Категории с цветами. Автоматч подсвечивает распознанное; по категориям решаем,
+// можно ли гейтить авто (элемент/тип урона — да) или нужен ручной выбор персонажей
+// (кнопочные клаузы: доля урона по конкретной кнопке у персонажей разная).
+const _KW_CAT={element:{l:'Элемент',c:'#5b9dff'},archetype:{l:'Тип урона',c:'#b18cff'},
+  button:{l:'Тип атаки',c:'#ffab5b'},stat:{l:'Стат / эффект',c:'#4fd6b8'},cond:{l:'Условие',c:'#8a8a99'}};
+const _KW_TERMS=[
+  ['physical','element'],['fire','element'],['ice','element'],['electric','element'],['ether','element'],['wind','element'],
+  ['anomaly proficiency','archetype'],['anomaly buildup','archetype'],['attribute anomaly','archetype'],['sheer force','archetype'],
+  ['sheer','archetype'],['anomaly','archetype'],['abloom','archetype'],['disorder','archetype'],['daze','archetype'],['stun','archetype'],
+  ['ex special attack','button'],['basic attack','button'],['dash attack','button'],['special attack','button'],['chain attack','button'],
+  ['ultimate','button'],['quick assist','button'],['defensive assist','button'],['assist follow-up','button'],['aftershock','button'],
+  ['dodge counter','button'],['assist','button'],
+  ['all-attribute res','stat'],['attribute dmg res','stat'],['crit rate','stat'],['crit dmg','stat'],['pen ratio','stat'],
+  ['res','stat'],['def','stat'],['atk','stat'],['crit','stat'],['pen','stat'],['impact','stat'],['energy','stat'],['decibel','stat'],
+  ['dmg','stat'],['damage','stat'],['hp','stat'],
+  ['on hit','cond'],['repeated triggers','cond'],['afflicted','cond'],['when','cond'],['after','cond'],['upon','cond'],['while','cond'],
+].sort((a,b)=>b[0].length-a[0].length);
+function _kwScan(text){
+  const low=(text||'').toLowerCase();const used=new Array(low.length).fill(false);const ranges=[];
+  _KW_TERMS.forEach(([term,cat])=>{
+    let idx=0;
+    while((idx=low.indexOf(term,idx))!==-1){
+      const before=idx===0||!/[a-z]/.test(low[idx-1]);
+      const after=idx+term.length>=low.length||!/[a-z]/.test(low[idx+term.length]);
+      let free=true;for(let k=idx;k<idx+term.length;k++)if(used[k]){free=false;break;}
+      if(before&&after&&free){ranges.push({s:idx,e:idx+term.length,cat,term});for(let k=idx;k<idx+term.length;k++)used[k]=true;}
+      idx+=term.length;
+    }
+  });
+  ranges.sort((a,b)=>a.s-b.s);
+  const byCat={element:[],archetype:[],button:[],stat:[],cond:[]};
+  ranges.forEach(r=>{if(!byCat[r.cat].includes(r.term))byCat[r.cat].push(r.term);});
+  return {ranges,byCat};
+}
+function _kwHighlight(text){
+  if(!text)return '<span style="color:var(--sub)">— нет текста —</span>';
+  const {ranges}=_kwScan(text);let out='',pos=0;
+  ranges.forEach(r=>{if(r.s<pos)return;out+=escapeHtml(text.slice(pos,r.s));
+    const col=_KW_CAT[r.cat].c;
+    out+=`<mark style="background:${col}22;color:${col};border-radius:3px;padding:0 3px" title="${_KW_CAT[r.cat].l}">${escapeHtml(text.slice(r.s,r.e))}</mark>`;
+    pos=r.e;});
+  out+=escapeHtml(text.slice(pos));return out;
+}
+// уверенность авто-гейта части по распознанным категориям
+function _partConfidence(e){
+  const s=_kwScan(e.desc||'');
+  const hasEl=s.byCat.element.length>0,hasArch=s.byCat.archetype.length>0,hasBtn=s.byCat.button.length>0;
+  if(e.chars&&e.chars.length)return{c:'#3ddc84',t:`вручную: ${e.chars.length} перс.`};
+  if(hasBtn&&!hasEl&&!hasArch)return{c:'#ff6b6b',t:'кнопочный — авто не справится, укажи персонажей'};
+  if(hasBtn&&(hasEl||hasArch))return{c:'#f5c842',t:'ограничение по кнопке — проверь/уточни'};
+  if(hasArch)return{c:'#3ddc84',t:'авто по типу урона'};
+  if(hasEl)return{c:'#3ddc84',t:'авто по элементу'};
+  return{c:'#f5c842',t:'проверь — авто не уверен'};
+}
+function _kwLegend(){
+  return `<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:10px;font-size:11px">`
+    +Object.values(_KW_CAT).map(v=>`<span style="display:inline-flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:${v.c}"></span>${v.l}</span>`).join('')
+    +`<span style="display:inline-flex;align-items:center;gap:4px;margin-left:8px"><span style="width:10px;height:10px;border-radius:50%;background:#3ddc84"></span>авто</span>`
+    +`<span style="display:inline-flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:50%;background:#f5c842"></span>проверить</span>`
+    +`<span style="display:inline-flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:50%;background:#ff6b6b"></span>вручную</span></div>`;
+}
+
 // ===== Влияние бафов Шиюй (Аналитика → Влияние бафов Шиюй) =====
 // Три блока: (1) справочник множителей всех семейств бафов, (2) какие бафы у турниров,
 // (3) редактор текущих множителей выбранного турнира. Константы зеркалят tournaments.js
@@ -660,8 +734,12 @@ function _renderShiyuBuffs(){
           <div style="max-height:220px;overflow:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:2px 10px">${list}</div>
           <button class="btn" style="padding:2px 10px;margin-top:8px" onclick="_shyPartTgl(${i})">Готово</button></div>`;
       }
-      return `<div style="border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:10px;background:var(--card)">
-        <input value="${escapeHtml(e.desc||'')}" onchange="_shyPartField(${i},'desc',this.value)" placeholder="описание части бафа" style="${inSt};width:100%;margin-bottom:10px">
+      const conf=_partConfidence(e);
+      return `<div style="border:1px solid var(--border);border-left:3px solid ${conf.c};border-radius:10px;padding:12px 14px;margin-bottom:10px;background:var(--card)">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap">
+          <span style="font-size:11px;font-weight:600;color:${conf.c};border:1px solid ${conf.c}66;border-radius:10px;padding:1px 9px">${conf.t}</span></div>
+        <div style="font-size:13px;line-height:1.55;margin-bottom:8px">${_kwHighlight(e.desc||'')}</div>
+        <input value="${escapeHtml(e.desc||'')}" onchange="_shyPartField(${i},'desc',this.value)" placeholder="править текст части" style="${inSt};width:100%;margin-bottom:10px;font-size:12px;opacity:.8">
         <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap">
           <label style="font-size:12px;color:var(--sub)">Тип <select onchange="_shyPartField(${i},'tag',this.value)" style="${inSt};margin-left:4px">${tagOpt(e)}</select></label>
           <span style="font-size:12px;color:var(--sub)">Сила ${_seg(e.w!=null?e.w:_w04(e.mag),`_shyEffW(${i},{v})`)}</span>
@@ -689,7 +767,8 @@ function _renderShiyuBuffs(){
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
         <span style="font-size:13px;color:var(--sub)">Общая сила бафа (0-4)</span>${_seg(_w04(d.strength),'_shyStr({v})')}</div>
       <div style="font-size:13px;font-weight:600;margin-bottom:8px">Части бафа</div>
-      <div style="font-size:12px;color:var(--sub);margin:-4px 0 10px;line-height:1.5">Каждую клаузу бафа можно вынести отдельной частью: тип, сила 0-4, «работает» % и список персонажей, для кого она реально применяется (если пусто — авто-гейт по элементу/архетипу/формуле урона).</div>
+      <div style="font-size:12px;color:var(--sub);margin:-4px 0 10px;line-height:1.5">Ключевые слова подсвечены по категориям. Цвет слева от карточки — уверенность авто-гейта: <b style="color:#3ddc84">зелёный</b> авто (элемент/тип урона), <b style="color:#f5c842">жёлтый</b> проверь, <b style="color:#ff6b6b">красный</b> кнопочный — укажи персонажей вручную.</div>
+      ${_kwLegend()}
       ${partsHTML}
       <button class="btn" style="padding:3px 12px;margin-top:4px" onclick="_shyEffAdd()">+ часть</button>
       <div style="margin-top:16px"><button class="btn btn-y" onclick="_shySave()">Сохранить баф</button>
@@ -749,4 +828,319 @@ async function _shySave(){
   if(dbErr(error,'сохранение бафа')){set('ошибка','var(--red)');return;}
   t.shiyu_data=sd;const dt=(D.tours||[]).find(x=>x.id===_W.shyTour);if(dt)dt.shiyu_data=sd;
   set('✓ сохранено','var(--accent)');toast('Баф сохранён');
+}
+
+// ===== Дуо / Трио: ручные рейтинги пар и троек (Аналитика → Калибровка силы) =====
+// Таблица team_ratings: key = "cid:ms|cid:ms[|cid:ms]" (cid сортированы), members jsonb,
+// stars_synergy / stars_power 0-5. A-ранги всегда M6 (клик по бейджу заблокирован).
+// Подсказка из данных: винрейт реальных пиков (пары = подмножества троек матчей).
+
+function _tmKey(members){ // канонический ключ состава
+  return members.slice().sort((a,b)=>String(a.cid).localeCompare(String(b.cid)))
+    .map(m=>m.cid+':'+m.ms).join('|');
+}
+function _tmStatsCalc(picks,matches){ // винрейты пар и троек из реальных пиков
+  const mBy={};matches.forEach(m=>mBy[m.id]=m);
+  // сторона драфта = 6 пиков, но играются ДВЕ тройки → группируем по team_slot;
+  // пары считаем только ВНУТРИ тройки (реально играли вместе), не по всей шестёрке
+  const teams={};
+  picks.forEach(p=>{const k=p.match_id+'|'+p.player_id+'|'+(p.team_slot??0);
+    (teams[k]=teams[k]||{cids:[],m:p.match_id,pl:p.player_id}).cids.push(String(p.character_id));});
+  const pair={},trio={};
+  Object.values(teams).forEach(t=>{
+    const m=mBy[t.m];if(!m||!m.winner_id)return;
+    const win=m.winner_id===t.pl?1:0;const c=[...new Set(t.cids)].sort();
+    for(let i=0;i<c.length;i++)for(let j=i+1;j<c.length;j++){
+      const k=c[i]+'|'+c[j];(pair[k]=pair[k]||{g:0,w:0});pair[k].g++;pair[k].w+=win;}
+    if(c.length===3){const k=c.join('|');(trio[k]=trio[k]||{g:0,w:0});trio[k].g++;trio[k].w+=win;}
+  });
+  return{pair,trio};
+}
+async function _tmLoad(){
+  const jobs=[_fetchAllW('team_ratings')];
+  jobs.push((D.chars&&D.chars.length)?Promise.resolve(D.chars):_fetchAllW('characters'));
+  jobs.push(_W.tmStats?Promise.resolve(null):_fetchAllW('match_picks'));
+  jobs.push(_W.tmStats?Promise.resolve(null):_fetchAllW('matches'));
+  const[rows,chars,picks,matches]=await Promise.all(jobs);
+  _W.tmRows={};rows.forEach(r=>_W.tmRows[r.key]=r);
+  _W.tmChars=chars.slice().sort((a,b)=>(a.name||'').localeCompare(b.name||'','ru'));
+  _W.tmCharMap={};chars.forEach(c=>_W.tmCharMap[c.id]=c);
+  if(picks)_W.tmStats=_tmStatsCalc(picks,matches);
+  _W.tmLoaded=true;
+}
+const _KB_TM=8; // прайор байес-винрейта пар/троек (выборки крошечные)
+function _tmWr(cids){
+  const s=_W.tmStats||{pair:{},trio:{}};
+  const c=cids.map(String).sort();
+  const rec=c.length===2?s.pair[c.join('|')]:s.trio[c.join('|')];
+  if(!rec)return null;
+  return{g:rec.g,wr:(rec.w+_KB_TM*0.5)/(rec.g+_KB_TM)};
+}
+// звёзды 0-5: клик по активной гасит в 0
+function _stars(cur,call){
+  cur=+cur||0;let s='';
+  for(let i=1;i<=5;i++)s+=`<span onclick="${call.replace('{v}',i===cur?0:i)}" style="cursor:pointer;font-size:18px;line-height:1;color:${i<=cur?'#f5c842':'var(--border)'};user-select:none">★</span>`;
+  return `<span style="white-space:nowrap;letter-spacing:2px">${s}</span>`;
+}
+function _tmMsBadge(c,ms,call){ // бейдж майндскейпа; A-ранг залочен на M6
+  const isA=c&&c.rarity==='A';
+  const v=isA?6:(+ms||0);
+  const base=`display:inline-block;min-width:26px;text-align:center;font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;border:1px solid var(--border);border-radius:4px;padding:1px 4px;color:${(isA||v>0)?'#f5c842':'var(--sub)'};`;
+  if(isA||!call)return `<span title="${isA?'A-ранг — всегда M6':''}" style="${base}cursor:default">M${v}</span>`;
+  return `<span title="Клик — сменить майндскейп" onclick="${call}" style="${base}cursor:pointer">M${v}</span>`;
+}
+
+function _renderTeams(size){
+  if(!_W.tmLoaded){
+    html(`${_analyticsTabs()}<div class="card" style="padding:22px"><span class="spinner"></span> Загружаю пары/тройки и статистику пиков…</div>`);
+    _tmLoad().then(()=>_renderWeights()).catch(e=>html(`${_analyticsTabs()}<div class="card" style="padding:22px;color:var(--red)">Ошибка загрузки: ${e.message}</div>`));
+    return;
+  }
+  const label=size===2?'пар':'троек';
+  if(!_W.tmNew||_W.tmNew.size!==size)_W.tmNew={size,slots:Array(size).fill(''),ms:Array(size).fill(0)};
+  const n=_W.tmNew;
+  const inSt='background:var(--field);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:4px 7px;font-size:13px';
+  // форма создания: N селектов + бейджи M
+  const slotSel=i=>{
+    const taken=new Set(n.slots.filter((v,j)=>v&&j!==i));
+    const opts=['<option value="">— персонаж —</option>']
+      .concat(_W.tmChars.filter(c=>!taken.has(c.id)).map(c=>`<option value="${c.id}" ${n.slots[i]===c.id?'selected':''}>${escapeHtml(c.name)}${c.rarity==='A'?' (A)':''}</option>`));
+    const c=_W.tmCharMap[n.slots[i]];
+    return `<span style="display:inline-flex;align-items:center;gap:6px">
+      ${c?iconChar(c,28):''}
+      <select onchange="_tmSlot(${i},this.value)" style="${inSt};min-width:170px">${opts.join('')}</select>
+      ${n.slots[i]?_tmMsBadge(c,n.ms[i],`_tmMsCycle(${i})`):''}</span>`;
+  };
+  const createForm=`<div class="card" style="padding:14px 16px;margin-bottom:16px">
+    <div style="font-size:13px;font-weight:600;margin-bottom:10px">Новая ${size===2?'пара':'тройка'}</div>
+    <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap">
+      ${Array.from({length:size},(_,i)=>slotSel(i)).join('<span style="color:var(--sub)">+</span>')}
+      <button class="btn btn-y" onclick="_tmAdd()">Добавить</button>
+      <span id="tm-status" style="font-size:12px;color:var(--sub)"></span>
+    </div>
+    <div style="font-size:11px;color:var(--sub);margin-top:8px">Клик по бейджу M — смена майндскейпа (A-ранги всегда M6). Дубликаты по составу+констам не создаются.</div>
+  </div>`;
+  // список сохранённых
+  const rows=Object.values(_W.tmRows).filter(r=>r.size===size)
+    .sort((a,b)=>(b.stars_power-a.stars_power)||(b.stars_synergy-a.stars_synergy)||a.key.localeCompare(b.key));
+  const rowHTML=r=>{
+    const mem=r.members||[];
+    const chips=mem.map(m=>{const c=_W.tmCharMap[m.cid]||{name:'?'};
+      return `<span style="display:inline-flex;align-items:center;gap:5px;margin-right:10px">${iconChar(c,26)}<span style="font-size:13px;font-weight:600">${escapeHtml(c.name||'?')}</span>${_tmMsBadge(c,m.ms,'')}</span>`;}).join('');
+    const wr=_tmWr(mem.map(m=>m.cid));
+    const wrTxt=wr?`<span title="байес-винрейт по реальным пикам (прайор ${_KB_TM})" style="font-family:'JetBrains Mono',monospace;font-size:12px;color:${wr.wr>=0.5?'#3ddc84':'#ff8a8a'}">${Math.round(wr.wr*100)}% · ${wr.g} игр</span>`
+      :'<span style="font-size:11px;color:var(--sub)">нет пиков</span>';
+    return `<tr style="border-top:1px solid var(--line)">
+      <td style="padding:9px 14px">${chips}</td>
+      <td style="padding:9px 8px;text-align:center;white-space:nowrap">${_stars(r.stars_synergy,`_tmStar('${r.key}','stars_synergy',{v})`)}</td>
+      <td style="padding:9px 8px;text-align:center;white-space:nowrap">${_stars(r.stars_power,`_tmStar('${r.key}','stars_power',{v})`)}</td>
+      <td style="padding:9px 8px;text-align:center">${wrTxt}</td>
+      <td style="padding:9px 8px;min-width:160px"><input value="${escapeHtml(r.note||'')}" placeholder="заметка" onchange="_tmNote('${r.key}',this.value)" style="${inSt};width:100%;font-size:12px"></td>
+      <td style="padding:9px 10px;text-align:center"><button class="btn" style="padding:2px 9px" onclick="_tmDel('${r.key}')">✕</button></td></tr>`;
+  };
+  const list=rows.length?`<div class="card" style="padding:0;overflow:hidden"><table style="width:100%;border-collapse:collapse">
+    <thead><tr style="font-size:11px;color:var(--sub);text-transform:uppercase;text-align:left">
+      <th style="padding:10px 14px">Состав</th><th style="padding:10px 8px;text-align:center">Синергия</th>
+      <th style="padding:10px 8px;text-align:center">Сила</th><th style="padding:10px 8px;text-align:center">Факт (пики)</th>
+      <th style="padding:10px 8px">Заметка</th><th></th></tr></thead>
+    <tbody>${rows.map(rowHTML).join('')}</tbody></table></div>`
+    :`<div class="card" style="padding:18px;color:var(--sub);font-size:13px">Пока нет сохранённых ${label}. Собери первую выше.</div>`;
+  html(`${_analyticsTabs()}${createForm}
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+      <span class="count-chip">${rows.length} ${label}</span>
+      <span style="font-size:12px;color:var(--sub)">Звёзды сохраняются сразу. «Факт» — винрейт состава по реальным пикам матчей (без учёта конст).</span></div>
+    ${list}`);
+}
+function _tmSlot(i,cid){const n=_W.tmNew;n.slots[i]=cid;
+  const c=_W.tmCharMap[cid];n.ms[i]=(c&&c.rarity==='A')?6:0;_renderWeights();}
+function _tmMsCycle(i){const n=_W.tmNew;const c=_W.tmCharMap[n.slots[i]];
+  if(c&&c.rarity==='A')return;n.ms[i]=(n.ms[i]+1)%7;_renderWeights();}
+function _tmSt(s,c){const el=document.getElementById('tm-status');if(el){el.textContent=s;el.style.color=c||'var(--sub)';}}
+async function _tmAdd(){
+  const n=_W.tmNew;
+  if(n.slots.some(v=>!v))return _tmSt('выбери всех персонажей','var(--red)');
+  const members=n.slots.map((cid,i)=>{const c=_W.tmCharMap[cid];
+    return{cid,ms:(c&&c.rarity==='A')?6:n.ms[i]};});
+  const key=_tmKey(members);
+  if(_W.tmRows[key])return _tmSt('такой состав уже есть','var(--red)');
+  const row={key,size:n.size,members,stars_synergy:0,stars_power:0,note:'',updated_at:new Date().toISOString()};
+  _tmSt('сохранение…');
+  const{error}=await sb.from('team_ratings').upsert(row,{onConflict:'key'});
+  if(dbErr(error,'создание состава'))return _tmSt('ошибка','var(--red)');
+  _W.tmRows[key]=row;_W.tmNew=null;_renderWeights();toast('Состав добавлен');
+}
+async function _tmSave(key){
+  const r=_W.tmRows[key];if(!r)return;
+  r.updated_at=new Date().toISOString();
+  const{error}=await sb.from('team_ratings').upsert(r,{onConflict:'key'});
+  if(dbErr(error,'сохранение рейтинга'))return _tmSt('ошибка','var(--red)');
+  _tmSt('✓ сохранено','var(--accent)');
+}
+function _tmStar(key,field,v){const r=_W.tmRows[key];if(!r)return;r[field]=+v||0;_tmSave(key);_renderWeights();}
+function _tmNote(key,v){const r=_W.tmRows[key];if(!r)return;r.note=v;_tmSave(key);}
+async function _tmDel(key){
+  if(!confirm('Удалить состав?'))return;
+  const{error}=await sb.from('team_ratings').delete().eq('key',key);
+  if(dbErr(error,'удаление состава'))return;
+  delete _W.tmRows[key];_renderWeights();
+}
+
+// ===== Сравнение Соло / Дуо / Трио =====
+// Единая шкала 0-100: соло = blended-Сила (как на вкладке Соло); дуо/трио = stars_power*20.
+// Рядом — звёзды синергии (для команд) и факт-винрейт из пиков.
+function _renderCompare(){
+  if(!_W.rows.length){
+    html(`${_analyticsTabs()}<div class="card" style="padding:22px"><span class="spinner"></span> Загружаю соло-калибровку…</div>`);
+    _cmpLoadSolo().then(()=>_renderWeights()).catch(e=>html(`${_analyticsTabs()}<div class="card" style="padding:22px;color:var(--red)">Ошибка: ${e.message}</div>`));
+    return;
+  }
+  if(!_W.tmLoaded){
+    html(`${_analyticsTabs()}<div class="card" style="padding:22px"><span class="spinner"></span> Загружаю пары/тройки…</div>`);
+    _tmLoad().then(()=>_renderWeights()).catch(e=>html(`${_analyticsTabs()}<div class="card" style="padding:22px;color:var(--red)">Ошибка: ${e.message}</div>`));
+    return;
+  }
+  const bar=(v,color)=>`<div style="display:flex;align-items:center;gap:8px">
+    <span style="font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:600;color:#fff;min-width:26px;text-align:right">${Math.round(v)}</span>
+    <span style="flex:1;height:6px;background:var(--field);border-radius:3px;overflow:hidden;min-width:50px"><span style="display:block;height:100%;width:${Math.max(2,Math.round(v))}%;background:${color||'var(--grad)'}"></span></span></div>`;
+  const cardSt='background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px';
+  const hd=t=>`<div style="font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;font-size:14px;letter-spacing:.03em;margin-bottom:10px">${t}</div>`;
+  // соло: топ-20 по blended-силе
+  const solo=_W.rows.map(r=>({r,p:_powerOf(r,_W.wman)})).sort((a,b)=>b.p-a.p).slice(0,20)
+    .map(({r,p})=>`<div style="display:grid;grid-template-columns:1fr 130px;gap:8px;align-items:center;padding:4px 0;border-top:1px solid var(--line)">
+      <span style="display:inline-flex;align-items:center;gap:7px;min-width:0">${iconChar(r.c,24)}<span style="font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(r.c.name)}</span></span>
+      ${bar(p)}</div>`).join('');
+  const starRow=v=>{let s='';for(let i=1;i<=5;i++)s+=`<span style="color:${i<=v?'#f5c842':'var(--border)'}">★</span>`;return s;};
+  const teamCol=size=>{
+    const rows=Object.values(_W.tmRows).filter(r=>r.size===size)
+      .sort((a,b)=>(b.stars_power-a.stars_power)||(b.stars_synergy-a.stars_synergy));
+    if(!rows.length)return `<div style="color:var(--sub);font-size:12px;padding:8px 0">Нет оценённых — добавь на вкладке «${size===2?'Дуо':'Трио'}».</div>`;
+    return rows.map(r=>{
+      const icons=(r.members||[]).map(m=>iconChar(_W.tmCharMap[m.cid]||{},22)).join('');
+      const nameTxt=(r.members||[]).map(m=>{const c=_W.tmCharMap[m.cid]||{};return (c.name||'?')+(m.ms?` M${m.ms}`:'');}).join(' + ');
+      const wr=_tmWr((r.members||[]).map(m=>m.cid));
+      return `<div style="padding:5px 0;border-top:1px solid var(--line)">
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">
+          <span style="display:inline-flex;gap:2px">${icons}</span>
+          <span style="font-size:11.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0" title="${escapeHtml(nameTxt)}">${escapeHtml(nameTxt)}</span></div>
+        <div style="display:grid;grid-template-columns:1fr auto auto;gap:10px;align-items:center">
+          ${bar(r.stars_power*20,'#b18cff')}
+          <span title="синергия" style="font-size:12px;letter-spacing:1px">${starRow(r.stars_synergy)}</span>
+          <span style="font-size:11px;color:var(--sub);min-width:56px;text-align:right">${wr?Math.round(wr.wr*100)+'% · '+wr.g:'—'}</span></div></div>`;
+    }).join('');
+  };
+  html(`${_analyticsTabs()}
+  <div style="font-size:12px;color:var(--sub);margin-bottom:12px;line-height:1.5">Единая шкала 0-100: соло — blended-Сила (ручной вес × авто), дуо/трио — Сила·20 из звёзд. Справа у команд: ★ синергии и факт-винрейт по пикам.</div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px">
+    <div style="${cardSt}">${hd('Соло — топ-20')}${solo||'<div style="color:var(--sub);font-size:12px">нет данных</div>'}</div>
+    <div style="${cardSt}">${hd('Дуо')}${teamCol(2)}</div>
+    <div style="${cardSt}">${hd('Трио')}${teamCol(3)}</div>
+  </div>`);
+}
+
+// ===== Спарринг-калибровка (Аналитика → Спарринг: Соло/Дуо/Трио) =====
+// Парные сравнения рандомных вариантов, подобранных ПО РОЛЯМ (см. weights-roadmap):
+// правая сторона повторяет ролевой профиль левой — не сравниваем 2 ДД против 2 станнеров.
+// Персонажи МОГУТ повторяться между сторонами (дуо/трио), составы не идентичны.
+// Клик по стороне → голос в sparring_votes; «Сложно / ничья» → замена без записи.
+// Майндскейпы: S-ранги M0, A-ранги M6 (турнирная конвенция predict).
+const _SP_ROLE_LBL={atk:'ДД',stun:'Стан',sup:'Саппорт',ano:'Аномалия',rupt:'Разлом',def:'Защита'};
+async function _spLoad(){
+  if(!_W.tmLoaded)await _tmLoad();                       // ростер + карта персонажей
+  const votes=await _fetchAllW('sparring_votes');
+  _W.spCounts={1:0,2:0,3:0};votes.forEach(v=>_W.spCounts[v.size]=(_W.spCounts[v.size]||0)+1);
+  _W.spLoaded=true;
+}
+function _spPool(){return _W.tmChars.filter(c=>c.role);}  // только с известной ролью
+const _spPick=arr=>arr[Math.floor(Math.random()*arr.length)];
+function _spMs(c){return c.rarity==='A'?6:0;}
+// команда size персонажей: рандом без повторов внутри команды; roleTpl (если задан) —
+// ролевой мультисет, который надо повторить
+function _spTeam(size,roleTpl){
+  const pool=_spPool();
+  const team=[];const used=new Set();
+  const roles=roleTpl?roleTpl.slice():null;
+  for(let i=0;i<size;i++){
+    let cand=pool.filter(c=>!used.has(c.id));
+    if(roles){const r=roles[i];const byRole=cand.filter(c=>c.role===r);if(byRole.length)cand=byRole;}
+    if(!cand.length)return null;
+    const c=_spPick(cand);used.add(c.id);team.push(c);
+  }
+  return team;
+}
+function _spGen(){
+  const size=_W.sparSize||1;
+  const pool=_spPool();if(pool.length<size+1)return null;
+  for(let tries=0;tries<50;tries++){
+    const left=_spTeam(size,null);if(!left)continue;
+    const tpl=left.map(c=>c.role);
+    const right=_spTeam(size,tpl);if(!right)continue;
+    const lk=left.map(c=>c.id).sort().join('|'),rk=right.map(c=>c.id).sort().join('|');
+    if(lk===rk)continue;                                  // полностью одинаковые составы
+    if(size===1&&left[0].id===right[0].id)continue;       // соло: сам с собой
+    return{left,right};
+  }
+  return null;
+}
+function _spNext(){_W.spCur=_spGen();_renderWeights();}
+function _renderSparring(){
+  if(!_W.spLoaded){
+    html(`${_analyticsTabs()}<div class="card" style="padding:22px"><span class="spinner"></span> Загружаю ростер и голоса…</div>`);
+    _spLoad().then(()=>{_W.spCur=null;_renderWeights();})
+      .catch(e=>html(`${_analyticsTabs()}<div class="card" style="padding:22px;color:var(--red)">Ошибка загрузки: ${e.message}</div>`));
+    return;
+  }
+  const size=_W.sparSize||1;
+  if(!_W.spCur)_W.spCur=_spGen();
+  const cur=_W.spCur;
+  const sb2=(v,l)=>`<button class="tbtn" style="${size===v?'border-color:var(--accent);color:#fff':''}" onclick="_spMode(${v})">${l}</button>`;
+  const tabs=`<div style="display:flex;gap:7px;flex-wrap:wrap;margin:0 0 14px">
+    <span style="font-size:12px;color:var(--sub);align-self:center;margin-right:4px">Состав:</span>
+    ${sb2(1,'Соло')}${sb2(2,'Дуо')}${sb2(3,'Трио')}
+    <span style="font-size:12px;color:var(--sub);align-self:center;margin-left:14px">за сессию: <b style="color:#fff">${_W.spSession||0}</b> · всего в БД: <b style="color:#fff">${_W.spCounts[size]||0}</b></span>
+  </div>`;
+  if(!cur){
+    html(`${_analyticsTabs()}${tabs}<div class="card" style="padding:22px;color:var(--sub)">Не удалось собрать пару вариантов (мало персонажей с ролями).</div>`);
+    return;
+  }
+  const sideCard=(team,side)=>{
+    const chips=team.map(c=>`<div style="display:flex;flex-direction:column;align-items:center;gap:6px;width:86px">
+      ${iconChar(c,64)}
+      <span style="font-size:12.5px;font-weight:600;text-align:center;line-height:1.2">${escapeHtml(c.name)}</span>
+      <span style="display:flex;gap:4px;align-items:center">
+        <span style="font-size:10px;color:var(--sub);border:1px solid var(--border);border-radius:3px;padding:0 4px">${_SP_ROLE_LBL[c.role]||c.role||'?'}</span>
+        <span style="font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;color:${_spMs(c)?'#f5c842':'var(--sub)'}">M${_spMs(c)}</span>
+      </span></div>`).join('');
+    return `<div onclick="_spVote('${side}')" title="Клик — этот вариант сильнее"
+      style="flex:1;min-width:250px;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:22px 18px;cursor:pointer;transition:border-color .12s,transform .12s"
+      onmouseover="this.style.borderColor='var(--accent)';this.style.transform='translateY(-2px)'"
+      onmouseout="this.style.borderColor='var(--border)';this.style.transform=''">
+      <div style="display:flex;gap:14px;justify-content:center;flex-wrap:wrap">${chips}</div>
+      <div style="text-align:center;margin-top:14px;font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;font-size:13px;letter-spacing:.04em;color:var(--sub)">Сильнее ${side==='left'?'левый':'правый'}</div>
+    </div>`;
+  };
+  html(`${_analyticsTabs()}${tabs}
+  <div style="font-size:12px;color:var(--sub);margin-bottom:14px;line-height:1.5">Кликни вариант, который кажется сильнее (в вакууме, без учёта врагов). Роли сторон совпадают. «Сложно / ничья» — заменить пару без записи. Норма итерации — пара десятков ответов.</div>
+  <div style="display:flex;gap:16px;align-items:stretch;flex-wrap:wrap">
+    ${sideCard(cur.left,'left')}
+    <div style="display:flex;flex-direction:column;justify-content:center;gap:10px;align-self:center">
+      <span style="font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;font-size:22px;color:var(--sub);text-align:center">VS</span>
+      <button class="btn" style="padding:8px 14px" onclick="_spSkip()">Сложно / ничья</button>
+    </div>
+    ${sideCard(cur.right,'right')}
+  </div>
+  <div style="margin-top:12px"><span id="sp-status" style="font-size:12px;color:var(--sub)"></span></div>`);
+}
+function _spMode(v){_W.sparSize=v;_W.spCur=null;_W.spSession=0;_renderWeights();}
+function _spSkip(){_spNext();}
+function _spSt(s,c){const el=document.getElementById('sp-status');if(el){el.textContent=s;el.style.color=c||'var(--sub)';}}
+async function _spVote(side){
+  const cur=_W.spCur;if(!cur)return;
+  const size=_W.sparSize||1;
+  const pack=t=>t.map(c=>({cid:c.id,ms:_spMs(c)}));
+  const row={size,left_team:pack(cur.left),right_team:pack(cur.right),winner:side};
+  _spNext();                                             // мгновенно следующая пара
+  _W.spSession=(_W.spSession||0)+1;
+  const{error}=await sb.from('sparring_votes').insert(row);
+  if(dbErr(error,'запись голоса')){_W.spSession--;_spSt('голос НЕ записан (нет таблицы/авторизации?)','var(--red)');return;}
+  _W.spCounts[size]=(_W.spCounts[size]||0)+1;_spSt('✓ записано','var(--accent)');
 }
