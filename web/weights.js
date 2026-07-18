@@ -175,7 +175,12 @@ function _analyticsTabs(){
     const cb=(v,l)=>`<button class="tbtn" style="${_W.calib===v?'border-color:var(--accent);color:#fff':''}" onclick="_anaCalib('${v}')">${l}</button>`;
     sub=`<div style="display:flex;gap:7px;flex-wrap:wrap;margin:0 0 14px">
       <span style="font-size:12px;color:var(--sub);align-self:center;margin-right:4px">Состав:</span>
-      ${cb('solo','Соло')}${cb('duo','Дуо')}${cb('trio','Трио')}${cb('cmp','Сравнение')}</div>`;
+      ${cb('solo','Соло')}${cb('duo','Дуо')}${cb('trio','Трио')}</div>`;
+  }
+  if(_W.section==='spar'){
+    const sv=_W.sparView||'spar';
+    const vb=(v,l)=>`<button class="tbtn" style="${sv===v?'border-color:var(--accent);color:#fff':''}" onclick="_anaSparView('${v}')">${l}</button>`;
+    sub=`<div style="display:flex;gap:7px;flex-wrap:wrap;margin:0 0 14px">${vb('spar','Спарринг')}${vb('cmp','Сравнение')}</div>`;
   }
   return `<div style="display:flex;gap:7px;flex-wrap:wrap;margin-bottom:14px">
     ${secBtn('power','Калибровка силы персонажей')}${secBtn('spar','Спарринг')}${secBtn('shiyu','Влияние бафов Шиюй')}${secBtn('consts','Теги + майндскейпы')}
@@ -183,6 +188,7 @@ function _analyticsTabs(){
 }
 function _anaSection(v){_W.section=v;_renderWeights();}
 function _anaCalib(v){_W.calib=v;_renderWeights();}
+function _anaSparView(v){_W.sparView=v;_renderWeights();}
 // заглушка-раздел (пока не реализован)
 function _anaStub(title,note){
   html(`${_analyticsTabs()}<div class="card" style="padding:22px"><h3 style="margin:0 0 8px">${title}</h3>
@@ -191,11 +197,10 @@ function _anaStub(title,note){
 function _renderWeights(){
   if(_W.section==='shiyu')return _renderShiyuBuffs();
   if(_W.section==='consts')return _renderTagsEditor();
-  if(_W.section==='spar')return _renderSparring();
+  if(_W.section==='spar')return (_W.sparView==='cmp')?_renderCompare():_renderSparring();
   // section='power'
   if(_W.calib==='duo')return _renderTeams(2);
   if(_W.calib==='trio')return _renderTeams(3);
-  if(_W.calib==='cmp')return _renderCompare();
   const w=_W.wman;
   const rf=_W.roleFilter;
   let rows=_W.rows.map(r=>({r,power:_powerOf(r,w)}));
@@ -357,13 +362,16 @@ const _NAME_ALIAS={Nicole:'Nicole Demara',Lycaon:'Von Lycaon',Lucy:'Luciana de M
   'S Billy':'Starlight - Billy',Harumasa:'Asaba Harumasa',Nekomata:'Nekomiya Mana',
   Manato:'Komano Manato',Anby:'Anby Demara',Billy:'Billy Kid',
   Corin:'Corin Wickes',Anton:'Anton Ivanov',Velina:'Velina Airgid',Norma:'Norma Hollowell'};
+// инверт _NAME_ALIAS: полное имя (в synergy_tags) → короткое (имя файла иконки)
+const _FULL2SHORT={};for(const short in _NAME_ALIAS)_FULL2SHORT[_NAME_ALIAS[short]]=short;
 function _charByName(name){
-  if(!_W.charIdx){
+  if(!_W.charIdx&&D.chars&&D.chars.length){ // строим индекс только когда карточки реально загружены
     _W.charIdx={};
-    (D.chars||[]).forEach(c=>{if(!c||!c.name)return;_W.charIdx[c.name]=c;
+    D.chars.forEach(c=>{if(!c||!c.name)return;_W.charIdx[c.name]=c;
       const full=_NAME_ALIAS[c.name];if(full)_W.charIdx[full]=c;});
   }
-  return _W.charIdx[name]||{name};
+  // карточка (даёт icon_url из БД + роль), иначе — фолбэк с коротким именем под файл иконки
+  return (_W.charIdx&&_W.charIdx[name])||{name:_FULL2SHORT[name]||name};
 }
 function _tagChar(id){
   const t=_W.tags[id]||{};
@@ -371,15 +379,35 @@ function _tagChar(id){
 }
 
 async function _loadTags(){
+  if(!D.chars||!D.chars.length){ // прямой заход на вкладку тегов — карточки персонажей (иконки) ещё не загружены
+    D.chars=await _fetchAllW('characters');D.charMap={};D.chars.forEach(c=>D.charMap[c.id]=c);_W.charIdx=null;
+  }
   const[base,rows]=await Promise.all([
     fetch('web/data/synergy_tags.json?v='+Date.now()).then(r=>r.json()).catch(()=>({})),
     _fetchAllW('synergy_tags')
   ]);
   const map={};
-  for(const cid in base)map[cid]=JSON.parse(JSON.stringify(base[cid]));
+  for(const cid in base)map[cid]=_msNorm(JSON.parse(JSON.stringify(base[cid])));
   _W.tagDb=new Set();
-  rows.forEach(r=>{map[r.character_id]=r.data;_W.tagDb.add(String(r.character_id));});
+  rows.forEach(r=>{map[r.character_id]=_msNorm(r.data);_W.tagDb.add(String(r.character_id));});
   _W.tags=map;_W.tagsLoaded=true;
+}
+
+// нормализуем ms: gives_self/gives → массив [{tag,mag,at}]. Старый формат — объект {tag:{mag,at}}
+// (один тег = одна строка). Массив снимает слияние: тег можно повторять (напр. Грейс даёт себе
+// разгон аномалии в нескольких констах). mag — АБСОЛЮТНОЕ значение тега с этого M (не +к M0).
+// ms.dmg (множитель урона M1-6) остаётся в редакторе для заполнения, но в расчётах НЕ участвует.
+function _msNorm(t){
+  if(!t)return t;
+  const ms=t.ms=t.ms||{};
+  ['gives_self','gives'].forEach(which=>{
+    const cur=ms[which];
+    if(Array.isArray(cur)){ms[which]=cur.map(e=>({tag:e.tag,mag:+e.mag||0,at:+e.at||1}));return;}
+    if(cur&&typeof cur==='object')ms[which]=Object.keys(cur).map(tag=>({tag,mag:+(cur[tag].mag)||0,at:+(cur[tag].at)||1}));
+    else ms[which]=[];
+  });
+  ms.dmg=ms.dmg||{};
+  return t;
 }
 
 function _renderTagsEditor(){
@@ -401,7 +429,7 @@ function _renderTagsEditor(){
     <button class="btn" onclick="_tagImport()" title="Залить текущий web/data/synergy_tags.json в таблицу synergy_tags (перезапишет)">Импорт из файла → БД</button>
     <span id="tag-status" style="font-size:12px;color:var(--sub)"></span>
   </div>
-  <p style="color:var(--sub);font-size:12px;margin:0 0 12px;line-height:1.5">Клик по персонажу — редактор. Базовые роли/даёт/нужно — шкала 0-4 (M0). Майндскейпы: «даёт себе»/«даёт команде» строками (тег · сила · с какого M), сила может быть больше 4. Урон M1–M6 — множитель к M0. Сохраняется автоматически.</p>
+  <p style="color:var(--sub);font-size:12px;margin:0 0 12px;line-height:1.5">Клик по персонажу — редактор. Базовые роли/даёт/нужно — шкала 0-4 (M0). Майндскейпы: «даёт себе»/«даёт команде» строками (тег · значение · с какого M) — значение абсолютное с этого M, может быть больше 4, тег можно повторять. Сохраняется автоматически.</p>
   <div class="card" style="padding:0;overflow:hidden">${ids.map(_tagRow).join('')}</div>`);
 }
 
@@ -415,7 +443,7 @@ function _tagRow(id){
   const rolePills=roles.length?roles.map(r=>_tagPill(_rlbl(r))).join(''):'<span style="color:var(--sub);font-size:12px">— роли не заданы —</span>';
   const gives=Object.keys(t.gives||{}).filter(k=>t.gives[k]).sort((a,b)=>t.gives[b]-t.gives[a]).slice(0,4);
   const givePreview=gives.length?gives.map(k=>`${_tlbl(k)} ${t.gives[k]}`).join(' · '):'';
-  const msN=t.ms?(Object.keys(t.ms.gives_self||{}).length+Object.keys(t.ms.gives||{}).length):0;
+  const msN=t.ms?((t.ms.gives_self||[]).length+(t.ms.gives||[]).length):0;
   const head=`<div onclick="_tagToggle('${id}')" style="display:flex;align-items:center;gap:12px;padding:11px 16px;cursor:pointer;border-top:1px solid var(--line);${open?'background:var(--field)':''}">
     <span style="color:var(--sub);width:12px;flex-shrink:0;transition:transform .15s;${open?'transform:rotate(90deg)':''}">▶</span>
     ${iconChar(c,30)}
@@ -440,7 +468,7 @@ function _seg(cur,call,max){
 
 function _tagForm(id){
   const t=_W.tags[id];
-  const ms=t.ms||(t.ms={gives_self:{},gives:{},dmg:{},note:'',a_rank:false});
+  const ms=t.ms||(t.ms={gives_self:[],gives:[],dmg:{},note:'',a_rank:false});
   const cellSt='padding:6px 10px;border-bottom:1px solid var(--line)';
   const H=s=>`<div style="font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;font-size:13px;letter-spacing:.03em;color:var(--text);margin:18px 0 8px">${s}</div>`;
 
@@ -465,23 +493,22 @@ function _tagForm(id){
       <tr><td style="${rowLbl}">Нужно</td>${_TAGVOCAB.map(([k])=>`<td style="${cellC}">${numIn((t.needs||{})[k],`_tagBase('${id}','needs','${k}',this.value)`)}</td>`).join('')}</tr>
     </tbody></table></div>`;
 
-  // Мидскейпы: таблица Тег | Сила | С M | ✕
+  // Мидскейпы: таблица Тег | Значение | С M | ✕. Строки — массив (тег можно повторять).
   const msTable=(which)=>{
-    const obj=ms[which]||{};const keys=Object.keys(obj);
-    const rows=keys.map(tag=>{
-      const v=obj[tag]||{mag:1,at:1};
-      const tagOpts=_TAGVOCAB.map(([k,l])=>`<option value="${k}" ${k===tag?'selected':''}>${l}</option>`).join('');
+    const arr=ms[which]||[];
+    const rows=arr.map((v,i)=>{
+      const tagOpts=_TAGVOCAB.map(([k,l])=>`<option value="${k}" ${k===v.tag?'selected':''}>${l}</option>`).join('');
       const atOpts=[1,2,3,4,5,6].map(m=>`<option value="${m}" ${+v.at===m?'selected':''}>M${m}</option>`).join('');
       const inSt='background:var(--field);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:3px 6px;font-size:12px';
       return `<tr>
-        <td style="${cellSt}"><select onchange="_tagMsKey('${id}','${which}','${tag}',this.value)" style="${inSt};min-width:150px">${tagOpts}</select></td>
-        <td style="${cellSt};text-align:center"><input type="number" step="0.5" value="${v.mag}" onchange="_tagMsSet('${id}','${which}','${tag}','mag',this.value)" style="${inSt};width:60px;text-align:center"></td>
-        <td style="${cellSt};text-align:center"><select onchange="_tagMsSet('${id}','${which}','${tag}','at',this.value)" style="${inSt}">${atOpts}</select></td>
-        <td style="${cellSt};text-align:center"><button class="btn" style="padding:2px 9px" onclick="_tagMsDel('${id}','${which}','${tag}')">✕</button></td></tr>`;}).join('')
+        <td style="${cellSt}"><select onchange="_tagMsSet('${id}','${which}',${i},'tag',this.value)" style="${inSt};min-width:150px">${tagOpts}</select></td>
+        <td style="${cellSt};text-align:center"><input type="number" step="0.5" value="${v.mag}" onchange="_tagMsSet('${id}','${which}',${i},'mag',this.value)" style="${inSt};width:60px;text-align:center"></td>
+        <td style="${cellSt};text-align:center"><select onchange="_tagMsSet('${id}','${which}',${i},'at',this.value)" style="${inSt}">${atOpts}</select></td>
+        <td style="${cellSt};text-align:center"><button class="btn" style="padding:2px 9px" onclick="_tagMsDel('${id}','${which}',${i})">✕</button></td></tr>`;}).join('')
       ||`<tr><td colspan="4" style="${cellSt};color:var(--sub);font-size:12px">— пусто —</td></tr>`;
     return `<table style="border-collapse:collapse;width:100%">
       <thead><tr style="font-size:11px;color:var(--sub);text-transform:uppercase">
-        <th style="text-align:left;padding:4px 10px">Тег</th><th style="padding:4px 10px">Сила</th>
+        <th style="text-align:left;padding:4px 10px">Тег</th><th style="padding:4px 10px">Значение с M</th>
         <th style="padding:4px 10px">С M</th><th style="padding:4px 10px"></th></tr></thead>
       <tbody>${rows}</tbody></table>
       <button class="btn" style="padding:3px 12px;margin-top:6px" onclick="_tagMsAdd('${id}','${which}')">+ добавить</button>`;
@@ -500,8 +527,10 @@ function _tagForm(id){
       <div>${H('Майндскейпы — даёт себе')}${msTable('gives_self')}</div>
       <div>${H('Майндскейпы — даёт команде')}${msTable('gives')}</div>
     </div>
-    <div style="font-size:12px;color:var(--sub);margin-top:6px">Сила майндскейпов может быть больше 4 (шкала 0-4 — только для базовых тегов M0). «С M» — с какого майндскейпа эффект активен.</div>
-    ${H('Множитель урона по майндскейпам (× к M0)')}${dmgRow}
+    <div style="font-size:12px;color:var(--sub);margin-top:6px">«Значение» — АБСОЛЮТНОЕ значение тега начиная с указанного M (не прибавка к M0). Пример: на M0 тег = 3, ставим 4 на M1 → с M1 значение просто 4 (не 3+4). Может быть больше 4 (шкала 0-4 — только для базовых тегов M0). «С M» — с какого майндскейпа значение действует. Один тег можно добавить несколько раз (разные пороги M).</div>
+    ${H('Множитель урона по майндскейпам (× к M0)')}
+    <div style="font-size:12px;color:var(--sub);margin:-4px 0 8px">Заполняется отдельно от «даёт себе/команде». В расчётах пока НЕ участвует — только справочно, пока не заполнишь.</div>
+    ${dmgRow}
     <label style="display:inline-flex;align-items:center;gap:7px;font-size:13px;margin-top:16px;cursor:pointer">
       <input type="checkbox" ${ms.a_rank?'checked':''} onchange="_tagARank('${id}',this.checked)"> A-ранг — эффекты считаем как на M6</label>
     ${H('Заметка')}<input value="${(t.note||'').replace(/"/g,'&quot;')}" onchange="_tagNote('${id}','note',this.value)" style="${noteSt}">
@@ -515,11 +544,10 @@ function _tagToggle(id){_W.tagExpand=_W.tagExpand===id?null:id;_renderTagsEditor
 // числовые поля (onchange по blur) — БЕЗ ре-рендера, иначе теряется фокус
 function _tagRole(id,role,v){const t=_W.tags[id];v=Math.max(0,Math.min(4,+v||0));if(v)t.roles[role]=v;else delete t.roles[role];_tagQueueSave(id);}
 function _tagBase(id,kind,tag,v){const t=_W.tags[id];t[kind]=t[kind]||{};v=Math.max(0,Math.min(4,+v||0));if(v)t[kind][tag]=v;else delete t[kind][tag];_tagQueueSave(id);}
-function _tagMs(id){const t=_W.tags[id];return t.ms||(t.ms={gives_self:{},gives:{},dmg:{},note:'',a_rank:false});}
-function _tagMsAdd(id,which){const m=_tagMs(id);m[which]=m[which]||{};const free=_TAGVOCAB.map(x=>x[0]).find(k=>!(k in m[which]))||'dmg_buff';m[which][free]={mag:1,at:1};_tagQueueSave(id);_renderTagsEditor();}
-function _tagMsKey(id,which,oldTag,newTag){const m=_tagMs(id);if(newTag===oldTag||!m[which])return;m[which][newTag]=m[which][oldTag];delete m[which][oldTag];_tagQueueSave(id);_renderTagsEditor();}
-function _tagMsSet(id,which,tag,field,v){const m=_tagMs(id);if(!m[which]||!m[which][tag])return;m[which][tag][field]=field==='at'?+v:parseFloat(v);_tagQueueSave(id);}
-function _tagMsDel(id,which,tag){const m=_tagMs(id);if(m[which])delete m[which][tag];_tagQueueSave(id);_renderTagsEditor();}
+function _tagMs(id){const t=_W.tags[id];return t.ms||(t.ms={gives_self:[],gives:[],dmg:{},note:'',a_rank:false});}
+function _tagMsAdd(id,which){const m=_tagMs(id);m[which]=m[which]||[];m[which].push({tag:'dmg_buff',mag:1,at:1});_tagQueueSave(id);_renderTagsEditor();}
+function _tagMsSet(id,which,i,field,v){const m=_tagMs(id);const e=m[which]&&m[which][i];if(!e)return;e[field]=(field==='tag')?v:(field==='at'?+v:parseFloat(v));_tagQueueSave(id);if(field==='tag')_renderTagsEditor();}
+function _tagMsDel(id,which,i){const m=_tagMs(id);if(m[which])m[which].splice(i,1);_tagQueueSave(id);_renderTagsEditor();}
 function _tagDmg(id,mval,v){const m=_tagMs(id);m.dmg=m.dmg||{};if(v==='')delete m.dmg[mval];else m.dmg[mval]=parseFloat(v);_tagQueueSave(id);}
 function _tagARank(id,on){_tagMs(id).a_rank=!!on;_tagQueueSave(id);}
 function _tagNote(id,path,v){const t=_W.tags[id];if(path==='ms.note')_tagMs(id).note=v;else t.note=v;_tagQueueSave(id);}
@@ -694,7 +722,9 @@ function _renderShiyuBuffs(){
       <td style="${td};text-align:center;font-size:12px">${mechs}</td>
       <td style="${td};font-size:12px">${eff}</td></tr>`;
   };
-  const perTour=tours.length?`<div style="${card}">${H('Бафы по турнирам')}
+  const unsaved=tours.filter(t=>!(t.shiyu_data&&t.shiyu_data.buff_tag)).length;
+  const backfillBtn=unsaved?`<button class="btn" style="margin-left:12px" onclick="_shyBackfill()" title="Зафиксировать доразобранные теги всех ротаций без buff_tag (иначе разбор идёт заново при каждой загрузке)">Зафиксировать доразбор (${unsaved})</button><span id="shy-bf-status" style="font-size:12px;color:var(--sub);margin-left:8px"></span>`:'';
+  const perTour=tours.length?`<div style="${card}">${H('Бафы по турнирам')+backfillBtn}
     <div style="overflow-x:auto"><table style="border-collapse:collapse;width:100%;min-width:720px">
       <thead><tr><th style="${th}">Турнир · баф</th><th style="${th}">Описание ротации</th><th style="${th};text-align:center">Элементы</th>
         <th style="${th};text-align:center">Архетипы</th><th style="${th}">Эффекты (сила 0-4)</th></tr></thead>
@@ -828,6 +858,23 @@ async function _shySave(){
   if(dbErr(error,'сохранение бафа')){set('ошибка','var(--red)');return;}
   t.shiyu_data=sd;const dt=(D.tours||[]).find(x=>x.id===_W.shyTour);if(dt)dt.shiyu_data=sd;
   set('✓ сохранено','var(--accent)');toast('Баф сохранён');
+}
+// массово фиксируем доразбор: старые ротации без buff_tag парсятся на лету при каждой загрузке.
+// Прогоняем _shyTag и пишем результат в shiyu_data.buff_tag, чтобы разбор больше не терялся.
+async function _shyBackfill(){
+  const st=document.getElementById('shy-bf-status');const set=(s,c)=>{if(st){st.textContent=s;st.style.color=c||'var(--sub)';}};
+  const todo=(_W.shyTours||[]).filter(t=>t.shiyu_data&&!t.shiyu_data.buff_tag);
+  if(!todo.length){set('нечего фиксировать');return;}
+  set(`фиксирую ${todo.length}…`);
+  let ok=0;
+  for(const t of todo){
+    const tag=_shyTag(t);
+    const sd={...t.shiyu_data,buff_tag:tag};
+    const{error}=await sb.from('tournaments').update({shiyu_data:sd}).eq('id',t.id);
+    if(error){dbErr(error,'фиксация бафа '+(t.name||t.id));set('ошибка','var(--red)');return;}
+    t.shiyu_data=sd;const dt=(D.tours||[]).find(x=>x.id===t.id);if(dt)dt.shiyu_data=sd;ok++;
+  }
+  set(`✓ зафиксировано ${ok}`,'var(--accent)');toast('Доразбор зафиксирован');_renderShiyuBuffs();
 }
 
 // ===== Дуо / Трио: ручные рейтинги пар и троек (Аналитика → Калибровка силы) =====
@@ -1125,6 +1172,7 @@ function _renderSparring(){
     <div style="display:flex;flex-direction:column;justify-content:center;gap:10px;align-self:center">
       <span style="font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;font-size:22px;color:var(--sub);text-align:center">VS</span>
       <button class="btn" style="padding:8px 14px" onclick="_spSkip()">Сложно / ничья</button>
+      <button class="btn" style="padding:8px 14px" onclick="_spNext()">Новая пара</button>
     </div>
     ${sideCard(cur.right,'right')}
   </div>
