@@ -1253,7 +1253,16 @@ function _spGen(){
   const size=_W.sparSize||1;
   const pool=_spPool(size);if(pool.length<size+1)return null;
   for(let tries=0;tries<120;tries++){
-    const gseq=size<2?null:_spComp(size);                 // одна ролевая раскладка на обе стороны
+    if(size<2){                                           // соло: сравниваем только внутри роли-группы (оборона = саппорт)
+      let lc=pool.filter(c=>!_spRecentHas(c.id));if(!lc.length)lc=pool;
+      const L=_spPick(lc);
+      let rc=pool.filter(c=>c.id!==L.id&&_spFRole(c)===_spFRole(L));
+      if(!rc.length)continue;
+      const fr=rc.filter(c=>!_spRecentHas(c.id));if(fr.length)rc=fr;
+      const R=_spWeighted(rc,x=>0.15+_spSim(L.id,x.id));
+      return{left:[_spInst(L)],right:[_spInst(R)]};
+    }
+    const gseq=_spComp(size);                             // одна ролевая раскладка на обе стороны
     const left=_spSide(size,gseq,pool,[],null);if(!left)continue;
     const right=_spSide(size,gseq,pool,left.map(c=>c.id),left);if(!right)continue;
     const lk=left.map(c=>c.id).sort().join('|'),rk=right.map(c=>c.id).sort().join('|');
