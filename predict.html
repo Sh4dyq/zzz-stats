@@ -505,8 +505,7 @@ async function fetchAll(makeQuery){
 }
 
 // ---- порядок игр для Elo (из синканых сеток) ----
-// Транслит Cyrillic→Latin + нормализация: ники в наших данных и в Challonge
-// расходятся (4_poker_↔4покер, Denchik↔Денчик, kykan↔kykan_velikana).
+// транслит Cyrillic→Latin + нормализация ников (наши данные vs Challonge расходятся)
 const _CY={а:'a',б:'b',в:'v',г:'g',д:'d',е:'e',ё:'e',ж:'zh',з:'z',и:'i',й:'i',к:'k',л:'l',м:'m',н:'n',о:'o',п:'p',р:'r',с:'s',т:'t',у:'u',ф:'f',х:'h',ц:'c',ч:'ch',ш:'sh',щ:'sch',ъ:'',ы:'y',ь:'',э:'e',ю:'yu',я:'ya'};
 const _norm=s=>(s||'').toLowerCase().replace(/[а-яё]/g,c=>_CY[c]??c).replace(/[^a-z0-9]/g,'');
 function _eqName(x,y){x=_norm(x);y=_norm(y);if(!x||!y)return false;if(x===y)return true;
@@ -514,17 +513,15 @@ function _eqName(x,y){x=_norm(x);y=_norm(y);if(!x||!y)return false;if(x===y)retu
   if(s>=5&&(x.includes(y)||y.includes(x)))return true;return false;}
 const _eqPair=(a1,a2,b1,b2)=>(_eqName(a1,b1)&&_eqName(a2,b2))||(_eqName(a1,b2)&&_eqName(a2,b1));
 
-// Упорядоченные пары матчей своей сетки (bracket_nodes, по player_id) — точный порядок.
+// пары матчей своей сетки (bracket_nodes, по player_id) — точный порядок
 function _matchesFromNodes(nodes){
   const ordP={W:0,L:1,GF:2};
   return nodes.slice().filter(n=>n.player1_id&&n.player2_id)
     .sort((a,b)=>(ordP[a.part]??3)-(ordP[b.part]??3)||a.round-b.round||a.slot-b.slot)
     .map(n=>({p1:n.player1_id,p2:n.player2_id,byId:true}));
 }
-// Упорядоченные пары матчей из bracket_cache (Challonge). Если участник Challonge
-// связан с нашим player_id (tournament_participants.challonge_pid, заполняется синком) —
-// матчим точно по id; иначе по имени (фаззи). play_order (если есть) даёт точный
-// порядок игры, в т.ч. чередование верхней/нижней сетки в Double Elimination.
+// пары матчей из bracket_cache (Challonge): по challonge_pid если связан, иначе фаззи по имени;
+// play_order (если есть) даёт точный порядок игры
 function _matchesFromCache(cache,pidToPlayer){
   const out=[];
   (cache.rounds||[]).forEach(r=>(r.matches||[]).forEach(m=>{
@@ -540,9 +537,7 @@ function _matchesFromCache(cache,pidToPlayer){
   if(out.length&&out.every(m=>m.ord!=null))out.sort((x,y)=>x.ord-y.ord); // точный порядок игры
   return out;
 }
-// enc.id → индекс порядка игры (0..1). Для турнира со связанной сеткой покрываем ВСЕ
-// встречи: сматченные — позицией в сетке, несматченные — их относительным sort_order,
-// обе шкалы нормируем в [0,1], чтобы порядок был согласован (иначе Elo мешал бы шкалы).
+// enc.id → индекс порядка игры в [0,1): сматченные — по позиции в сетке, остальные — по sort_order
 function playOrderMap(){
   const map={};
   D.tours.forEach(t=>{
@@ -607,16 +602,14 @@ async function boot(){
   D.cache={};bc.forEach(c=>{D.cache[c.tournament_id]=c.json;});
   // порядок встреч для Elo — из синканых сеток (Challonge/своя), иначе sort_order
   D.playOrder=playOrderMap();
-  // теги синергии: источник правды — таблица synergy_tags (правится в админке), фолбэк — статический JSON
+  // теги синергии из synergy_tags (фолбэк — статический JSON)
   sb.from('synergy_tags').select('character_id,data').then(r=>{
     const rows=r.data||[];const map=rows.length?{}:null;
     rows.forEach(x=>map[x.character_id]=x.data);
     return Synergy.load(map);
   },()=>Synergy.load()).then(()=>updateDraft()).catch(e=>console.warn('synergy load',e));
   D.elo=Predict.buildRatings(D.tours,encs,D.mbe,D.playOrder);
-  // Отображаемый рейтинг стянут к 1000 по числу игр (n₀=8): игрок с 2 играми не висит
-  // в топе. ВАЖНО: вероятности/симуляции считаются по СЫРОМУ рейтингу (стягивание
-  // прогноза ухудшает его — проверено), поэтому eloRaw для математики, eloShown для показа.
+  // eloShown стянут к 1000 по числу игр (n₀=8) — только для показа; математика по eloRaw
   D.N0=8;
   D.picks=pks;D.mmap=mmap;
   D.encTour={};encs.forEach(e=>D.encTour[e.id]=e.tournament_id);
@@ -670,7 +663,6 @@ function setMode(m){
 document.querySelectorAll('.mode-btn').forEach(b=>b.onclick=()=>setMode(b.dataset.mode));
 
 const fPct=p=>(p*100).toFixed(1)+'%';
-// Сырой рейтинг — для всей математики (вероятности, Монте-Карло). Стянутый — только показ.
 const eloRaw=pid=>D.elo.ratings[pid]??1000;
 const eloShown=pid=>{const n=D.elo.games[pid]||0;return 1000+(eloRaw(pid)-1000)*n/(n+D.N0);};
 function resBar(nickA,pA,nickB){
@@ -715,8 +707,7 @@ function updatePvp(){
   const pElo=Predict.pElo(D.elo.ratings[a]??1000,D.elo.ratings[b]??1000);
   const h=Predict.headToHead(a,b,D.encs,D.mbe);
   const n=h.w+h.d+h.l;
-  // Минимальная поправка на личные встречи: байес-винрейт a против b с сильным прайором
-  // (H2H_PRIOR игр к 50%) → мало игр почти не сдвигает; лёгкий вес в log-odds.
+  // поправка на личные встречи: байес-WR с сильным прайором, лёгкий вес в log-odds
   const H2H_PRIOR=4,H2H_W=0.5;
   let p=pElo;
   if(n){
@@ -730,7 +721,7 @@ function updatePvp(){
 let ELO_SORT={k:'elo',asc:false};
 function setEloSort(k){
   if(ELO_SORT.k===k)ELO_SORT.asc=!ELO_SORT.asc;
-  else ELO_SORT={k,asc:k==='nick'};   // Elo/Игры по умолчанию по убыванию, Ник — по возрастанию
+  else ELO_SORT={k,asc:k==='nick'};
   renderEloTable();
 }
 function renderEloTable(){
@@ -749,10 +740,9 @@ function renderEloTable(){
 }
 
 // ---- драфт ----
-// 6 независимых ячеек на сторону (null = пусто). Ряд 1 = слоты 0–2, ряд 2 = 3–5.
+// 6 независимых ячеек на сторону (null=пусто). Ряд 1 = слоты 0–2, ряд 2 = 3–5.
 const DR={a:[null,null,null,null,null,null],b:[null,null,null,null,null,null]};
-// Ротации Шиюй: на одну ротацию часто выпадает несколько турниров, поэтому группируем
-// турниры по shiyu_url (id ротации); без url турнир образует свою группу.
+// группировка турниров по ротации Шиюй (shiyu_url); без url — своя группа
 function rotations(){
   if(D.rots)return D.rots;
   const by={};
@@ -767,8 +757,7 @@ function rotations(){
     return r;
   });
 }
-// Винрейты персонажей в разрезе ротации Шиюй: только матчи её турниров,
-// с байес-прайором к общему винрейту персонажа (мало игр → тянет к истории).
+// винрейты персонажей в разрезе ротации Шиюй, байес-прайор к общему WR
 const CSTATS_R={};
 function cstatsFor(rotKey){
   if(!rotKey)return D.cstats;
@@ -788,7 +777,6 @@ function cstatsFor(rotKey){
     const s=st[cid],g=(D.cstats[cid]&&D.cstats[cid].bwr)||0.5;
     s.bwr=(s.wEq+PRIOR*g)/(s.games+PRIOR);
   });
-  // персонажи без игр на этой ротации — общий байес-винрейт
   Object.keys(D.cstats).forEach(cid=>{if(!st[cid])st[cid]={games:0,wEq:0,bwr:D.cstats[cid].bwr};});
   return CSTATS_R[rotKey]=st;
 }
@@ -798,23 +786,21 @@ function initDraft(){
   const pal=$('pal-shared');
   pal.innerHTML=D.chars.map(c=>
     `<div class="pal-it" data-cid="${c.id}" data-name="${esc((c.name||'').toLowerCase())}" title="${esc(c.name)}" draggable="true" ondragstart="drStart(event,null,'pool','${c.id}')" ondragend="drEnd(event)" onclick="poolPick('${c.id}')">${iconChar(c,52)}</div>`).join('');
-  // пул — цель сброса для удаления слота (с любой стороны)
+  // пул — цель сброса для удаления слота
   pal.ondragover=e=>{e.preventDefault();};
   pal.ondrop=e=>{e.preventDefault();drDropPool();};
   renderSlots('a');renderSlots('b');
   $('cb-a').innerHTML=playerOpts('— игрок (опц.) —');
   $('cb-b').innerHTML=playerOpts('— игрок (опц.) —');
 }
-// A-ранги в турнирах почти всегда идут на M6 (дёшево прокачиваются) → дефолт M6,
-// S-ранги — M0. Пользователь может переопределить кликом по бейджу.
+// A-ранги дефолт M6 (дёшево прокачиваются), S-ранги M0; оверрайд кликом по бейджу
 const defaultMs=cid=>(D.charMap[cid]&&D.charMap[cid].rarity==='A')?6:0;
 function togglePick(side,cid){
   const arr=DR[side],i=arr.findIndex(p=>p&&p.cid===cid);
-  if(i>=0)arr[i]=null;                              // уже в составе → убрать
-  else{const e=arr.findIndex(p=>!p);if(e<0)return;arr[e]={cid,ms:defaultMs(cid)};} // в первую пустую
+  if(i>=0)arr[i]=null;
+  else{const e=arr.findIndex(p=>!p);if(e<0)return;arr[e]={cid,ms:defaultMs(cid)};}
   renderSlots(side);updateDraft();
 }
-// два способа: (1) клик слота → ACTIVE, затем клик персонажа; (2) клик персонажа → PENDING, затем клик слота
 let ACTIVE=null,PENDING=null;
 function place(side,idx,cid){DR[side][idx]={cid,ms:defaultMs(cid)};ACTIVE=PENDING=null;renderSlots('a');renderSlots('b');updateDraft();}
 function resetDraft(){DR.a=[null,null,null,null,null,null];DR.b=[null,null,null,null,null,null];ACTIVE=PENDING=null;const s=$('ps-shared');if(s){s.value='';filterPal();}renderSlots('a');renderSlots('b');updateDraft();}
@@ -859,9 +845,7 @@ function renderSlots(side){
   }).join('');
   refreshPool();
 }
-// --- drag&drop: ячейки НЕЗАВИСИМЫ, ничего не съезжает. пул→ячейка (замена),
-// ячейка→ячейка (обмен: пустая цель = перенос, занятая = свап только этих двух),
-// ячейка→пул (убрать эту ячейку). ---
+// drag&drop: пул→ячейка (замена), ячейка→ячейка (обмен), ячейка→пул (убрать)
 let DR_DRAG=null;
 function drStart(ev,side,from,cid){DR_DRAG={side,from,cid};ev.dataTransfer.effectAllowed='move';try{ev.dataTransfer.setData('text/plain',cid);}catch(e){}}
 function drEnd(ev){DR_DRAG=null;document.querySelectorAll('.slot.over').forEach(s=>s.classList.remove('over'));}
@@ -872,11 +856,11 @@ function drDropSlot(ev,side,idx){
   const d=DR_DRAG;DR_DRAG=null;if(!d)return;
   const arr=DR[side];
   if(d.from==='pool'){
-    if(takenSide(d.cid))return;                      // уже занят любой стороной
-    arr[idx]={cid:d.cid,ms:defaultMs(d.cid)};        // положить в эту ячейку (заменяет)
+    if(takenSide(d.cid))return;
+    arr[idx]={cid:d.cid,ms:defaultMs(d.cid)};
   }else{
-    if(d.side!==side)return;                         // перестановка только внутри стороны
-    const tmp=arr[idx];arr[idx]=arr[d.from];arr[d.from]=tmp; // обмен ячеек (пустая цель = перенос)
+    if(d.side!==side)return;                          // перестановка только внутри стороны
+    const tmp=arr[idx];arr[idx]=arr[d.from];arr[d.from]=tmp;
   }
   renderSlots(side);updateDraft();
 }
@@ -892,27 +876,17 @@ function filterPal(){
 }
 const logit=p=>Math.log(Math.min(1-1e-6,Math.max(1e-6,p))/(1-Math.min(1-1e-6,Math.max(1e-6,p))));
 const sigm=x=>1/(1+Math.exp(-x));
-// Винрейт пика с учётом майндскейпа: статистика (cid, M) с прайором к винрейту
-// персонажа (мало игр на конкретном M → тянет к базовому).
-// PC_W — вес личного опыта игрока; ELO_W — вес Elo-разницы игроков. Влияние игроков
-// было слишком сильным (переворачивало винрейты в безшансовые), поэтому Elo придушен.
+// винрейт пика с учётом M: статистика (cid,M) с прайором к базовому WR персонажа.
+// PC_W — вес опыта игрока, ELO_W — вес Elo-разницы (придушен).
 const MS_PRIOR=4,PC_PRIOR=4,PC_W=0.35,ELO_W=0.45;
-// адаптивный вес синергии: при малой выборке пиков персонажа теги весят больше.
-// SYN_K — сколько пиков для «половинной» уверенности; SYN_BOOST — сила буста (низкий:
-// на мете почти не трогает, включается на редких/новых персонажах). Проверено на данных.
+// адаптивный вес синергии: при малой выборке пиков теги весят больше
 const SYN_K=8,SYN_BOOST=1;
-// веса синергии в серой строке (откалибровано на данных); кап тега — в synergy.js
 const SYN_TAG_W=0.6,SYN_LIFT_W=0.3;
-// BUFF_W — вес попадания в баф ротации Шиюй (Synergy.buffMatchup). Считается отдельно от
-// enemy weak/res: баф бустит команды по элементу/архетипу глобально. См. память shiyu-rotation.
-const BUFF_W=0.5;
+const BUFF_W=0.5; // вес попадания в баф ротации Шиюй (Synergy.buffMatchup)
 function effBwr(p,stats){
   const base=(stats[p.cid]&&stats[p.cid].bwr)||0.5;
-  // А-ранги всегда идут на M6 и от майндскейпа не зависят → базовый винрейт без разреза по M
-  if(D.charMap[p.cid]&&D.charMap[p.cid].rarity==='A')return base;
-  // МОНОТОННОСТЬ (для симуляции): повышение майндскейпа НИКОГДА не снижает винрейт.
-  // value(M) = максимум по m≤M из (есть данные ? блендованный к базе : базовый).
-  // Несыгранный высокий M наследует лучшее снизу — статданных по нему нет (микро-сноска в UI).
+  if(D.charMap[p.cid]&&D.charMap[p.cid].rarity==='A')return base; // A-ранги без разреза по M
+  // монотонность: value(M) = максимум по m≤M (повышение M не снижает WR)
   let v=-1;
   for(let m=0;m<=p.ms;m++){
     const s=D.msStats[p.cid+':'+m];
@@ -921,7 +895,7 @@ function effBwr(p,stats){
   }
   return v<0?base:v;
 }
-// есть ли у пика высокий майндскейп без статистики по нему (для микро-сноски)
+// высокий M без статистики по нему (для микро-сноски)
 function msNoData(p){
   if(D.charMap[p.cid]&&D.charMap[p.cid].rarity==='A')return false;
   if(!p.ms)return false;
@@ -929,7 +903,7 @@ function msNoData(p){
   return !s||!s.games;
 }
 const sideStrength=(arr,stats)=>{const v=arr.map(p=>effBwr(p,stats));return v.length?v.reduce((a,b)=>a+b,0)/v.length:0.5;};
-// Личный винрейт игрока на выбранных персонажах (прайор — винрейт персонажа).
+// личный WR игрока на выбранных персонажах (прайор — WR персонажа)
 function pcBwr(pid,arr,stats){
   const v=arr.map(p=>{
     const base=(stats[p.cid]&&stats[p.cid].bwr)||0.5;
@@ -955,8 +929,7 @@ function buildPairLift(pks,mmap,cstats){
     out[key]={g:s.g,lift:s.w/s.g-(soloWr(a)+soloWr(b))/2};}
   return out;
 }
-// комнаты Шиюй выбранной ротации (для матчап-аналитики): первый турнир ротации
-// с нормализованными данными shiyu_data.rooms (враги + weak/res).
+// комнаты Шиюй ротации (враги + weak/res) — первый турнир ротации с shiyu_data.rooms
 function rotRooms(rotKey){
   if(!rotKey)return[];
   const rot=rotations().find(r=>r.key===rotKey);if(!rot)return[];
@@ -990,7 +963,7 @@ function updateDraft(){
   let L=logit(pd);
   const parts=[`<span>Сила составов (байес-WR${tid?', эта Шиюй':''}, с учётом M): <b>${fPct(sa)}</b> vs <b>${fPct(sb)}</b></span>`];
   let na='Драфт 1',nb='Драфт 2';
-  // игроки (опц.): Elo обоих ×ELO_W + личный винрейт с этими персонажами ×PC_W
+  // игроки (опц.): Elo ×ELO_W + личный WR ×PC_W
   const a=$('cb-a').value,b=$('cb-b').value;
   if(a&&b&&a!==b){
     const pe=Predict.pElo(D.elo.ratings[a]??1000,D.elo.ratings[b]??1000);
@@ -1006,9 +979,8 @@ function updateDraft(){
   const RARE_GAMES=5;
   const lowSample=p=>((D.cstats[p.cid]&&D.cstats[p.cid].games)||0)<RARE_GAMES;
   const noDataNames=[...new Set(fA.concat(fB).filter(p=>msNoData(p)||lowSample(p)).map(p=>D.charMap[p.cid]&&D.charMap[p.cid].name).filter(Boolean))];
-  // синергия — отдельная серая строка (сумма 100%); крупные цифры остаются без неё
+  // синергия — отдельная серая строка (крупные цифры без неё)
   if(window.Synergy&&Synergy.ready){
-    // отряд = полный ряд: слоты 0–2 или 3–5
     const rowsOf=picks=>[[0,picks.slice(0,3).filter(Boolean)],[1,picks.slice(3,6).filter(Boolean)]].filter(([,t])=>t.length===3);
     const nmOf=t=>t.map(x=>D.charMap[x.cid]&&D.charMap[x.cid].name).filter(Boolean);
     // буст тегов при малой выборке пиков (по общим играм, не по майндскейпу)
@@ -1054,7 +1026,6 @@ function setTourView(v){
 }
 function ctFmt(){
   CT.fmt=$('ct-fmt').value;
-  // сетка ← группы: все расставленные сливаются в один список сеяния; сетка → группы: в пул
   CT.zones=CT.fmt==='RR'?[[],[]]:[CT.zones.flat()];
   $('ct-addg').style.display=CT.fmt==='RR'?'inline-block':'none';
   $('ct-zh').textContent=CT.fmt==='RR'?'Группы — тяни игроков внутрь':'Участники (порядок = сеяние)';
@@ -1093,8 +1064,8 @@ function ctDrop(e,zone){
   CT.zones.forEach(z=>{const i=z.indexOf(pid);if(i>=0)z.splice(i,1);}); // убрать откуда был
   if(zone!=='pool'){
     const z=CT.zones[+zone];if(!z)return ctRender();
-    // если бросили на конкретный чип — вставить перед ним (для порядка сеяния)
-    const tgt=e.target.closest('.chip');
+    const tgt=e.target.closest('.chip'); // бросок на чип → вставить перед ним
+
     const at=tgt?z.indexOf(tgt.dataset.pid):-1;
     if(at>=0)z.splice(at,0,pid);else z.push(pid);
   }
@@ -1119,8 +1090,7 @@ function ctBuildNodes(){
   BracketEngine.seed(nodes,parts.map((pid,i)=>({player_id:pid,seed:i+1})),size);
   return nodes;
 }
-// детерминированный прогноз: заполняем сетку до конца, победитель = ручной (forced) либо
-// более вероятный по Elo. Возвращает ноды с players+winner_id во всех матчах.
+// детерминированный прогноз: победитель = forced либо фаворит по Elo
 function ctPredict(nodes){
   const R=D.elo.ratings,by={};nodes.forEach(n=>by[n.id]=n);
   const ordP={W:0,L:1,GF:2};
@@ -1143,10 +1113,9 @@ function ctPick(nodeId,slot){
 }
 function ctRenderSim(){
   const R=D.elo.ratings,out=$('ct-out');
-  const pred=ctPredict(ctBuildNodes());          // детерминированный прогноз (с forced)
+  const pred=ctPredict(ctBuildNodes());
   CT.byId={};pred.forEach(n=>CT.byId[n.id]=n);
-  const sim=Predict.simulateBracket(ctBuildNodes(),R,10000,CT.forced); // шансы (forced учтён)
-  // ---- реальная схема сетки: колонки-раунды, точки выравнены по фидерам ----
+  const sim=Predict.simulateBracket(ctBuildNodes(),R,10000,CT.forced);
   const rname=k=>{const[p,r]=k.split('|');return p==='GF'?'Гранд-финал':(p==='L'?'Нижняя · Раунд '+r:(CT.sim.fmt==='DE'?'Верхняя · ':'')+'Раунд '+r);};
   const groups={};pred.forEach(n=>{const k=n.part+'|'+n.round;(groups[k]=groups[k]||[]).push(n);});
   const seat=(n,slot)=>{

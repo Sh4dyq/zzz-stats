@@ -1,5 +1,4 @@
-// Squad synergy scorer (порт tools/synergy_model.py). Аналитика: поправка в очках
-// винрейта. Данные: web/data/synergy_tags.json + characters_synergy.json.
+// Squad synergy scorer — поправка в очках винрейта. Данные: synergy_tags.json + characters_synergy.json.
 (function(g){
 'use strict';
 let TAGS=null, SYN=null, NAME2ID={};
@@ -36,7 +35,7 @@ const MATCHUP_CAP=0.10;
 const roleOf=(id,r)=>((TAGS[id].roles||{})[r]||0);
 const giveOf=(id,t)=>((TAGS[id].gives||{})[t]||0);
 
-function rid(x){ // accept tag id, full name or short/DB name
+function rid(x){ // tag id | полное имя | короткое/DB-имя
   if(TAGS[x])return x;
   const n=ALIAS[x]||x;
   return NAME2ID[n]!=null?NAME2ID[n]:null;
@@ -121,9 +120,7 @@ function bestTeam(members){
   } return best;
 }
 
-// split a draft side (up to 6) into its two halves of 3. Drafts play 6v6 as two
-// teams, so we pick the 3+3 partition that maximises total synergy and return
-// both halves. <6 selected -> a single best team (or whatever is there).
+// сторону драфта (до 6) делим на две тройки: берём разбиение 3+3 с макс. синергией
 function splitSide(members){
   const ids=members.map(rid).filter(Boolean);
   if(ids.length<3){const s=score(ids);return{scores:s?[s]:[],total:s?s.total:0};}
@@ -169,10 +166,7 @@ function elementMatchup(members,room){
   const pts=Math.max(-MATCHUP_CAP,Math.min(MATCHUP_CAP,MATCHUP_CAP*raw));
   return{pts:+pts.toFixed(3),detail:{profile:prof,weakW,resW,raw:+raw.toFixed(2)}};
 }
-// --- Shiyu frontier buff fit ---
-// Баф ротации бустит команды по элементу и/или архетипу (sheer/anomaly/stun/crit).
-// Возвращает бонус [0..BUFF_CAP]·strength (всегда ≥0 — в предикте берётся как разница A−B,
-// значит важно лишь относительное попадание в баф). Считается ОТДЕЛЬНО от enemy weak/res.
+// --- Shiyu frontier buff fit: бонус [0..BUFF_CAP]·strength по элементу/архетипу ---
 const BUFF_CAP=0.10;
 function mechMatch(id,mech){
   const r=TAGS[id].roles||{},gv=TAGS[id].gives||{};
@@ -183,12 +177,7 @@ function mechMatch(id,mech){
   if(mech==='crit')return(r.crit_dps||0)>=2;
   return false;
 }
-// баф Шиюй как «виртуальный тиммейт»: ценность = Σ по эффектам tagW·mag·gate·need.
-// - mag: сила эффекта, уже нормирована по семейному диапазону при парсинге (parseBuffTag).
-// - gate (кому применимо): element-DMG проходит через долю отряда в баф-элементах (dmg_buff —
-//   частично универсален: RES-shred/DMG-taken помогают всем → пол 0.5); sheer/anomaly-бафы — через
-//   долю архетипа; pen/def/atk — универсальны (=1); crit — пол 0.5 + доля крит-дпс.
-// - need: 0.5 + 0.5·доля дпс-членов, у кого тег в needs (баф, закрывающий дыру, ценнее дубля).
+// ценность бафа = Σ по эффектам tagW·mag·gate·need
 function buffMatchup(members,tag){
   if(!tag)return 0;
   const elems=tag.elems||(tag.elem?[tag.elem]:[]);
@@ -201,42 +190,36 @@ function buffMatchup(members,tag){
     ['sheer','anomaly','stun','crit'].forEach(m=>{if(mechMatch(c,m))mechW[m]+=w;});});
   if(!total)return 0;
   const elemFit=elems.reduce((s,e)=>s+(prof[e]||0),0)/total; // доля урона в баф-элементах
-  // архетипы бафа: мультивыбор (mechs[]) с фолбэком на старый одиночный mech
   const mechs=(tag.mechs&&tag.mechs.length)?tag.mechs:(tag.mech?[tag.mech]:[]);
   // фолбэк: старый тег без effects → чистое попадание elem/mech
   if(!tag.effects||!tag.effects.length){
     let raw=elemFit;mechs.forEach(m=>{if(mechW[m]!=null)raw+=mechW[m]/total;});
     return +(BUFF_CAP*Math.min(1,raw)*(tag.strength||1)).toFixed(3);
   }
-  // доли отряда по типу скейла урона (для гейтов по формуле урона ZZZ)
   const sheerFrac=mechW.sheer/total, critFrac=mechW.crit/total, anomFrac=mechW.anomaly/total;
   const dmg=team.filter(isDmg);
   const needFrac=t=>dmg.length?dmg.filter(c=>((TAGS[c].needs||{})[t]||0)>0).length/dmg.length:0;
-  // множества id отряда для ручного гейта по списку персонажей эффекта
   const teamSet=new Set(team.map(String));
   let val=0;
   tag.effects.forEach(e=>{
-    // нужды элемент/кнопка-DMG берём от базового dmg_buff
     const needTag=(e.tag==='dmg_buff_elem'||e.tag==='dmg_buff_skill')?'dmg_buff':e.tag;
     const base=tagW(needTag)||0.3, mag=(e.w!=null?e.w/4:(e.mag||0.5));
     let gate;
     if(e.chars&&e.chars.length){
-      // РУЧНОЙ гейт: доля урона отряда среди явно выбранных для этой части персонажей
+      // ручной гейт: доля урона отряда среди выбранных для части персонажей
       let g=0;e.chars.forEach(cid=>{if(teamSet.has(String(cid)))g+=elementWeight(cid);});
       gate=total?g/total:0;
     }else{
-      // авто-гейт по мультипликаторам формулы урона:
       gate=1;
-      if(e.tag==='dmg_buff_elem')gate=elemFit;               // RES/элемент-DMG: только урон баф-элемента
-      else if(e.tag==='dmg_buff')gate=1;                     // универс. DMG-Bonus/RES-shred — всем (в т.ч. шир)
-      else if(e.tag==='dmg_buff_skill')gate=0.5;             // по кнопке: заглушка (нужна раскладка урона per-char)
+      if(e.tag==='dmg_buff_elem')gate=elemFit;
+      else if(e.tag==='dmg_buff')gate=1;
+      else if(e.tag==='dmg_buff_skill')gate=0.5;             // заглушка (нужна раскладка урона per-char)
       else if(e.tag==='sheer_dmg_buff')gate=sheerFrac;
-      else if(e.tag==='anomaly_buff')gate=anomFrac;          // AP/аномалия-DMG: только аномальный урон
-      else if(e.tag==='crit_buff')gate=critFrac;             // CRIT-множитель ≈1 у аномалы/шир → 0
-      else if(e.tag==='pen_buff'||e.tag==='def_shred')gate=1-sheerFrac; // шир игнорит DEF → PEN/DEF-shred бесполезны
-      // atk_buff, прочее → gate=1 (ATK кормит все формулы: стандарт/аномалия/шир)
+      else if(e.tag==='anomaly_buff')gate=anomFrac;
+      else if(e.tag==='crit_buff')gate=critFrac;
+      else if(e.tag==='pen_buff'||e.tag==='def_shred')gate=1-sheerFrac;
     }
-    const apply=(e.apply!=null?e.apply/100:1);  // «насколько работает» (ручной коэффициент части, %)
+    const apply=(e.apply!=null?e.apply/100:1);
     const need=0.5+0.5*needFrac(needTag);
     val+=base*mag*gate*need*apply;
   });
@@ -255,8 +238,7 @@ function bestMatchup(members,rooms){
   } return best;
 }
 
-// pre — необязательный уже загруженный объект тегов (напр. из Supabase synergy_tags).
-// Без него берём статический web/data/synergy_tags.json (фолбэк/офлайн).
+// pre — уже загруженные теги (Supabase synergy_tags); иначе фолбэк на synergy_tags.json
 async function load(pre){
   if(TAGS)return;
   const sP=fetch('web/data/characters_synergy.json').then(r=>r.json());

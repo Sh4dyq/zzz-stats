@@ -1,6 +1,5 @@
-// weights.js — админ-страница «Веса персонажей». Ручная калибровка силы (0..100)
-// поверх авто-сигналов (средний кост + байес-винрейт). Пишет в char_weights.
-// Средний кост/винрейт считаются на лету из tournament_costs + match_picks/matches.
+// weights.js — админ-аналитика: ручная калибровка силы (0..100) поверх авто-сигналов
+// (средний кост + байес-винрейт). Пишет в char_weights.
 
 const KB_WR=15; // псевдо-счёт байес-винрейта (как в rating-tab)
 
@@ -29,8 +28,7 @@ function _avgCosts(costs){
   for(const t in perTour)for(const ch in perTour[t])(acc[ch]=acc[ch]||[]).push(perTour[t][ch].cost);
   const out={};
   for(const ch in acc){
-    // кост 0 в турнире = бесплатный бейслайн (напр. S Anby), а не реальная цена.
-    // Если у перса есть ненулевой кост где-то ещё — усредняем только по ненулевым.
+    // кост 0 = бесплатный бейслайн, не цена: если есть ненулевые — усредняем по ним
     const nz=acc[ch].filter(x=>x>0);
     const use=nz.length?nz:acc[ch];
     out[ch]=use.reduce((a,b)=>a+b,0)/use.length;
@@ -59,8 +57,7 @@ function _wmanInit(){const v=parseFloat(localStorage.getItem(_WMAN_KEY));return 
 let _W={rows:[],saved:{},sortKey:'power',sortDir:-1,wman:_wmanInit(),roleFilter:'all',expanded:new Set(),
   section:'power',calib:'solo'}; // section: power|shiyu|consts ; calib (в power): solo|duo|trio
 
-// констелляции (майндскейпы), реально сыгранные на турнирах: пики/винрейт + кост майндскейпа.
-// Только сыгранные — это заодно отсекает мусорные косты незаигранных M (напр. заглушки).
+// реально сыгранные констелляции: пики/винрейт + кост майндскейпа (отсекает мусорные косты незаигранных M)
 function _constsByChar(picks,matches,costs){
   const mById={};matches.forEach(m=>mById[m.id]=m);
   const play={};
@@ -108,7 +105,7 @@ async function _cmpLoadSolo(){
     }));
 }
 
-// авто-z из коста и винрейта (грубая нормировка под шкалу; финальная калибровка — в predict.js)
+// авто-z из коста и винрейта (грубая нормировка под шкалу)
 function _zAuto(r){
   const zc=r.cost!=null?(r.cost/100-0.5)*0.9:0;
   const zw=r.wr!=null?(r.wr-0.5)*6:0;
@@ -135,8 +132,7 @@ const _roleLabel=r=>{const x=_ROLES.find(e=>e[0]===r);return x?x[1]:r;};
 const _cw=(id,ms)=>((_W.cweights&&_W.cweights[id])||{})[ms]??50;
 const _tierBadge=(t,attr)=>`<span ${attr} style="display:inline-flex;align-items:center;justify-content:center;min-width:30px;height:22px;font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;font-size:14px;color:#181820;background:${t.c};border-radius:5px;padding:0 6px">${t.t}</span>`;
 
-// констелляции для показа: M0 — база (S-ранги: строка персонажа=M0, A-ранги: =M6),
-// поэтому M0 не отдельная строка; у A-рангов констелляций вообще нет.
+// констелляции для показа (M0 — база, у A-рангов констелляций нет)
 function _displayConsts(r){
   if(r.c.rarity==='A')return [];
   return ((_W.consts&&_W.consts[r.id])||[]).filter(c=>c.ms>0);
@@ -271,9 +267,7 @@ function _renderWeights(){
   <p style="color:var(--sub);font-size:12px;margin-top:12px;line-height:1.5">Клик по персонажу — констелляции (сыгранные майндскейпы + кост/винрейт). Фильтр по ролям сверху. Клик по заголовку — сортировка. Не забудь «Сохранить».</p>`);
 }
 
-// Точечная перерисовка ячеек строки БЕЗ пересборки таблицы и без пересортировки —
-// иначе тащимый ползунок заменяется новым DOM (застывает), а строка «улетает» при ре-сорте.
-// Позиции обновляются только при новой сортировке (клик по заголовку).
+// точечная перерисовка ячеек строки без пересборки таблицы (иначе ползунок застывает при драге)
 // row-like объект строки (персонаж или констелляция) для пересчёта силы
 function _rowObj(tr){
   if(tr.dataset.ri!=null&&tr.dataset.ri!=='')return _W.rows[+tr.dataset.ri];
@@ -315,12 +309,10 @@ async function saveWeights(){
   toast('Веса сохранены');
 }
 
-// ===== Редактор тегов синергии + майндскейпов (Аналитика → Теги + майндскейпы) =====
-// Источник правды — таблица synergy_tags (jsonb на персонажа). Базовые roles/gives/needs
-// = шкала 0-4 (M0); ms.gives_self / ms.gives — мидскейпы (mag вне 0-4 допустим, at = порог M).
-// Автосохранение построчно (debounce), фолбэк-база — web/data/synergy_tags.json.
-// Единый словарь тегов: [ключ, короткая метка, полное описание]. Метки приведены к
-// одному виду (Существительное + игровой термин), описания — в тултип.
+// ===== Редактор тегов синергии + майндскейпов =====
+// источник — synergy_tags (jsonb); roles/gives/needs = шкала 0-4 (M0); ms.gives_self/gives — мидскейпы.
+// автосейв построчно (debounce), фолбэк — web/data/synergy_tags.json.
+// словарь тегов: [ключ, короткая метка, полное описание (в тултип)]
 const _TAGVOCAB=[
   ['atk_buff','Баф ATK','Повышение ATK команде (ширикам ~0.5, скейлятся от HP)'],
   ['dmg_buff','Общий DMG','Универсальный DMG% / DMG-taken / снижение всех RES — полезен всем'],
@@ -353,8 +345,7 @@ const _TAGSHORT={atk_buff:'ATK',dmg_buff:'DMG',crit_buff:'Крит',anomaly_buff
   decibel:'Деци',aftershock:'Афт',abloom:'Abloom',ether_veil:'Вуаль'};
 const _ROLESHORT={crit_dps:'КритДПС',sheer_dps:'Шир',sub_dps:'СабДПС',main_anomaly:'МейнАн',
   sub_anomaly:'СабАн',stunner:'Стан',support:'Сапп',off_field:'ОффФ'};
-// имена в synergy_tags — полные; в D.chars — короткие (см. ALIAS в synergy.js). Матчим по имени,
-// чтобы вытащить настоящую карточку персонажа (иконку). Иначе iconChar не находит файл.
+// имена в synergy_tags полные, в D.chars короткие — матчим по имени для иконки
 const _NAME_ALIAS={Nicole:'Nicole Demara',Lycaon:'Von Lycaon',Lucy:'Luciana de Montefio',
   Astra:'Astra Yao',Alice:'Alice Thymefield',Burnice:'Burnice White',Vivian:'Vivian Banshee',
   Evelyn:'Evelyn Chevalier',Ellen:'Ellen Joe',Rina:'Alexandrina Sebastiane',
@@ -373,7 +364,6 @@ function _charByName(name){
     D.chars.forEach(c=>{if(!c||!c.name)return;_W.charIdx[c.name]=c;
       const full=_NAME_ALIAS[c.name];if(full)_W.charIdx[full]=c;});
   }
-  // карточка (даёт icon_url из БД + роль), иначе — фолбэк с коротким именем под файл иконки
   return (_W.charIdx&&_W.charIdx[name])||{name:_FULL2SHORT[name]||name};
 }
 function _tagChar(id){
@@ -396,10 +386,8 @@ async function _loadTags(){
   _W.tags=map;_W.tagsLoaded=true;
 }
 
-// нормализуем ms: gives_self/gives → массив [{tag,mag,at}]. Старый формат — объект {tag:{mag,at}}
-// (один тег = одна строка). Массив снимает слияние: тег можно повторять (напр. Грейс даёт себе
-// разгон аномалии в нескольких констах). mag — АБСОЛЮТНОЕ значение тега с этого M (не +к M0).
-// ms.dmg (множитель урона M1-6) остаётся в редакторе для заполнения, но в расчётах НЕ участвует.
+// ms: gives_self/gives → массив [{tag,mag,at}] (тег можно повторять); mag — абсолютное значение с этого M.
+// старый формат {tag:{mag,at}} конвертируется. ms.dmg в расчётах не участвует.
 function _msNorm(t){
   if(!t)return t;
   const ms=t.ms=t.ms||{};
@@ -644,10 +632,9 @@ function _kwLegend(){
     +`<span style="display:inline-flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:50%;background:#ff6b6b"></span>вручную</span></div>`;
 }
 
-// ===== Влияние бафов Шиюй (Аналитика → Влияние бафов Шиюй) =====
-// Три блока: (1) справочник множителей всех семейств бафов, (2) какие бафы у турниров,
-// (3) редактор текущих множителей выбранного турнира. Константы зеркалят tournaments.js
-// (BUFF_BAND) и synergy.js (гейты buffMatchup). mag = 0.4 + 0.6·норм; условие ×0.7.
+// ===== Влияние бафов Шиюй =====
+// (1) справочник семейств, (2) бафы турниров, (3) редактор множителей турнира.
+// константы зеркалят tournaments.js (BUFF_BAND) и synergy.js (гейты buffMatchup).
 const _BUFF_FAMILIES=[
   ['dmg_buff','Общий DMG',[10,40],'всем','DMG% / DMG-taken / снижение всех RES — универсально'],
   ['dmg_buff_elem','DMG элемента',[10,40],'доля урона в баф-элементах','DMG% элемента и «ignore <эл> RES» — только урон этого элемента'],
@@ -660,7 +647,6 @@ const _BUFF_FAMILIES=[
   ['def_shred','Снижение DEF',[10,25],'1 − доля Sheer','Снижение DEF врага — ширикам не нужно'],
 ];
 // тег бафа турнира: сохранённый buff_tag, иначе доразбор из текста ротации на лету
-// (старые ротации грузились до появления парсера — тега нет, но buff.lines есть).
 function _shyTag(t){
   const sd=t.shiyu_data||{};
   if(sd.buff_tag)return sd.buff_tag;
@@ -692,8 +678,7 @@ function _renderShiyuBuffs(){
   const th='text-align:left;padding:6px 10px;font-size:11px;color:var(--sub);text-transform:uppercase;border-bottom:1px solid var(--line)';
   const td='padding:7px 10px;border-bottom:1px solid var(--line);font-size:13px';
 
-  // (1) справочник семейств: сила по умолчанию задаётся руками (0-4), сохраняется локально,
-  // применяется как стартовая сила новых эффектов этого семейства
+  // (1) справочник семейств (сила 0-4 руками, стартовая сила новых эффектов семейства)
   const famRows=_BUFF_FAMILIES.map(([k,l,band,gate,desc])=>`<tr>
     <td style="${td}"><b>${l}</b><div style="font-size:11px;color:var(--sub)">${desc}</div></td>
     <td style="${td};text-align:center;font-family:'JetBrains Mono',monospace">${band[0]}–${band[1]}%</td>
@@ -904,8 +889,7 @@ async function _shySave(){
   t.shiyu_data=sd;const dt=(D.tours||[]).find(x=>x.id===_W.shyTour);if(dt)dt.shiyu_data=sd;
   set('✓ сохранено','var(--accent)');toast('Баф сохранён');
 }
-// массово фиксируем доразбор: старые ротации без buff_tag парсятся на лету при каждой загрузке.
-// Прогоняем _shyTag и пишем результат в shiyu_data.buff_tag, чтобы разбор больше не терялся.
+// массово пишем доразобранный тег в shiyu_data.buff_tag (чтобы разбор не терялся)
 async function _shyBackfill(){
   const st=document.getElementById('shy-bf-status');const set=(s,c)=>{if(st){st.textContent=s;st.style.color=c||'var(--sub)';}};
   const todo=(_W.shyTours||[]).filter(t=>t.shiyu_data&&!t.shiyu_data.buff_tag);
@@ -922,10 +906,8 @@ async function _shyBackfill(){
   set(`✓ зафиксировано ${ok}`,'var(--accent)');toast('Доразбор зафиксирован');_renderShiyuBuffs();
 }
 
-// ===== Дуо / Трио: ручные рейтинги пар и троек (Аналитика → Калибровка силы) =====
-// Таблица team_ratings: key = "cid:ms|cid:ms[|cid:ms]" (cid сортированы), members jsonb,
-// stars_synergy / stars_power 0-5. A-ранги всегда M6 (клик по бейджу заблокирован).
-// Подсказка из данных: винрейт реальных пиков (пары = подмножества троек матчей).
+// ===== Дуо / Трио: ручные рейтинги пар и троек =====
+// team_ratings: key="cid:ms|cid:ms[|cid:ms]", stars_synergy/stars_power 0-5, A-ранги всегда M6.
 
 function _tmKey(members){ // канонический ключ состава
   return members.slice().sort((a,b)=>String(a.cid).localeCompare(String(b.cid)))
@@ -933,8 +915,7 @@ function _tmKey(members){ // канонический ключ состава
 }
 function _tmStatsCalc(picks,matches){ // винрейты пар и троек из реальных пиков
   const mBy={};matches.forEach(m=>mBy[m.id]=m);
-  // сторона драфта = 6 пиков, но играются ДВЕ тройки → группируем по team_slot;
-  // пары считаем только ВНУТРИ тройки (реально играли вместе), не по всей шестёрке
+  // группируем по team_slot: пары считаем внутри тройки, не по всей шестёрке
   const teams={};
   picks.forEach(p=>{const k=p.match_id+'|'+p.player_id+'|'+(p.team_slot??0);
     (teams[k]=teams[k]||{cids:[],m:p.match_id,pl:p.player_id}).cids.push(String(p.character_id));});
@@ -1094,11 +1075,9 @@ async function _tmDel(key){
 }
 
 // ===== Сравнение Соло / Дуо / Трио — рейтинг из голосов спарринга =====
-// Итог парных сравнений из sparring_votes: модель Брэдли-Терри (MM-итерации).
-// Единица сравнения = состав на калибровочном M ("cid:ms|…"), поэтому M6 Солдатка и
-// M0 Солдатка — РАЗНЫЕ единицы. Отдельно от ручной калибровки char_weights.
+// sparring_votes → Брэдли-Терри (MM). Единица = состав на калибровочном M ("cid:ms|…").
 function _btKey(team){return (team||[]).map(m=>m.cid+':'+(m.ms||0)).sort().join('|');}
-// Брэдли-Терри: games=[{w:key,l:key}] → {key:{score 0-100, games}}
+// games=[{w:key,l:key}] → {key:{score 0-100, games}}
 function _btRank(games){
   const ids=[...new Set(games.flatMap(g=>[g.w,g.l]))];
   if(ids.length<2)return {};
@@ -1165,12 +1144,9 @@ function _renderCompare(){
   </div>`);
 }
 
-// ===== Спарринг-калибровка (Аналитика → Спарринг: Соло/Дуо/Трио) =====
-// Парные сравнения рандомных вариантов, подобранных ПО РОЛЯМ (см. weights-roadmap):
-// правая сторона повторяет ролевой профиль левой — не сравниваем 2 ДД против 2 станнеров.
-// Персонажи МОГУТ повторяться между сторонами (дуо/трио), составы не идентичны.
-// Клик по стороне → голос в sparring_votes; «Сложно / ничья» → замена без записи.
-// Майндскейпы: S-ранги M0, A-ранги M6 (турнирная конвенция predict).
+// ===== Спарринг-калибровка =====
+// парные сравнения вариантов, подобранных по ролям (правая повторяет ролевой профиль левой).
+// клик по стороне → голос в sparring_votes; «Сложно/ничья» → замена без записи.
 const _SP_ROLE_LBL={atk:'ДД',stun:'Стан',sup:'Саппорт',ano:'Аномалия',rupt:'Разлом',def:'Защита'};
 async function _spLoad(){
   if(!_W.tmLoaded)await _tmLoad();                       // ростер + карта персонажей
@@ -1203,7 +1179,7 @@ function _spMs(c){
 const _spInGame=c=>!(_W.spCfg&&_W.spCfg[c.id]&&_W.spCfg[c.id].in_game===false);
 function _spPool(){return _W.tmChars.filter(c=>c.role&&_spInGame(c));} // роль известна + в игре
 const _spPick=arr=>arr[Math.floor(Math.random()*arr.length)];
-// похожесть тегов (Жаккар) — станнер-с-аномалистами (Наньгун) ближе к Ликаону, чем к чистому стану
+// похожесть тегов (Жаккар)
 function _spSim(a,b){
   const A=_W.spSig[a],B=_W.spSig[b];if(!A||!B||!A.size||!B.size)return 0;
   let inter=0;A.forEach(x=>{if(B.has(x))inter++;});return inter/(A.size+B.size-inter);
@@ -1235,8 +1211,8 @@ function _spTeamRight(size,left){
     if(!cand.length)cand=pool.filter(c=>!used.has(c.id));
     if(!cand.length)return null;
     const fresh=cand.filter(c=>!_spRecentHas(c.id));if(fresh.length)cand=fresh;
-    // вес: похожесть тегов к левому i (Наньгун↔Ликаон), лёгкий базовый шум
-    const c=_spWeighted(cand,x=>0.15+_spSim(left[i].id,x.id));
+    const c=_spWeighted(cand,x=>0.15+_spSim(left[i].id,x.id)); // вес: похожесть тегов + базовый шум
+
     used.add(c.id);team.push(c);
   }
   return team;

@@ -1,22 +1,9 @@
 // predict.js — вероятности побед: Elo игроков, драфт vs драфт, Монте-Карло турнира.
-// Чистые функции без DOM, общие для statistics.html (калькуляторы) и bracket.html («Шансы»).
-// Все вероятности пересчитываются из текущих данных БД → обновляются сами по мере
-// проставления результатов (сыгранные матчи фиксированы, несыгранные симулируются).
 (function(g){
-  // K=40 — на наших коротких историях быстрее выводит рейтинг к реальной силе (прекуэнциальный
-  // тест: log-loss ниже, чем при 30/32), и хорошо стареет с ростом данных. Малую выборку
-  // лечит не K, а стягивание отображаемого рейтинга (см. predict.html eloShown), НЕ вероятности.
   const ELO_START=1000, ELO_K=40;
   const pElo=(ra,rb)=>1/(1+Math.pow(10,(rb-ra)/400));
 
-  // Elo по играм (каждый match = игра, ничья = 0.5) в хронологии:
-  // турниры по created_at asc → встречи по порядку игры → игры по match_number.
-  // Порядок встреч внутри турнира: orderMap[enc.id] (реальный порядок сетки, если
-  // удалось привязать к Challonge/своей сетке) → иначе sort_order. orderMap задаётся
-  // так, что для одного турнира им покрыты ЛИБО все встречи, либо ни одной — тогда
-  // шкалы не смешиваются (см. predict.html playOrderMap).
-  // encounters: [{id,tournament_id,player1_id,player2_id,winner_id,sort_order}]
-  // matchesByEnc: {encounter_id:[match,...]}
+  // Elo по играм в хронологии: турниры по created_at → встречи по orderMap/sort_order → игры по match_number.
   function buildRatings(tournaments,encounters,matchesByEnc,orderMap){
     const ord=orderMap||{};
     const key=e=>ord[e.id]!=null?ord[e.id]:(e.sort_order!=null?e.sort_order:1e9);
@@ -31,7 +18,7 @@
     encs.forEach(e=>{
       const p1=e.player1_id,p2=e.player2_id;if(!p1||!p2)return;
       const ms=((matchesByEnc&&matchesByEnc[e.id])||[]).slice().sort((a,b)=>(a.match_number||0)-(b.match_number||0));
-      const games=ms.length?ms:(e.winner_id?[{winner_id:e.winner_id}]:[]); // фолбэк: нет игр — считаем встречу одной игрой
+      const games=ms.length?ms:(e.winner_id?[{winner_id:e.winner_id}]:[]);
       games.forEach(m=>{
         if(!m.winner_id&&!m.is_draw)return;
         const s1=m.is_draw?0.5:(m.winner_id===p1?1:0);
@@ -43,7 +30,7 @@
     return{ratings:R,games:G,get};
   }
 
-  // Личные встречи p1 против p2 по играм: {w,d,l} с точки зрения p1.
+  // личные встречи p1 vs p2 по играм: {w,d,l} с точки зрения p1
   function headToHead(p1,p2,encounters,matchesByEnc){
     const r={w:0,d:0,l:0};
     (encounters||[]).forEach(e=>{
@@ -64,8 +51,7 @@
   const PRIOR_N=6;
   const bayes=(wEq,n)=>(wEq+PRIOR_N*0.5)/((n||0)+PRIOR_N);
 
-  // Статистика персонажей по пикам: cid → {games,wEq,bwr}.
-  // picks: match_picks[], matchMap: match_id → match (winner_id/is_draw).
+  // статистика персонажей по пикам: cid → {games,wEq,bwr}
   function charStats(picks,matchMap){
     const st={};
     (picks||[]).forEach(pk=>{
@@ -78,7 +64,7 @@
     return st;
   }
 
-  // Сила драфта = средний байес-винрейт его персонажей; шанс — по формуле log5.
+  // сила драфта = средний байес-винрейт персонажей; шанс — log5
   function draftWinProb(cidsA,cidsB,stats){
     const side=cids=>{
       const v=cids.filter(Boolean).map(c=>(stats[c]&&stats[c].bwr)||0.5);
@@ -89,18 +75,14 @@
     return{p:den>0?num/den:0.5,sa:a,sb:b};
   }
 
-  // --- Монте-Карло: своя сетка (bracket_nodes) ---
-  // nodes из БД (уже с продвинутыми игроками и winner_id сыгранных). Несыгранные ноды
-  // с двумя игроками сэмплируются по Elo. Возврат: pid → {champ,final} (вероятности 0..1).
-  // Ключ пары игроков (не зависит от порядка) — для фиксации исходов «кто кого бьёт».
+  // --- Монте-Карло: своя сетка (bracket_nodes) → pid → {champ,final} ---
   const pairKey=(a,b)=>String(a)<String(b)?a+'|'+b:b+'|'+a;
-  // forced: {pairKey: winnerId} — если эти двое встретились, победитель фиксирован
-  // (ручной выбор в конструкторе). Действует в ЛЮБОМ раунде, где пара реально сошлась.
+  // forced: {pairKey: winnerId} — фиксированный победитель пары (ручной выбор в конструкторе)
   function simulateBracket(nodes,ratings,iters,forced){
     iters=iters||5000;
     const ordP={W:0,L:1,GF:2};
     const order=nodes.slice().sort((a,b)=>(ordP[a.part]??3)-(ordP[b.part]??3)||a.round-b.round||a.slot-b.slot);
-    const finalNode=order[order.length-1]; // GF (DE) либо финал верхней (SE)
+    const finalNode=order[order.length-1];
     const res={},fin={};
     const get=id=>ratings[id]??ELO_START;
     for(let it=0;it<iters;it++){
@@ -110,7 +92,7 @@
         let a=p1[n.id],b=p2[n.id],w=win[n.id];
         if(!w){
           if(a&&b){const f=forced&&forced[pairKey(a,b)];w=f!=null?f:(Math.random()<pElo(get(a),get(b))?a:b);}
-          else if(n.is_bye)w=a||b;                    // BYE — авто-проход
+          else if(n.is_bye)w=a||b;
           if(!w)return;
           win[n.id]=w;
         }
@@ -129,10 +111,7 @@
     return out;
   }
 
-  // --- Монте-Карло: SE/DE без своей сетки (приближение) ---
-  // Структура пар неизвестна (challonge-legacy) → считаем по выбыванию: SE — вылет
-  // после 1 поражения, DE — после 2. Оставшиеся разыгрываются случайной жеребьёвкой
-  // по раундам. Возврат: pid → {champ,final}.
+  // --- Монте-Карло: SE/DE без своей сетки (приближение по выбыванию, жеребьёвка по раундам) ---
   function simulateElimination(players,losses,type,ratings,iters){
     iters=iters||5000;
     const de=type==='DE';
@@ -141,7 +120,7 @@
     const bump=(o,p)=>{if(p)o[p]=(o[p]||0)+1;};
     const shuffle=a=>{for(let i=a.length-1;i>0;i--){const j=(Math.random()*(i+1))|0;[a[i],a[j]]=[a[j],a[i]];}return a;};
     const play=(a,b)=>Math.random()<pElo(get(a),get(b))?a:b;
-    // раунд: пары по жребию; победители дальше, нечётный — bye; losersOut собирает проигравших
+    // раунд: пары по жребию, победители дальше, нечётный — bye
     const round=(arr,losersOut)=>{
       const next=[];shuffle(arr);
       for(let i=0;i+1<arr.length;i+=2){const w=play(arr[i],arr[i+1]);next.push(w);if(losersOut)losersOut.push(w===arr[i]?arr[i+1]:arr[i]);}
@@ -177,10 +156,7 @@
     return out;
   }
 
-  // --- Монте-Карло: группа / round robin ---
-  // players: [pid], encounters — встречи ЭТОГО турнира (сыгранные фиксируются, пары
-  // без результата и недостающие пары симулируются, один круг).
-  // Возврат: pid → {expPlace, placeP:[P(место1),P(место2),...]}.
+  // --- Монте-Карло: группа / round robin (один круг) → pid → {expPlace, placeP:[...]} ---
   function simulateRoundRobin(players,encounters,ratings,iters){
     iters=iters||5000;
     const n=players.length;if(n<2)return{};
@@ -196,7 +172,6 @@
       if(e.winner_id&&idx[e.winner_id]!=null)basePts[idx[e.winner_id]]++;
       else pending.push([a,b,pElo(get(e.player1_id),get(e.player2_id))]);
     });
-    // недостающие пары круга
     for(let a=0;a<n;a++)for(let b=a+1;b<n;b++)
       if(!seen.has(a+'-'+b))pending.push([a,b,pElo(get(players[a]),get(players[b]))]);
     const placeCnt=players.map(()=>new Array(n).fill(0));
@@ -204,8 +179,8 @@
     for(let it=0;it<iters;it++){
       for(let i=0;i<n;i++)pts[i]=basePts[i];
       pending.forEach(([a,b,p])=>{if(Math.random()<p)pts[a]++;else pts[b]++;});
-      // очки ↓, тайбрейк — случайный (жребий)
-      const tie=ord.map(()=>Math.random());
+      const tie=ord.map(()=>Math.random()); // тайбрейк — жребий
+
       ord.sort((x,y)=>pts[y]-pts[x]||tie[x]-tie[y]);
       ord.forEach((pi,place)=>placeCnt[pi][place]++);
     }
