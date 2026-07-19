@@ -190,6 +190,7 @@ function buffMatchup(members,tag){
     ['sheer','anomaly','stun','crit'].forEach(m=>{if(mechMatch(c,m))mechW[m]+=w;});});
   if(!total)return 0;
   const elemFit=elems.reduce((s,e)=>s+(prof[e]||0),0)/total; // доля урона в баф-элементах
+  const elemFitOf=els=>(els&&els.length)?els.reduce((s,e)=>s+(prof[e]||0),0)/total:elemFit; // элемент части → фолбэк общий
   const mechs=(tag.mechs&&tag.mechs.length)?tag.mechs:(tag.mech?[tag.mech]:[]);
   // фолбэк: старый тег без effects → чистое попадание elem/mech
   if(!tag.effects||!tag.effects.length){
@@ -211,13 +212,15 @@ function buffMatchup(members,tag){
       gate=total?g/total:0;
     }else{
       gate=1;
-      if(e.tag==='dmg_buff_elem')gate=elemFit;
+      if(e.tag==='dmg_buff_elem')gate=elemFitOf(e.elems);
       else if(e.tag==='dmg_buff')gate=1;
       else if(e.tag==='dmg_buff_skill')gate=0.5;             // заглушка (нужна раскладка урона per-char)
       else if(e.tag==='sheer_dmg_buff')gate=sheerFrac;
       else if(e.tag==='anomaly_buff')gate=anomFrac;
       else if(e.tag==='crit_buff')gate=critFrac;
       else if(e.tag==='pen_buff'||e.tag==='def_shred')gate=1-sheerFrac;
+      // элемент как доп-ограничение для любой части (у dmg_buff_elem он уже сам гейт)
+      if(e.tag!=='dmg_buff_elem'&&e.elems&&e.elems.length)gate*=elemFitOf(e.elems);
     }
     const apply=(e.apply!=null?e.apply/100:1);
     const need=0.5+0.5*needFrac(needTag);

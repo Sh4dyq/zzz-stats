@@ -654,6 +654,19 @@ function _shyTag(t){
   const txt=String(raw).replace(/<[^>]+>/g,' ');
   return (typeof parseBuffTag==='function')?parseBuffTag(txt):{elems:[],elem:null,mech:null,strength:0,effects:[]};
 }
+// ключ группы: один и тот же Шиюй (id из ссылки) → турниры делят один баф
+function _shyKey(t){
+  const u=t.shiyu_url||'';const m=u.match(/shiyu\/(\d+)/);
+  if(m)return 'id:'+m[1];
+  if(u)return 'url:'+u;
+  const sid=t.shiyu_data&&t.shiyu_data.id;return sid?('sid:'+sid):('t:'+t.id);
+}
+// сгруппировать турниры по Шиюй; rep — носитель бафа (с buff_tag), иначе первый
+function _shyGroups(tours){
+  const map=new Map();
+  tours.forEach(t=>{const k=_shyKey(t);if(!map.has(k))map.set(k,[]);map.get(k).push(t);});
+  return [...map.values()].map(ts=>({key:_shyKey(ts[0]),tours:ts,rep:ts.find(x=>x.shiyu_data&&x.shiyu_data.buff_tag)||ts[0]}));
+}
 function _renderShiyuBuffs(){
   // источник — свежий список турниров (D.tours на этой странице может быть ещё не загружен)
   if(!_W.shyLoaded){
@@ -664,15 +677,19 @@ function _renderShiyuBuffs(){
       .then(([rows,tj,chars])=>{_W.shyTours=rows;
         if(!D.chars||!D.chars.length){D.chars=chars;D.charMap={};chars.forEach(c=>D.charMap[c.id]=c);}
         _W.shyCharMap={};(chars||[]).forEach(c=>_W.shyCharMap[c.id]=c);
-        // ростер для пикера: карточка персонажа (иконка+имя) по id из synergy_tags
-        _W.shyRoster=Object.entries(tj).map(([id,v])=>({id,name:(_W.shyCharMap[id]&&_W.shyCharMap[id].name)||v.name}))
+        // synergy_tags ключи = enka_id → резолвим к персонажу по enka (иначе битые иконки: имя полное, файл — короткий)
+        _W.shyByEnka={};(chars||[]).forEach(c=>{if(c.enka_id)_W.shyByEnka[String(c.enka_id).split('_')[0]]=c;});
+        // ростер для пикера: карточка персонажа (иконка+имя) + элемент/специальность для фильтра
+        _W.shyRoster=Object.entries(tj).map(([id,v])=>{const c=_W.shyByEnka[id]||null;
+          return{id,char:c||{name:v.name},name:(c&&c.name)||v.name,elem:(v.element||'').toLowerCase(),spec:(v.specialty||'').toLowerCase()};})
           .sort((a,b)=>(a.name||'').localeCompare(b.name||'','ru'));
         _W.shyLoaded=true;_renderShiyuBuffs();})
       .catch(e=>html(`${_analyticsTabs()}<div class="card" style="padding:22px;color:var(--red)">Ошибка загрузки: ${e.message}</div>`));
     return;
   }
   const tours=(_W.shyTours||[]).filter(t=>t.shiyu_data);       // все загруженные ротации
-  if(_W.shyTour===undefined||!tours.some(t=>t.id===_W.shyTour))_W.shyTour=tours.length?tours[0].id:null;
+  const groups=_shyGroups(tours);                              // группы по Шиюй (не дублировать баф)
+  if(_W.shyTour===undefined||!groups.some(g=>g.rep.id===_W.shyTour))_W.shyTour=groups.length?groups[0].rep.id:null;
   const card='background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px 18px;margin-bottom:16px';
   const H=s=>`<div style="font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;font-size:14px;letter-spacing:.03em;color:var(--text);margin:0 0 10px">${s}</div>`;
   const th='text-align:left;padding:6px 10px;font-size:11px;color:var(--sub);text-transform:uppercase;border-bottom:1px solid var(--line)';
@@ -695,8 +712,9 @@ function _renderShiyuBuffs(){
       условная строка (when/after/upon) → ×0.7, суммарный вклад ≤ <b>BUFF_CAP = 0.10</b>, вес блока <b>BUFF_W = 0.50</b>,
       нужда отряда = 0.5 + 0.5·(доля дпс, кому эффект нужен).</div></div>`;
 
-  // (2) бафы по турнирам — с описанием ротации
-  const bt=t=>{
+  // (2) бафы по Шиюй (одна строка на группу турниров — баф общий)
+  const bt=g=>{
+    const t=g.rep;
     const saved=!!(t.shiyu_data&&t.shiyu_data.buff_tag);
     const tag=_shyTag(t);
     const b=t.shiyu_data.buff||{};
@@ -708,27 +726,29 @@ function _renderShiyuBuffs(){
       const ap=(e.apply!=null&&e.apply!==100)?` ${e.apply}%`:'';
       return `${_tlbl(e.tag)} ${w}/4${ap}${who}`;}).join(' · ')||'—';
     const notSaved=saved?'':' <span style="font-size:10px;color:var(--sub);border:1px solid var(--border);border-radius:3px;padding:0 4px">не сохранён</span>';
+    const members=g.tours.length>1?`<div style="font-size:11px;color:var(--sub);margin-top:3px">🔗 ${g.tours.length} турнира: ${g.tours.map(x=>escapeHtml(x.name||x.id)).join(', ')}</div>`:'';
     return `<tr>
       <td style="${td};vertical-align:top;min-width:150px"><b>${escapeHtml(t.name||t.id)}</b>${notSaved}
-        <div style="font-size:12px;color:var(--accent);margin-top:2px">${escapeHtml(b.title||'')}</div></td>
+        <div style="font-size:12px;color:var(--accent);margin-top:2px">${escapeHtml(b.title||'')}</div>${members}</td>
       <td style="${td};font-size:12px;color:var(--sub);max-width:340px;line-height:1.5">${desc}</td>
       <td style="${td};text-align:center;font-size:12px">${elems}</td>
       <td style="${td};text-align:center;font-size:12px">${mechs}</td>
       <td style="${td};font-size:12px">${eff}</td></tr>`;
   };
-  const unsaved=tours.filter(t=>!(t.shiyu_data&&t.shiyu_data.buff_tag)).length;
-  const backfillBtn=unsaved?`<button class="btn" style="margin-left:12px" onclick="_shyBackfill()" title="Зафиксировать доразобранные теги всех ротаций без buff_tag (иначе разбор идёт заново при каждой загрузке)">Зафиксировать доразбор (${unsaved})</button><span id="shy-bf-status" style="font-size:12px;color:var(--sub);margin-left:8px"></span>`:'';
-  const perTour=tours.length?`<div style="${card}">${H('Бафы по турнирам')+backfillBtn}
+  const unsaved=groups.filter(g=>!(g.rep.shiyu_data&&g.rep.shiyu_data.buff_tag)).length;
+  const backfillBtn=unsaved?`<button class="btn" style="margin-left:12px" onclick="_shyBackfill()" title="Зафиксировать доразобранные теги ротаций без buff_tag (иначе разбор идёт заново при каждой загрузке)">Зафиксировать доразбор (${unsaved})</button><span id="shy-bf-status" style="font-size:12px;color:var(--sub);margin-left:8px"></span>`:'';
+  const perTour=groups.length?`<div style="${card}">${H('Бафы по Шиюй')+backfillBtn}
     <div style="overflow-x:auto"><table style="border-collapse:collapse;width:100%;min-width:720px">
-      <thead><tr><th style="${th}">Турнир · баф</th><th style="${th}">Описание ротации</th><th style="${th};text-align:center">Элементы</th>
+      <thead><tr><th style="${th}">Шиюй (турниры) · баф</th><th style="${th}">Описание ротации</th><th style="${th};text-align:center">Элементы</th>
         <th style="${th};text-align:center">Архетипы</th><th style="${th}">Эффекты (сила 0-4)</th></tr></thead>
-      <tbody>${tours.map(bt).join('')}</tbody></table></div></div>`
-    : `<div style="${card}">${H('Бафы по турнирам')}<div style="color:var(--sub);font-size:13px">Ни у одного турнира не загружена ротация Шиюй. Импорт — в «Турниры → Настройки → Ротация Шиюй».</div></div>`;
+      <tbody>${groups.map(bt).join('')}</tbody></table></div></div>`
+    : `<div style="${card}">${H('Бафы по Шиюй')}<div style="color:var(--sub);font-size:13px">Ни у одного турнира не загружена ротация Шиюй. Импорт — в «Турниры → Настройки → Ротация Шиюй».</div></div>`;
 
-  // (3) редактор выбранного турнира (мульти-элемент/архетип, сила 0-4, описание)
+  // (3) редактор группы (мульти-элемент/архетип, сила 0-4, описание) — сохранение разливается на все турниры группы
   let editor='';
-  const cur=tours.find(t=>t.id===_W.shyTour);
-  const opts=tours.map(t=>`<option value="${t.id}" ${t.id===_W.shyTour?'selected':''}>${escapeHtml(t.name||t.id)}</option>`).join('');
+  const curG=groups.find(g=>g.rep.id===_W.shyTour);
+  const cur=curG&&curG.rep;
+  const opts=groups.map(g=>`<option value="${g.rep.id}" ${g.rep.id===_W.shyTour?'selected':''}>${escapeHtml(g.rep.name||g.rep.id)}${g.tours.length>1?` (×${g.tours.length})`:''}</option>`).join('');
   if(cur){
     const savedTag=!!(cur.shiyu_data&&cur.shiyu_data.buff_tag);
     if(!_W.shyDraft||_W.shyDraftFor!==_W.shyTour){_W.shyDraft=_shyDraftFrom(_shyTag(cur));_W.shyDraftFor=_W.shyTour;}
@@ -744,7 +764,7 @@ function _renderShiyuBuffs(){
     const rosterName={};(_W.shyRoster||[]).forEach(r=>rosterName[r.id]=r.name);
     const tagOpt=e=>[..._TAGVOCAB.map(x=>[x[0],x[1]]),['dmg_buff_elem','DMG элемента'],['dmg_buff_skill','DMG по кнопке']]
       .map(([k,l])=>`<option value="${k}" ${k===e.tag?'selected':''}>${l}</option>`).join('');
-    const charCard=cid=>_W.shyCharMap&&_W.shyCharMap[cid]||{name:rosterName[cid]||cid};
+    const charCard=cid=>(_W.shyByEnka&&_W.shyByEnka[cid])||(_W.shyCharMap&&_W.shyCharMap[cid])||{name:rosterName[cid]||cid};
     const partCard=(e,i)=>{
       const chars=(e.chars||[]).map(String);
       const isSkill=e.tag==='dmg_buff_skill';
@@ -763,12 +783,18 @@ function _renderShiyuBuffs(){
       let picker='';
       if(_W.shyPartOpen===i){
         const q=(_W.shyPickQ||'').toLowerCase();
-        const list=(_W.shyRoster||[]).filter(r=>!q||(r.name||'').toLowerCase().includes(q))
-          .map(r=>{const on=chars.includes(String(r.id));const c=charCard(r.id);
+        const fe=_W.shyPickElem||'',fr=_W.shyPickRole||'';
+        const fchip=(on,label,call)=>`<button onclick="${call}" style="font-size:11px;padding:2px 9px;border-radius:12px;cursor:pointer;border:1px solid ${on?'var(--accent)':'var(--border)'};background:${on?'var(--accent)':'transparent'};color:${on?'#181820':'var(--sub)'}">${label}</button>`;
+        const elFilter=_ELEMS.map(([e,l])=>fchip(fe===e,l,`_shyPickElemSet('${e}')`)).join(' ');
+        const roFilter=_SHY_SPEC.map(([r,l])=>fchip(fr===r,l,`_shyPickRoleSet('${r}')`)).join(' ');
+        const list=(_W.shyRoster||[]).filter(r=>(!q||(r.name||'').toLowerCase().includes(q))&&(!fe||r.elem===fe)&&(!fr||r.spec===fr))
+          .map(r=>{const on=chars.includes(String(r.id));const c=r.char||charCard(r.id);
             return `<div onclick="_shyPartCharTgl(${i},'${r.id}')" title="${escapeHtml(r.name)}" style="display:flex;flex-direction:column;align-items:center;gap:2px;width:60px;padding:5px 2px;border-radius:8px;cursor:pointer;border:1px solid ${on?'var(--accent)':'transparent'};${on?'background:rgba(83,74,183,.22)':''}">
               ${iconChar(c,38)}<span style="font-size:10px;text-align:center;line-height:1.1;max-width:58px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(r.name)}</span></div>`;}).join('');
         picker=`<div style="margin-top:8px;border:1px solid var(--border);border-radius:8px;padding:10px;background:var(--card)">
           <input placeholder="поиск…" value="${escapeHtml(_W.shyPickQ||'')}" oninput="_shyPickSearch(this.value)" style="${inSt};width:200px;margin-bottom:8px">
+          <div style="display:flex;flex-wrap:wrap;gap:4px;align-items:center;margin-bottom:6px"><span style="font-size:10px;color:var(--sub);margin-right:2px">Элемент:</span>${fchip(!fe,'все',`_shyPickElemSet('')`)}${elFilter}</div>
+          <div style="display:flex;flex-wrap:wrap;gap:4px;align-items:center;margin-bottom:8px"><span style="font-size:10px;color:var(--sub);margin-right:2px">Роль:</span>${fchip(!fr,'все',`_shyPickRoleSet('')`)}${roFilter}</div>
           <div style="max-height:260px;overflow:auto;display:flex;flex-wrap:wrap;gap:3px">${list||'<span style="color:var(--sub);font-size:12px">ничего не найдено</span>'}</div>
           <button class="btn" style="padding:2px 10px;margin-top:8px" onclick="_shyPartTgl(${i})">Готово</button></div>`;
       }
@@ -778,6 +804,13 @@ function _renderShiyuBuffs(){
         <div style="font-size:12px;color:var(--sub);margin-bottom:6px">Кнопки, по которым идёт DMG (можно несколько)</div>
         <div style="display:flex;gap:6px;flex-wrap:wrap">${_SKILL_BTNS.map(([k,l])=>chip(btns.includes(k),l,`_shyBtnTgl(${i},'${k}')`)).join('')}</div>
         ${btns.length?'':'<div style="font-size:11px;color:#f5c842;margin-top:6px">не выбрана ни одна кнопка</div>'}</div>`:'';
+      // элемент отдельной части: у «DMG элемента» это сам гейт (пусто → общий элемент бафа),
+      // у остальных — опциональное ограничение части этим элементом
+      const isElem=e.tag==='dmg_buff_elem';
+      const elHint=isElem?'пусто → общий элемент бафа':'необязательно — ограничить часть элементом';
+      const elemBlock=`<div style="margin-top:10px;padding:10px;border:1px dashed var(--border);border-radius:8px">
+        <div style="font-size:12px;color:var(--sub);margin-bottom:6px">Элемент этой части <span style="font-size:11px">(${elHint})</span></div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">${_ELEMS.map(([el,l])=>chip((e.elems||[]).includes(el),l,`_shyPartElem(${i},'${el}')`)).join('')}</div></div>`;
       const conf=_partConfidence(e);
       return `<div style="border:1px solid var(--border);border-left:3px solid ${conf.c};border-radius:10px;padding:12px 14px;margin-bottom:10px;background:var(--card)">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap">
@@ -792,7 +825,7 @@ function _renderShiyuBuffs(){
           <button class="btn" style="padding:2px 10px;margin-left:auto" onclick="_shyEffDel(${i})">✕ удалить</button>
         </div>
         ${e.pct!=null?`<div style="font-size:11px;color:var(--sub);margin-top:6px">из текста: ${e.pct}${e.flat?'pts':'%'}</div>`:''}
-        ${btnBlock}
+        ${btnBlock}${elemBlock}
         <div style="margin-top:10px"><div style="font-size:12px;color:var(--sub);margin-bottom:4px">Для кого работает${isSkill?' (и % урона по кнопкам у каждого)':''}
           <button class="btn" style="padding:1px 9px;margin-left:6px" onclick="_shyPartTgl(${i})">${_W.shyPartOpen===i?'скрыть':'выбрать'} (${chars.length})</button></div>
           <div>${chips}</div>${picker}</div></div>`;
@@ -824,6 +857,8 @@ function _renderShiyuBuffs(){
 // элементы/архетипы с русскими метками
 const _ELEMS=[['physical','Физика'],['fire','Огонь'],['ice','Лёд'],['electric','Электро'],['ether','Эфир'],['wind','Ветер']];
 const _MECHS=[['sheer','Шир'],['anomaly','Аномалия'],['stun','Стан'],['crit','Крит']];
+// специальности персонажей (для фильтра пикера) — ключи из synergy_tags.specialty (lowercase)
+const _SHY_SPEC=[['attack','ДД'],['anomaly','Аномалия'],['stun','Стан'],['support','Саппорт'],['defense','Защита'],['rupture','Разлом']];
 const _elLbl=e=>(_ELEMS.find(x=>x[0]===e)||[e,e])[1];
 const _mechLbl=m=>(_MECHS.find(x=>x[0]===m)||[m,m])[1];
 // mag(0-1) <-> сила(0-4). Отображаем 0-4, храним 0-1 (модель читает mag=сила/4).
@@ -859,6 +894,8 @@ function _shyEffDel(i){_W.shyDraft.effects.splice(i,1);if(_W.shyPartOpen===i)_W.
 function _shyEffAdd(){_W.shyDraft.effects.push({tag:'dmg_buff',pct:null,flat:false,cond:false,w:2,mag:0.5,apply:100,chars:[],charApply:{},buttons:[],desc:''});_renderShiyuBuffs();}
 // выбор персонажей для части
 function _shyPartTgl(i){_W.shyPartOpen=_W.shyPartOpen===i?null:i;_W.shyPickQ='';_renderShiyuBuffs();}
+function _shyPickElemSet(e){_W.shyPickElem=_W.shyPickElem===e?'':e;_renderShiyuBuffs();}
+function _shyPickRoleSet(r){_W.shyPickRole=_W.shyPickRole===r?'':r;_renderShiyuBuffs();}
 function _shyPickSearch(v){_W.shyPickQ=v;_renderShiyuBuffs();
   const inp=document.querySelector('#page-content input[placeholder="поиск…"]');if(inp){inp.focus();inp.setSelectionRange(v.length,v.length);}}
 function _shyPartCharTgl(i,id){const e=_W.shyDraft.effects[i];e.chars=e.chars||[];e.charApply=e.charApply||{};
@@ -871,6 +908,9 @@ const _SKILL_BTNS=[['basic','Basic'],['dash','Dash'],['special','Special'],['ex_
   ['chain','Chain'],['ultimate','Ultimate'],['assist','Assist'],['aftershock','Aftershock']];
 function _shyBtnTgl(i,k){const e=_W.shyDraft.effects[i];e.buttons=e.buttons||[];
   const j=e.buttons.indexOf(k);j<0?e.buttons.push(k):e.buttons.splice(j,1);_renderShiyuBuffs();}
+// тумблер элемента отдельной части
+function _shyPartElem(i,el){const e=_W.shyDraft.effects[i];e.elems=e.elems||[];
+  const j=e.elems.indexOf(el);j<0?e.elems.push(el):e.elems.splice(j,1);_renderShiyuBuffs();}
 function _shyCharApply(i,id,v){const e=_W.shyDraft.effects[i];e.charApply=e.charApply||{};
   e.charApply[id]=Math.max(0,Math.min(100,+v||0));} // по blur, без ре-рендера
 async function _shySave(){
@@ -882,22 +922,29 @@ async function _shySave(){
     strength:Math.max(0,Math.min(1,d.strength)),
     effects:d.effects.map(e=>{const w=e.w!=null?e.w:_w04(e.mag);
       return{...e,w,mag:_magFromW(w),apply:e.apply!=null?e.apply:100,chars:(e.chars||[]).slice()};})};
-  const sd={...t.shiyu_data,buff_tag:tag};
+  // разливаем на все турниры той же группы Шиюй (один баф — не проставлять руками на каждый)
+  const key=_shyKey(t);
+  const grp=(_W.shyTours||[]).filter(x=>x.shiyu_data&&_shyKey(x)===key);
   set('сохранение…');
-  const{error}=await sb.from('tournaments').update({shiyu_data:sd}).eq('id',_W.shyTour);
-  if(dbErr(error,'сохранение бафа')){set('ошибка','var(--red)');return;}
-  t.shiyu_data=sd;const dt=(D.tours||[]).find(x=>x.id===_W.shyTour);if(dt)dt.shiyu_data=sd;
-  set('✓ сохранено','var(--accent)');toast('Баф сохранён');
+  for(const g of grp){
+    const sd={...g.shiyu_data,buff_tag:tag};
+    const{error}=await sb.from('tournaments').update({shiyu_data:sd}).eq('id',g.id);
+    if(dbErr(error,'сохранение бафа')){set('ошибка','var(--red)');return;}
+    g.shiyu_data=sd;const dt=(D.tours||[]).find(x=>x.id===g.id);if(dt)dt.shiyu_data=sd;
+  }
+  set(`✓ сохранено (${grp.length} турн.)`,'var(--accent)');toast(`Баф сохранён на ${grp.length} турнир(ов)`);
 }
-// массово пишем доразобранный тег в shiyu_data.buff_tag (чтобы разбор не терялся)
+// пишем эффективный тег на все невыставленные турниры группы: ручной buff_tag носителя, иначе доразбор.
 async function _shyBackfill(){
   const st=document.getElementById('shy-bf-status');const set=(s,c)=>{if(st){st.textContent=s;st.style.color=c||'var(--sub)';}};
-  const todo=(_W.shyTours||[]).filter(t=>t.shiyu_data&&!t.shiyu_data.buff_tag);
-  if(!todo.length){set('нечего фиксировать');return;}
-  set(`фиксирую ${todo.length}…`);
+  const groups=_shyGroups((_W.shyTours||[]).filter(t=>t.shiyu_data));
+  const jobs=[];                                           // {t, tag} — что дописать
+  groups.forEach(g=>{const tag=(g.rep.shiyu_data&&g.rep.shiyu_data.buff_tag)||_shyTag(g.rep);
+    g.tours.forEach(t=>{if(!(t.shiyu_data&&t.shiyu_data.buff_tag))jobs.push({t,tag});});});
+  if(!jobs.length){set('нечего фиксировать');return;}
+  set(`фиксирую ${jobs.length}…`);
   let ok=0;
-  for(const t of todo){
-    const tag=_shyTag(t);
+  for(const{t,tag} of jobs){
     const sd={...t.shiyu_data,buff_tag:tag};
     const{error}=await sb.from('tournaments').update({shiyu_data:sd}).eq('id',t.id);
     if(error){dbErr(error,'фиксация бафа '+(t.name||t.id));set('ошибка','var(--red)');return;}
@@ -1294,39 +1341,65 @@ function _spMKey(left,right){
   return [s(left),s(right)].sort().join(' vs ');
 }
 const _spRecentM=k=>(_W.spRecentM||[]).includes(k);
+// инстанс из конкретного тир-юнита (M фиксирован, без случайного тира)
+const _spInstU=u=>({...u.c,_ms:u.ms,_mlbl:u.mlbl,_pr:null});
+// соло: модельно-осознанный подбор — недосэмплированные тир-юниты × близость рейтингов × новизна пары.
+// (не тянем по киту, иначе перс всегда встречает похожих и не пересекается с теми, кого реально надо сравнить)
+function _spGenSolo(pool){
+  const votes=(_W.spVotesAll||[]).filter(v=>v.size===1);
+  const games=[],pairS={};
+  votes.forEach(v=>{const a=_btKey(v.left_team),b=_btKey(v.right_team);if(a===b)return;
+    games.push(v.winner==='left'?{w:a,l:b}:{w:b,l:a});
+    pairS[[a,b].sort().join('#')]=(pairS[[a,b].sort().join('#')]||0)+1;});
+  const rank=_btRank(games);
+  const gamesOf=k=>rank[k]?rank[k].games:0, scoreOf=k=>rank[k]?rank[k].score:null;
+  const units=[];pool.forEach(c=>_spTiers(c).forEach(t=>units.push({c,ms:t.ms,mlbl:_spTierLbl(t),role:_spFRole(c),key:c.id+':'+t.ms})));
+  if(units.length<2)return null;
+  const recU=_W.spRecentU||[];const notRec=u=>!recU.includes(u.key);
+  let fallback=null;
+  for(let tries=0;tries<200;tries++){
+    let lc=units.filter(notRec);if(!lc.length)lc=units;
+    const L=_spWeighted(lc,u=>1/(1+gamesOf(u.key)));         // левый: реже всего сыгранный юнит
+    let rc=units.filter(u=>u.c.id!==L.c.id&&u.role===L.role);
+    if(!rc.length)continue;
+    const rcf=rc.filter(notRec);if(rcf.length)rc=rcf;
+    const gL=scoreOf(L.key);
+    const R=_spWeighted(rc,u=>{
+      const gR=scoreOf(u.key);
+      const close=(gL!=null&&gR!=null)?1/(1+Math.abs(gL-gR)/8):1.3;  // близкий рейтинг информативнее; неизвестный тоже
+      const nov=1/(1+(pairS[[L.key,u.key].sort().join('#')]||0));    // новизна пары (Чжао↔Рина, если не встречались)
+      const rare=1/(1+gamesOf(u.key));                                // недосэмплированность правого
+      return close*nov*rare*(1+0.25*_spSim(L.c,u.c));                 // кит — лёгкий нудж, не доминанта
+    });
+    const m={left:[_spInstU(L)],right:[_spInstU(R)]};
+    fallback=fallback||m;
+    if(!_spRecentM(_spMKey(m.left,m.right)))return m;
+  }
+  return fallback;
+}
 function _spGen(){
   const size=_W.sparSize||1;
   const pool=_spPool(size);if(pool.length<size+1)return null;
+  if(size<2)return _spGenSolo(pool);
   const seen=_spSeen(size);                                // приоритет редко сравниваемым
   let fallback=null;
   for(let tries=0;tries<160;tries++){
-    let m=null;
-    if(size<2){                                            // соло: сравниваем только внутри роли-группы (оборона = саппорт)
-      let lc=pool.filter(c=>!_spRecentHas(c.id));if(!lc.length)lc=pool;
-      const L=_spWeighted(lc,x=>_spRareW(seen,x.id));
-      let rc=pool.filter(c=>c.id!==L.id&&_spFRole(c)===_spFRole(L));
-      if(!rc.length)continue;
-      const fr=rc.filter(c=>!_spRecentHas(c.id));if(fr.length)rc=fr;
-      const R=_spWeighted(rc,x=>(1+_spSim(L,x))*_spRareW(seen,x.id));
-      m={left:[_spInst(L)],right:[_spInst(R)]};
-    }else{
-      const gseq=_spComp(size);                            // одна ролевая раскладка на обе стороны
-      const left=_spSide(size,gseq,pool,[],null,seen);if(!left)continue;
-      const right=_spSide(size,gseq,pool,left.map(c=>c.id),left,seen);if(!right)continue;
-      const lk=left.map(c=>c.id).sort().join('|'),rk=right.map(c=>c.id).sort().join('|');
-      if(lk===rk)continue;                                 // полностью одинаковые составы
-      m={left,right};
-    }
-    fallback=fallback||m;
-    if(!_spRecentM(_spMKey(m.left,m.right)))return m;       // не повторяем недавний матчап
+    const gseq=_spComp(size);                              // одна ролевая раскладка на обе стороны
+    const left=_spSide(size,gseq,pool,[],null,seen);if(!left)continue;
+    const right=_spSide(size,gseq,pool,left.map(c=>c.id),left,seen);if(!right)continue;
+    const lk=left.map(c=>c.id).sort().join('|'),rk=right.map(c=>c.id).sort().join('|');
+    if(lk===rk)continue;                                   // полностью одинаковые составы
+    const m={left,right};fallback=fallback||m;
+    if(!_spRecentM(_spMKey(left,right)))return m;          // не повторяем недавний матчап
   }
   return fallback;                                          // пул мал — отдаём хоть что-то
 }
-// запомнить показанных: и персонажей, и матчап целиком (чтобы пара не всплывала слишком часто)
+// запомнить показанных: персонажей, тир-юниты и матчап целиком (чтобы пара/юнит не всплывали слишком часто)
 function _spRemember(cur){
-  if(!cur)return;const ids=[...cur.left,...cur.right].map(c=>String(c.id));
-  _W.spRecent=[...ids,...(_W.spRecent||[])].slice(0,40);   // ~20 пар × 2 стороны
-  _W.spRecentM=[_spMKey(cur.left,cur.right),...(_W.spRecentM||[])].slice(0,25); // ~25 матчапов
+  if(!cur)return;const all=[...cur.left,...cur.right];
+  _W.spRecent=[...all.map(c=>String(c.id)),...(_W.spRecent||[])].slice(0,40);      // ~20 пар × 2 стороны
+  _W.spRecentU=[...all.map(c=>c.id+':'+_spMs(c)),...(_W.spRecentU||[])].slice(0,30); // тир-юниты (M0 и M1 независимо)
+  _W.spRecentM=[_spMKey(cur.left,cur.right),...(_W.spRecentM||[])].slice(0,25);      // ~25 матчапов
 }
 function _spNext(){if(_W.spCur)_spRemember(_W.spCur);_W.spCur=_spGen();_renderWeights();}
 function _renderSparring(){
