@@ -53,7 +53,10 @@ function _winrates(picks,matches){
   return out;
 }
 
-let _W={rows:[],saved:{},sortKey:'power',sortDir:-1,wman:0.5,roleFilter:'all',expanded:new Set(),
+// доверие ручному весу — persist между заходами
+const _WMAN_KEY='zzz_wman';
+function _wmanInit(){const v=parseFloat(localStorage.getItem(_WMAN_KEY));return isNaN(v)?0.5:Math.max(0,Math.min(1,v));}
+let _W={rows:[],saved:{},sortKey:'power',sortDir:-1,wman:_wmanInit(),roleFilter:'all',expanded:new Set(),
   section:'power',calib:'solo'}; // section: power|shiyu|consts ; calib (в power): solo|duo|trio
 
 // констелляции (майндскейпы), реально сыгранные на турнирах: пики/винрейт + кост майндскейпа.
@@ -287,7 +290,7 @@ function _paintRow(tr){
   const bar=tr.querySelector('[data-tierbar]');bar.style.width=Math.round(power)+'%';bar.style.background=tier.c;
 }
 function _wmanChange(val){
-  _W.wman=+val/100;document.getElementById('wman-out').textContent=_W.wman.toFixed(2);
+  _W.wman=+val/100;localStorage.setItem(_WMAN_KEY,_W.wman);document.getElementById('wman-out').textContent=_W.wman.toFixed(2);
   document.querySelectorAll('#page-content tbody tr[data-ri],#page-content tbody tr[data-cw]').forEach(_paintRow);
 }
 function _sortW(key){if(_W.sortKey===key)_W.sortDir*=-1;else{_W.sortKey=key;_W.sortDir=-1;}_renderWeights();}
@@ -670,9 +673,14 @@ function _renderShiyuBuffs(){
   if(!_W.shyLoaded){
     html(`${_analyticsTabs()}<div class="card" style="padding:22px"><span class="spinner"></span> Загружаю ротации…</div>`);
     Promise.all([_fetchAllW('tournaments'),
-      fetch('web/data/synergy_tags.json?v='+Date.now()).then(r=>r.json()).catch(()=>({}))])
-      .then(([rows,tj])=>{_W.shyTours=rows;
-        _W.shyRoster=Object.entries(tj).map(([id,v])=>({id,name:v.name})).sort((a,b)=>a.name.localeCompare(b.name,'ru'));
+      fetch('web/data/synergy_tags.json?v='+Date.now()).then(r=>r.json()).catch(()=>({})),
+      (D.chars&&D.chars.length)?Promise.resolve(D.chars):_fetchAllW('characters')])
+      .then(([rows,tj,chars])=>{_W.shyTours=rows;
+        if(!D.chars||!D.chars.length){D.chars=chars;D.charMap={};chars.forEach(c=>D.charMap[c.id]=c);}
+        _W.shyCharMap={};(chars||[]).forEach(c=>_W.shyCharMap[c.id]=c);
+        // ростер для пикера: карточка персонажа (иконка+имя) по id из synergy_tags
+        _W.shyRoster=Object.entries(tj).map(([id,v])=>({id,name:(_W.shyCharMap[id]&&_W.shyCharMap[id].name)||v.name}))
+          .sort((a,b)=>(a.name||'').localeCompare(b.name||'','ru'));
         _W.shyLoaded=true;_renderShiyuBuffs();})
       .catch(e=>html(`${_analyticsTabs()}<div class="card" style="padding:22px;color:var(--red)">Ошибка загрузки: ${e.message}</div>`));
     return;
@@ -684,11 +692,12 @@ function _renderShiyuBuffs(){
   const th='text-align:left;padding:6px 10px;font-size:11px;color:var(--sub);text-transform:uppercase;border-bottom:1px solid var(--line)';
   const td='padding:7px 10px;border-bottom:1px solid var(--line);font-size:13px';
 
-  // (1) справочник семейств: авто-разбор из % даёт стартовую силу 0-4, дальше правится руками
+  // (1) справочник семейств: сила по умолчанию задаётся руками (0-4), сохраняется локально,
+  // применяется как стартовая сила новых эффектов этого семейства
   const famRows=_BUFF_FAMILIES.map(([k,l,band,gate,desc])=>`<tr>
     <td style="${td}"><b>${l}</b><div style="font-size:11px;color:var(--sub)">${desc}</div></td>
     <td style="${td};text-align:center;font-family:'JetBrains Mono',monospace">${band[0]}–${band[1]}%</td>
-    <td style="${td};text-align:center;font-family:'JetBrains Mono',monospace">2–4</td>
+    <td style="${td};text-align:center">${_seg(_famW(k),`_shyFamW('${k}',{v})`)}</td>
     <td style="${td}">${gate}</td></tr>`).join('');
   const ref=`<div style="${card}">${H('Общие множители всех видов бафов')}
     <div style="overflow-x:auto"><table style="border-collapse:collapse;width:100%;min-width:560px">
@@ -750,20 +759,40 @@ function _renderShiyuBuffs(){
     const rosterName={};(_W.shyRoster||[]).forEach(r=>rosterName[r.id]=r.name);
     const tagOpt=e=>[..._TAGVOCAB.map(x=>[x[0],x[1]]),['dmg_buff_elem','DMG элемента'],['dmg_buff_skill','DMG по кнопке']]
       .map(([k,l])=>`<option value="${k}" ${k===e.tag?'selected':''}>${l}</option>`).join('');
+    const charCard=cid=>_W.shyCharMap&&_W.shyCharMap[cid]||{name:rosterName[cid]||cid};
     const partCard=(e,i)=>{
-      const chars=e.chars||[];
-      const chips=chars.map(cid=>`<span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;background:rgba(83,74,183,.18);color:#b3aaf0;border-radius:10px;padding:1px 8px;margin:2px 4px 2px 0">${escapeHtml(rosterName[cid]||cid)}<span style="cursor:pointer;opacity:.7" onclick="_shyPartCharTgl(${i},'${cid}')">✕</span></span>`).join('')
-        ||'<span style="font-size:11px;color:var(--sub)">— не выбраны → авто-гейт по элементу/архетипу —</span>';
+      const chars=(e.chars||[]).map(String);
+      const isSkill=e.tag==='dmg_buff_skill';
+      const ap=e.charApply||{};
+      // выбранные персонажи: иконка + имя + (для «DMG по кнопке») свой % работы
+      const chipRow=cid=>{
+        const c=charCard(cid);
+        const pctIn=isSkill?`<input type="number" min="0" max="100" step="5" value="${ap[cid]!=null?ap[cid]:100}" onchange="_shyCharApply(${i},'${cid}',this.value)" title="доля урона этого перса по указанным кнопкам" style="${inSt};width:52px;text-align:center;padding:2px 4px;font-size:11px">%`:'';
+        return `<span style="display:inline-flex;align-items:center;gap:5px;background:rgba(83,74,183,.14);border-radius:10px;padding:2px 8px 2px 4px;margin:2px 5px 2px 0">
+          ${iconChar(c,22)}<span style="font-size:11.5px;color:#c9c2f2">${escapeHtml(c.name)}</span>${pctIn}
+          <span style="cursor:pointer;opacity:.6;font-size:11px" onclick="_shyPartCharTgl(${i},'${cid}')">✕</span></span>`;
+      };
+      const chips=chars.length?chars.map(chipRow).join('')
+        :'<span style="font-size:11px;color:var(--sub)">— не выбраны → авто-гейт по элементу/архетипу —</span>';
+      // иконочный пикер персонажей
       let picker='';
       if(_W.shyPartOpen===i){
-        const list=(_W.shyRoster||[])
-          .map(r=>`<label style="display:flex;align-items:center;gap:6px;padding:2px 4px;font-size:12px;cursor:pointer">
-            <input type="checkbox" ${chars.map(String).includes(String(r.id))?'checked':''} onchange="_shyPartCharTgl(${i},'${r.id}')">${escapeHtml(r.name)}</label>`).join('');
+        const q=(_W.shyPickQ||'').toLowerCase();
+        const list=(_W.shyRoster||[]).filter(r=>!q||(r.name||'').toLowerCase().includes(q))
+          .map(r=>{const on=chars.includes(String(r.id));const c=charCard(r.id);
+            return `<div onclick="_shyPartCharTgl(${i},'${r.id}')" title="${escapeHtml(r.name)}" style="display:flex;flex-direction:column;align-items:center;gap:2px;width:60px;padding:5px 2px;border-radius:8px;cursor:pointer;border:1px solid ${on?'var(--accent)':'transparent'};${on?'background:rgba(83,74,183,.22)':''}">
+              ${iconChar(c,38)}<span style="font-size:10px;text-align:center;line-height:1.1;max-width:58px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(r.name)}</span></div>`;}).join('');
         picker=`<div style="margin-top:8px;border:1px solid var(--border);border-radius:8px;padding:10px;background:var(--card)">
-          <input placeholder="поиск…" oninput="_shyFilterPicker(this)" style="${inSt};width:200px;margin-bottom:8px">
-          <div style="max-height:220px;overflow:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:2px 10px">${list}</div>
+          <input placeholder="поиск…" value="${escapeHtml(_W.shyPickQ||'')}" oninput="_shyPickSearch(this.value)" style="${inSt};width:200px;margin-bottom:8px">
+          <div style="max-height:260px;overflow:auto;display:flex;flex-wrap:wrap;gap:3px">${list||'<span style="color:var(--sub);font-size:12px">ничего не найдено</span>'}</div>
           <button class="btn" style="padding:2px 10px;margin-top:8px" onclick="_shyPartTgl(${i})">Готово</button></div>`;
       }
+      // кнопки для «DMG по кнопке»
+      const btns=e.buttons||[];
+      const btnBlock=isSkill?`<div style="margin-top:10px;padding:10px;border:1px dashed var(--border);border-radius:8px">
+        <div style="font-size:12px;color:var(--sub);margin-bottom:6px">Кнопки, по которым идёт DMG (можно несколько)</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">${_SKILL_BTNS.map(([k,l])=>chip(btns.includes(k),l,`_shyBtnTgl(${i},'${k}')`)).join('')}</div>
+        ${btns.length?'':'<div style="font-size:11px;color:#f5c842;margin-top:6px">не выбрана ни одна кнопка</div>'}</div>`:'';
       const conf=_partConfidence(e);
       return `<div style="border:1px solid var(--border);border-left:3px solid ${conf.c};border-radius:10px;padding:12px 14px;margin-bottom:10px;background:var(--card)">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap">
@@ -773,12 +802,13 @@ function _renderShiyuBuffs(){
         <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap">
           <label style="font-size:12px;color:var(--sub)">Тип <select onchange="_shyPartField(${i},'tag',this.value)" style="${inSt};margin-left:4px">${tagOpt(e)}</select></label>
           <span style="font-size:12px;color:var(--sub)">Сила ${_seg(e.w!=null?e.w:_w04(e.mag),`_shyEffW(${i},{v})`)}</span>
-          <label style="font-size:12px;color:var(--sub)">Работает <input type="number" min="0" max="100" step="5" value="${e.apply!=null?e.apply:100}" onchange="_shyPartField(${i},'apply',this.value)" style="${inSt};width:60px;text-align:center">%</label>
+          <label style="font-size:12px;color:var(--sub)" title="${isSkill?'общий % — переопределяется индивидуальными у персонажей':''}">Работает <input type="number" min="0" max="100" step="5" value="${e.apply!=null?e.apply:100}" onchange="_shyPartField(${i},'apply',this.value)" style="${inSt};width:60px;text-align:center">%</label>
           <label style="font-size:12px;color:var(--sub);display:inline-flex;align-items:center;gap:5px"><input type="checkbox" ${e.cond?'checked':''} onchange="_shyPartField(${i},'cond',this.checked)">условный</label>
           <button class="btn" style="padding:2px 10px;margin-left:auto" onclick="_shyEffDel(${i})">✕ удалить</button>
         </div>
         ${e.pct!=null?`<div style="font-size:11px;color:var(--sub);margin-top:6px">из текста: ${e.pct}${e.flat?'pts':'%'}</div>`:''}
-        <div style="margin-top:10px"><div style="font-size:12px;color:var(--sub);margin-bottom:4px">Для кого работает
+        ${btnBlock}
+        <div style="margin-top:10px"><div style="font-size:12px;color:var(--sub);margin-bottom:4px">Для кого работает${isSkill?' (и % урона по кнопкам у каждого)':''}
           <button class="btn" style="padding:1px 9px;margin-left:6px" onclick="_shyPartTgl(${i})">${_W.shyPartOpen===i?'скрыть':'выбрать'} (${chars.length})</button></div>
           <div>${chips}</div>${picker}</div></div>`;
     };
@@ -814,6 +844,11 @@ const _mechLbl=m=>(_MECHS.find(x=>x[0]===m)||[m,m])[1];
 // mag(0-1) <-> сила(0-4). Отображаем 0-4, храним 0-1 (модель читает mag=сила/4).
 const _w04=mag=>Math.max(0,Math.min(4,Math.round((+mag||0)*4)));
 const _magFromW=w=>+((+w||0)/4).toFixed(2);
+// ручная сила семейств бафов (0-4) — persist локально, дефолт 3
+const _FAM_KEY='zzz_buff_fam';
+function _famAll(){try{return JSON.parse(localStorage.getItem(_FAM_KEY))||{};}catch(e){return {};}}
+function _famW(k){const v=_famAll()[k];return v==null?3:v;}
+function _shyFamW(k,v){const a=_famAll();a[k]=+v||0;localStorage.setItem(_FAM_KEY,JSON.stringify(a));_renderShiyuBuffs();}
 // черновик редактора: нормализуем тег к {elems[],mechs[],strength(0-1),effects[]}
 function _shyDraftFrom(tag){
   return{
@@ -832,17 +867,27 @@ function _shyPartField(i,field,val){const e=_W.shyDraft.effects[i];
   if(field==='apply')e.apply=Math.max(0,Math.min(100,+val||0));
   else if(field==='cond')e.cond=!!val;
   else e[field]=val;
+  if(field==='tag'){const fw=_famW(val);e.w=fw;e.mag=_magFromW(fw);} // сила по умолчанию из семейства
   if(field==='desc'||field==='apply')return; // текст/число по blur — без ре-рендера
   _renderShiyuBuffs();}
 function _shyEffDel(i){_W.shyDraft.effects.splice(i,1);if(_W.shyPartOpen===i)_W.shyPartOpen=null;_renderShiyuBuffs();}
-function _shyEffAdd(){_W.shyDraft.effects.push({tag:'dmg_buff',pct:null,flat:false,cond:false,w:2,mag:0.5,apply:100,chars:[],desc:''});_renderShiyuBuffs();}
+function _shyEffAdd(){_W.shyDraft.effects.push({tag:'dmg_buff',pct:null,flat:false,cond:false,w:2,mag:0.5,apply:100,chars:[],charApply:{},buttons:[],desc:''});_renderShiyuBuffs();}
 // выбор персонажей для части
-function _shyPartTgl(i){_W.shyPartOpen=_W.shyPartOpen===i?null:i;_renderShiyuBuffs();}
-// фильтр списка персонажей без ре-рендера (иначе теряется фокус в поиске)
-function _shyFilterPicker(inp){const q=inp.value.toLowerCase();const grid=inp.parentElement.querySelector('div');
-  if(grid)grid.querySelectorAll('label').forEach(l=>{l.style.display=l.textContent.toLowerCase().includes(q)?'':'none';});}
-function _shyPartCharTgl(i,id){const e=_W.shyDraft.effects[i];e.chars=e.chars||[];
-  const j=e.chars.map(String).indexOf(String(id));j<0?e.chars.push(id):e.chars.splice(j,1);_renderShiyuBuffs();}
+function _shyPartTgl(i){_W.shyPartOpen=_W.shyPartOpen===i?null:i;_W.shyPickQ='';_renderShiyuBuffs();}
+function _shyPickSearch(v){_W.shyPickQ=v;_renderShiyuBuffs();
+  const inp=document.querySelector('#page-content input[placeholder="поиск…"]');if(inp){inp.focus();inp.setSelectionRange(v.length,v.length);}}
+function _shyPartCharTgl(i,id){const e=_W.shyDraft.effects[i];e.chars=e.chars||[];e.charApply=e.charApply||{};
+  const j=e.chars.map(String).indexOf(String(id));
+  if(j<0){e.chars.push(id);if(e.charApply[id]==null)e.charApply[id]=100;}
+  else{e.chars.splice(j,1);delete e.charApply[id];}
+  _renderShiyuBuffs();}
+// «DMG по кнопке»: выбор кнопок и индивидуальный % урона на перса
+const _SKILL_BTNS=[['basic','Basic'],['dash','Dash'],['special','Special'],['ex_special','EX Special'],
+  ['chain','Chain'],['ultimate','Ultimate'],['assist','Assist'],['aftershock','Aftershock']];
+function _shyBtnTgl(i,k){const e=_W.shyDraft.effects[i];e.buttons=e.buttons||[];
+  const j=e.buttons.indexOf(k);j<0?e.buttons.push(k):e.buttons.splice(j,1);_renderShiyuBuffs();}
+function _shyCharApply(i,id,v){const e=_W.shyDraft.effects[i];e.charApply=e.charApply||{};
+  e.charApply[id]=Math.max(0,Math.min(100,+v||0));} // по blur, без ре-рендера
 async function _shySave(){
   const t=(_W.shyTours||[]).find(x=>x.id===_W.shyTour);if(!t||!t.shiyu_data||!_W.shyDraft)return;
   const st=document.getElementById('shy-status');const set=(s,c)=>{if(st){st.textContent=s;st.style.color=c||'var(--sub)';}};
@@ -947,16 +992,29 @@ function _renderTeams(size){
   if(!_W.tmNew||_W.tmNew.size!==size)_W.tmNew={size,slots:Array(size).fill(''),ms:Array(size).fill(0)};
   const n=_W.tmNew;
   const inSt='background:var(--field);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:4px 7px;font-size:13px';
-  // форма создания: N селектов + бейджи M
+  // слот: иконка (или пустой квадрат) + имя/«выбрать» + бейдж M. Клик открывает иконочный пикер.
   const slotSel=i=>{
-    const taken=new Set(n.slots.filter((v,j)=>v&&j!==i));
-    const opts=['<option value="">— персонаж —</option>']
-      .concat(_W.tmChars.filter(c=>!taken.has(c.id)).map(c=>`<option value="${c.id}" ${n.slots[i]===c.id?'selected':''}>${escapeHtml(c.name)}${c.rarity==='A'?' (A)':''}</option>`));
     const c=_W.tmCharMap[n.slots[i]];
+    const open=_W.tmPickOpen===i;
+    const face=c?`<span style="display:inline-flex;align-items:center;gap:6px">${iconChar(c,34)}<span style="font-size:13px;font-weight:600;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(c.name)}</span></span>`
+      :`<span style="display:inline-flex;align-items:center;gap:6px;color:var(--sub)"><span style="width:34px;height:34px;border-radius:6px;background:#1c1f2e;display:inline-block"></span>выбрать</span>`;
     return `<span style="display:inline-flex;align-items:center;gap:6px">
-      ${c?iconChar(c,28):''}
-      <select onchange="_tmSlot(${i},this.value)" style="${inSt};min-width:170px">${opts.join('')}</select>
+      <button class="btn" style="padding:5px 9px;border-color:${open?'var(--accent)':'var(--border)'}" onclick="_tmPickTgl(${i})">${face}</button>
       ${n.slots[i]?_tmMsBadge(c,n.ms[i],`_tmMsCycle(${i})`):''}</span>`;
+  };
+  const picker=()=>{
+    const i=_W.tmPickOpen;if(i==null)return '';
+    const taken=new Set(n.slots.filter((v,j)=>v&&j!==i));
+    const q=(_W.tmPickQ||'').toLowerCase();
+    const list=_W.tmChars.filter(c=>!taken.has(c.id)&&(!q||(c.name||'').toLowerCase().includes(q)));
+    const cell=c=>`<div onclick="_tmSlot(${i},'${c.id}')" title="${escapeHtml(c.name)}" style="display:flex;flex-direction:column;align-items:center;gap:3px;width:66px;padding:6px 2px;border-radius:8px;cursor:pointer;${n.slots[i]===c.id?'background:rgba(83,74,183,.22);border:1px solid var(--accent)':'border:1px solid transparent'}" onmouseover="this.style.background='var(--field)'" onmouseout="this.style.background='${n.slots[i]===c.id?'rgba(83,74,183,.22)':'transparent'}'">
+      ${iconChar(c,44)}<span style="font-size:10.5px;text-align:center;line-height:1.15;max-width:64px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(c.name)}${c.rarity==='A'?' (A)':''}</span></div>`;
+    return `<div class="card" style="padding:12px 14px;margin-bottom:16px;border-color:var(--accent)">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+        <span style="font-size:13px;font-weight:600">Слот ${i+1} — выбери персонажа</span>
+        <input placeholder="поиск…" value="${escapeHtml(_W.tmPickQ||'')}" oninput="_tmPickSearch(this.value)" style="${inSt};min-width:180px">
+        <button class="btn" style="padding:3px 11px;margin-left:auto" onclick="_tmPickTgl(${i})">Закрыть</button></div>
+      <div style="display:flex;flex-wrap:wrap;gap:4px;max-height:320px;overflow:auto">${list.map(cell).join('')||'<span style="color:var(--sub);font-size:12px">ничего не найдено</span>'}</div></div>`;
   };
   const createForm=`<div class="card" style="padding:14px 16px;margin-bottom:16px">
     <div style="font-size:13px;font-weight:600;margin-bottom:10px">Новая ${size===2?'пара':'тройка'}</div>
@@ -966,7 +1024,7 @@ function _renderTeams(size){
       <span id="tm-status" style="font-size:12px;color:var(--sub)"></span>
     </div>
     <div style="font-size:11px;color:var(--sub);margin-top:8px">Клик по бейджу M — смена майндскейпа (A-ранги всегда M6). Дубликаты по составу+констам не создаются.</div>
-  </div>`;
+  </div>${picker()}`;
   // список сохранённых
   const rows=Object.values(_W.tmRows).filter(r=>r.size===size)
     .sort((a,b)=>(b.stars_power-a.stars_power)||(b.stars_synergy-a.stars_synergy)||a.key.localeCompare(b.key));
@@ -999,7 +1057,10 @@ function _renderTeams(size){
     ${list}`);
 }
 function _tmSlot(i,cid){const n=_W.tmNew;n.slots[i]=cid;
-  const c=_W.tmCharMap[cid];n.ms[i]=(c&&c.rarity==='A')?6:0;_renderWeights();}
+  const c=_W.tmCharMap[cid];n.ms[i]=(c&&c.rarity==='A')?6:0;_W.tmPickOpen=null;_W.tmPickQ='';_renderWeights();}
+function _tmPickTgl(i){_W.tmPickOpen=_W.tmPickOpen===i?null:i;_W.tmPickQ='';_renderWeights();}
+function _tmPickSearch(v){_W.tmPickQ=v;const i=_W.tmPickOpen;_renderWeights();
+  const inp=document.querySelector('#page-content input[placeholder="поиск…"]');if(inp){inp.focus();inp.setSelectionRange(v.length,v.length);}}
 function _tmMsCycle(i){const n=_W.tmNew;const c=_W.tmCharMap[n.slots[i]];
   if(c&&c.rarity==='A')return;n.ms[i]=(n.ms[i]+1)%7;_renderWeights();}
 function _tmSt(s,c){const el=document.getElementById('tm-status');if(el){el.textContent=s;el.style.color=c||'var(--sub)';}}
@@ -1032,55 +1093,75 @@ async function _tmDel(key){
   delete _W.tmRows[key];_renderWeights();
 }
 
-// ===== Сравнение Соло / Дуо / Трио =====
-// Единая шкала 0-100: соло = blended-Сила (как на вкладке Соло); дуо/трио = stars_power*20.
-// Рядом — звёзды синергии (для команд) и факт-винрейт из пиков.
+// ===== Сравнение Соло / Дуо / Трио — рейтинг из голосов спарринга =====
+// Итог парных сравнений из sparring_votes: модель Брэдли-Терри (MM-итерации).
+// Единица сравнения = состав на калибровочном M ("cid:ms|…"), поэтому M6 Солдатка и
+// M0 Солдатка — РАЗНЫЕ единицы. Отдельно от ручной калибровки char_weights.
+function _btKey(team){return (team||[]).map(m=>m.cid+':'+(m.ms||0)).sort().join('|');}
+// Брэдли-Терри: games=[{w:key,l:key}] → {key:{score 0-100, games}}
+function _btRank(games){
+  const ids=[...new Set(games.flatMap(g=>[g.w,g.l]))];
+  if(ids.length<2)return {};
+  const wins={},opp={};ids.forEach(i=>{wins[i]=0;opp[i]=[];});
+  games.forEach(g=>{wins[g.w]++;opp[g.w].push(g.l);opp[g.l].push(g.w);});
+  let p={};ids.forEach(i=>p[i]=1);
+  for(let it=0;it<200;it++){
+    const np={};
+    ids.forEach(i=>{let d=0;opp[i].forEach(j=>d+=1/(p[i]+p[j]));np[i]=d>0?(wins[i]||1e-3)/d:p[i];});
+    let ls=0;ids.forEach(i=>ls+=Math.log(np[i]||1e-9));const g=Math.exp(ls/ids.length);
+    ids.forEach(i=>np[i]=np[i]/g);p=np;
+  }
+  const lg=ids.map(i=>Math.log(p[i]||1e-9));
+  const mean=lg.reduce((a,b)=>a+b,0)/lg.length;
+  const sd=Math.sqrt(lg.reduce((a,b)=>a+(b-mean)**2,0)/lg.length)||1;
+  const out={};ids.forEach((i,k)=>{out[i]={score:100/(1+Math.exp(-(lg[k]-mean)/sd)),games:opp[i].length};});
+  return out;
+}
+async function _cmpLoadVotes(){_W.spVotes=await _fetchAllW('sparring_votes');}
 function _renderCompare(){
-  if(!_W.rows.length){
-    html(`${_analyticsTabs()}<div class="card" style="padding:22px"><span class="spinner"></span> Загружаю соло-калибровку…</div>`);
-    _cmpLoadSolo().then(()=>_renderWeights()).catch(e=>html(`${_analyticsTabs()}<div class="card" style="padding:22px;color:var(--red)">Ошибка: ${e.message}</div>`));
+  if(!_W.tmLoaded){
+    html(`${_analyticsTabs()}<div class="card" style="padding:22px"><span class="spinner"></span> Загружаю ростер…</div>`);
+    _tmLoad().then(()=>_renderWeights()).catch(e=>html(`${_analyticsTabs()}<div class="card" style="padding:22px;color:var(--red)">Ошибка: ${e.message}</div>`));
     return;
   }
-  if(!_W.tmLoaded){
-    html(`${_analyticsTabs()}<div class="card" style="padding:22px"><span class="spinner"></span> Загружаю пары/тройки…</div>`);
-    _tmLoad().then(()=>_renderWeights()).catch(e=>html(`${_analyticsTabs()}<div class="card" style="padding:22px;color:var(--red)">Ошибка: ${e.message}</div>`));
+  if(!_W.spVotes){
+    html(`${_analyticsTabs()}<div class="card" style="padding:22px"><span class="spinner"></span> Загружаю голоса спарринга…</div>`);
+    _cmpLoadVotes().then(()=>_renderWeights()).catch(e=>html(`${_analyticsTabs()}<div class="card" style="padding:22px;color:var(--red)">Ошибка: ${e.message}</div>`));
     return;
   }
   const bar=(v,color)=>`<div style="display:flex;align-items:center;gap:8px">
     <span style="font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:600;color:#fff;min-width:26px;text-align:right">${Math.round(v)}</span>
     <span style="flex:1;height:6px;background:var(--field);border-radius:3px;overflow:hidden;min-width:50px"><span style="display:block;height:100%;width:${Math.max(2,Math.round(v))}%;background:${color||'var(--grad)'}"></span></span></div>`;
   const cardSt='background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px';
-  const hd=t=>`<div style="font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;font-size:14px;letter-spacing:.03em;margin-bottom:10px">${t}</div>`;
-  // соло: топ-20 по blended-силе
-  const solo=_W.rows.map(r=>({r,p:_powerOf(r,_W.wman)})).sort((a,b)=>b.p-a.p).slice(0,20)
-    .map(({r,p})=>`<div style="display:grid;grid-template-columns:1fr 130px;gap:8px;align-items:center;padding:4px 0;border-top:1px solid var(--line)">
-      <span style="display:inline-flex;align-items:center;gap:7px;min-width:0">${iconChar(r.c,24)}<span style="font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(r.c.name)}</span></span>
-      ${bar(p)}</div>`).join('');
-  const starRow=v=>{let s='';for(let i=1;i<=5;i++)s+=`<span style="color:${i<=v?'#f5c842':'var(--border)'}">★</span>`;return s;};
-  const teamCol=size=>{
-    const rows=Object.values(_W.tmRows).filter(r=>r.size===size)
-      .sort((a,b)=>(b.stars_power-a.stars_power)||(b.stars_synergy-a.stars_synergy));
-    if(!rows.length)return `<div style="color:var(--sub);font-size:12px;padding:8px 0">Нет оценённых — добавь на вкладке «${size===2?'Дуо':'Трио'}».</div>`;
-    return rows.map(r=>{
-      const icons=(r.members||[]).map(m=>iconChar(_W.tmCharMap[m.cid]||{},22)).join('');
-      const nameTxt=(r.members||[]).map(m=>{const c=_W.tmCharMap[m.cid]||{};return (c.name||'?')+(m.ms?` M${m.ms}`:'');}).join(' + ');
-      const wr=_tmWr((r.members||[]).map(m=>m.cid));
-      return `<div style="padding:5px 0;border-top:1px solid var(--line)">
-        <div style="display:flex;align-items:center;gap:6px;margin-bottom:3px">
-          <span style="display:inline-flex;gap:2px">${icons}</span>
-          <span style="font-size:11.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0" title="${escapeHtml(nameTxt)}">${escapeHtml(nameTxt)}</span></div>
-        <div style="display:grid;grid-template-columns:1fr auto auto;gap:10px;align-items:center">
-          ${bar(r.stars_power*20,'#b18cff')}
-          <span title="синергия" style="font-size:12px;letter-spacing:1px">${starRow(r.stars_synergy)}</span>
-          <span style="font-size:11px;color:var(--sub);min-width:56px;text-align:right">${wr?Math.round(wr.wr*100)+'% · '+wr.g:'—'}</span></div></div>`;
+  const hd=(t,n)=>`<div style="font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;font-size:14px;letter-spacing:.03em;margin-bottom:10px">${t} <span style="color:var(--sub);font-weight:600;font-style:normal">${n}</span></div>`;
+  const msBadge=ms=>`<span style="font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:700;color:${ms?'#f5c842':'var(--sub)'};margin-left:2px">M${ms}</span>`;
+  // разбор "cid:ms|…" → элементы {cid,ms}
+  const parseKey=k=>k.split('|').map(p=>{const[cid,ms]=p.split(':');return{cid,ms:+ms||0};});
+  const col=(size,color)=>{
+    const games=_W.spVotes.filter(v=>v.size===size).map(v=>{
+      const a=_btKey(v.left_team),b=_btKey(v.right_team);
+      return v.winner==='left'?{w:a,l:b}:{w:b,l:a};
+    }).filter(g=>g.w!==g.l);
+    const rank=_btRank(games);
+    const items=Object.entries(rank).sort((a,b)=>b[1].score-a[1].score).slice(0,30);
+    if(!items.length)return `<div style="color:var(--sub);font-size:12px;padding:8px 0">Пока нет голосов — калибруй во вкладке «Спарринг».</div>`;
+    return items.map(([key,r])=>{
+      const mem=parseKey(key);
+      const face=mem.map(m=>{const c=_W.tmCharMap[m.cid]||{};
+        return `<span style="display:inline-flex;align-items:center">${iconChar(c,size===1?24:20)}${msBadge(m.ms)}</span>`;}).join('<span style="color:var(--sub);font-size:10px;margin:0 2px">+</span>');
+      const nameTxt=mem.map(m=>(_W.tmCharMap[m.cid]||{}).name||'?').join(' + ');
+      return `<div style="display:grid;grid-template-columns:1fr 120px;gap:8px;align-items:center;padding:4px 0;border-top:1px solid var(--line)">
+        <span style="display:inline-flex;align-items:center;gap:4px;min-width:0" title="${escapeHtml(nameTxt)} · ${r.games} сравн.">${face}</span>
+        ${bar(r.score,color)}</div>`;
     }).join('');
   };
+  const nGames=s=>_W.spVotes.filter(v=>v.size===s).length;
   html(`${_analyticsTabs()}
-  <div style="font-size:12px;color:var(--sub);margin-bottom:12px;line-height:1.5">Единая шкала 0-100: соло — blended-Сила (ручной вес × авто), дуо/трио — Сила·20 из звёзд. Справа у команд: ★ синергии и факт-винрейт по пикам.</div>
+  <div style="font-size:12px;color:var(--sub);margin-bottom:12px;line-height:1.5">Рейтинг из парных голосов «Спарринга» (Брэдли-Терри, шкала 0-100). Единица — состав на калибровочном майндскейпе, поэтому M0 и M6 одного перса — разные строки. Это НЕ ручная калибровка — чистый результат сравнений.</div>
   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px">
-    <div style="${cardSt}">${hd('Соло — топ-20')}${solo||'<div style="color:var(--sub);font-size:12px">нет данных</div>'}</div>
-    <div style="${cardSt}">${hd('Дуо')}${teamCol(2)}</div>
-    <div style="${cardSt}">${hd('Трио')}${teamCol(3)}</div>
+    <div style="${cardSt}">${hd('Соло','· '+nGames(1)+' голосов')}${col(1,'var(--grad)')}</div>
+    <div style="${cardSt}">${hd('Дуо','· '+nGames(2)+' голосов')}${col(2,'#b18cff')}</div>
+    <div style="${cardSt}">${hd('Трио','· '+nGames(3)+' голосов')}${col(3,'#5b9dff')}</div>
   </div>`);
 }
 
@@ -1093,34 +1174,79 @@ function _renderCompare(){
 const _SP_ROLE_LBL={atk:'ДД',stun:'Стан',sup:'Саппорт',ano:'Аномалия',rupt:'Разлом',def:'Защита'};
 async function _spLoad(){
   if(!_W.tmLoaded)await _tmLoad();                       // ростер + карта персонажей
-  const votes=await _fetchAllW('sparring_votes');
+  if(!_W.tagsLoaded)await _loadTags();                   // теги для подбора похожих пар
+  const[votes,cfg,picks]=await Promise.all([
+    _fetchAllW('sparring_votes'),_fetchAllW('sparring_config'),_fetchAllW('match_picks')]);
   _W.spCounts={1:0,2:0,3:0};votes.forEach(v=>_W.spCounts[v.size]=(_W.spCounts[v.size]||0)+1);
+  _W.spCfg={};cfg.forEach(r=>_W.spCfg[r.character_id]={calib_ms:r.calib_ms,in_game:r.in_game!==false});
+  // калибровочный M из пиков: самый частый майндскейп персонажа в реальных матчах
+  const cnt={};picks.forEach(p=>{const c=cnt[p.character_id]=cnt[p.character_id]||{};c[p.mindscape]=(c[p.mindscape]||0)+1;});
+  _W.spRepMs={};
+  for(const id in cnt){let best=null,bn=-1;for(const ms in cnt[id])if(cnt[id][ms]>bn){bn=cnt[id][ms];best=+ms;}_W.spRepMs[id]=best;}
+  _W.spSig={};                                           // тег-сигнатура персонажа (для похожести)
+  for(const id in (_W.tags||{})){const t=_W.tags[id];const s=new Set();
+    Object.keys(t.roles||{}).forEach(k=>t.roles[k]&&s.add('r:'+k));
+    Object.keys(t.gives||{}).forEach(k=>t.gives[k]&&s.add('g:'+k));
+    Object.keys(t.needs||{}).forEach(k=>t.needs[k]&&s.add('n:'+k));
+    _W.spSig[id]=s;}
+  _W.spRecent=_W.spRecent||[];
   _W.spLoaded=true;
 }
-function _spPool(){return _W.tmChars.filter(c=>c.role);}  // только с известной ролью
+// калибровочный M: ручной оверрайд → самый частый из пиков → A=6/S=0
+function _spMs(c){
+  const cf=_W.spCfg&&_W.spCfg[c.id];
+  if(cf&&cf.calib_ms!=null)return cf.calib_ms;
+  const rep=_W.spRepMs&&_W.spRepMs[c.id];
+  if(rep!=null)return rep;
+  return c.rarity==='A'?6:0;
+}
+const _spInGame=c=>!(_W.spCfg&&_W.spCfg[c.id]&&_W.spCfg[c.id].in_game===false);
+function _spPool(){return _W.tmChars.filter(c=>c.role&&_spInGame(c));} // роль известна + в игре
 const _spPick=arr=>arr[Math.floor(Math.random()*arr.length)];
-function _spMs(c){return c.rarity==='A'?6:0;}
-// команда size персонажей: рандом без повторов внутри команды; roleTpl (если задан) —
-// ролевой мультисет, который надо повторить
-function _spTeam(size,roleTpl){
-  const pool=_spPool();
-  const team=[];const used=new Set();
-  const roles=roleTpl?roleTpl.slice():null;
+// похожесть тегов (Жаккар) — станнер-с-аномалистами (Наньгун) ближе к Ликаону, чем к чистому стану
+function _spSim(a,b){
+  const A=_W.spSig[a],B=_W.spSig[b];if(!A||!B||!A.size||!B.size)return 0;
+  let inter=0;A.forEach(x=>{if(B.has(x))inter++;});return inter/(A.size+B.size-inter);
+}
+const _spRecentHas=id=>(_W.spRecent||[]).includes(String(id));
+// взвешенно-случайный выбор с приоритетом кандидата (вес>0)
+function _spWeighted(cands,weightFn){
+  const w=cands.map(weightFn);const tot=w.reduce((a,b)=>a+b,0);
+  if(tot<=0)return _spPick(cands);
+  let r=Math.random()*tot;for(let i=0;i<cands.length;i++){r-=w[i];if(r<=0)return cands[i];}
+  return cands[cands.length-1];
+}
+// левая команда: рандом без повторов, штраф за недавних
+function _spTeamLeft(size){
+  const pool=_spPool();const team=[];const used=new Set();
   for(let i=0;i<size;i++){
-    let cand=pool.filter(c=>!used.has(c.id));
-    if(roles){const r=roles[i];const byRole=cand.filter(c=>c.role===r);if(byRole.length)cand=byRole;}
-    if(!cand.length)return null;
+    let cand=pool.filter(c=>!used.has(c.id));if(!cand.length)return null;
+    const fresh=cand.filter(c=>!_spRecentHas(c.id));if(fresh.length)cand=fresh;
     const c=_spPick(cand);used.add(c.id);team.push(c);
+  }
+  return team;
+}
+// правая команда: повторяет роли левой + подбирает похожих по тегам к соответствующему левому
+function _spTeamRight(size,left){
+  const pool=_spPool();const team=[];const used=new Set();
+  for(let i=0;i<size;i++){
+    const r=left[i].role;
+    let cand=pool.filter(c=>!used.has(c.id)&&c.role===r);
+    if(!cand.length)cand=pool.filter(c=>!used.has(c.id));
+    if(!cand.length)return null;
+    const fresh=cand.filter(c=>!_spRecentHas(c.id));if(fresh.length)cand=fresh;
+    // вес: похожесть тегов к левому i (Наньгун↔Ликаон), лёгкий базовый шум
+    const c=_spWeighted(cand,x=>0.15+_spSim(left[i].id,x.id));
+    used.add(c.id);team.push(c);
   }
   return team;
 }
 function _spGen(){
   const size=_W.sparSize||1;
   const pool=_spPool();if(pool.length<size+1)return null;
-  for(let tries=0;tries<50;tries++){
-    const left=_spTeam(size,null);if(!left)continue;
-    const tpl=left.map(c=>c.role);
-    const right=_spTeam(size,tpl);if(!right)continue;
+  for(let tries=0;tries<80;tries++){
+    const left=_spTeamLeft(size);if(!left)continue;
+    const right=_spTeamRight(size,left);if(!right)continue;
     const lk=left.map(c=>c.id).sort().join('|'),rk=right.map(c=>c.id).sort().join('|');
     if(lk===rk)continue;                                  // полностью одинаковые составы
     if(size===1&&left[0].id===right[0].id)continue;       // соло: сам с собой
@@ -1128,7 +1254,12 @@ function _spGen(){
   }
   return null;
 }
-function _spNext(){_W.spCur=_spGen();_renderWeights();}
+// запомнить показанных, чтобы ~20 последних не всплывали снова из-за похожести тегов
+function _spRemember(cur){
+  if(!cur)return;const ids=[...cur.left,...cur.right].map(c=>String(c.id));
+  _W.spRecent=[...ids,...(_W.spRecent||[])].slice(0,40); // ~20 пар × 2 стороны
+}
+function _spNext(){if(_W.spCur)_spRemember(_W.spCur);_W.spCur=_spGen();_renderWeights();}
 function _renderSparring(){
   if(!_W.spLoaded){
     html(`${_analyticsTabs()}<div class="card" style="padding:22px"><span class="spinner"></span> Загружаю ростер и голоса…</div>`);
@@ -1143,8 +1274,10 @@ function _renderSparring(){
   const tabs=`<div style="display:flex;gap:7px;flex-wrap:wrap;margin:0 0 14px">
     <span style="font-size:12px;color:var(--sub);align-self:center;margin-right:4px">Состав:</span>
     ${sb2(1,'Соло')}${sb2(2,'Дуо')}${sb2(3,'Трио')}
+    <button class="tbtn" style="margin-left:10px;${_W.spCfgOpen?'border-color:var(--accent);color:#fff':''}" onclick="_spCfgTgl()">⚙ Калибровка</button>
     <span style="font-size:12px;color:var(--sub);align-self:center;margin-left:14px">за сессию: <b style="color:#fff">${_W.spSession||0}</b> · всего в БД: <b style="color:#fff">${_W.spCounts[size]||0}</b></span>
   </div>`;
+  if(_W.spCfgOpen){html(`${_analyticsTabs()}${tabs}${_spConfigPanel()}`);return;}
   if(!cur){
     html(`${_analyticsTabs()}${tabs}<div class="card" style="padding:22px;color:var(--sub)">Не удалось собрать пару вариантов (мало персонажей с ролями).</div>`);
     return;
@@ -1178,6 +1311,51 @@ function _renderSparring(){
   </div>
   <div style="margin-top:12px"><span id="sp-status" style="font-size:12px;color:var(--sub)"></span></div>`);
 }
+// ⚙ Панель калибровки: на персонажа — калибровочный M (авто/оверрайд) и флаг «в игре».
+function _spConfigPanel(){
+  const q=(_W.spCfgQ||'').toLowerCase();
+  const chars=_W.tmChars.filter(c=>c.role&&(!q||(c.name||'').toLowerCase().includes(q)))
+    .slice().sort((a,b)=>(a.name||'').localeCompare(b.name||'','ru'));
+  const inSt='background:var(--field);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:4px 7px;font-size:13px';
+  const cell=c=>{
+    const cf=_W.spCfg[c.id]||{};
+    const inGame=cf.in_game!==false;
+    const rep=_W.spRepMs&&_W.spRepMs[c.id];
+    const eff=_spMs(c);
+    const over=cf.calib_ms!=null;
+    const msOpts=['<option value="">авто</option>'].concat([0,1,2,3,4,5,6].map(m=>`<option value="${m}" ${cf.calib_ms===m?'selected':''}>M${m}</option>`));
+    return `<div style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:8px;background:${inGame?'transparent':'rgba(255,80,80,.06)'};border:1px solid var(--line)">
+      ${iconChar(c,34)}
+      <div style="min-width:0;flex:1"><div style="font-size:12.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(c.name)}</div>
+        <div style="font-size:10.5px;color:var(--sub)">${_SP_ROLE_LBL[c.role]||c.role} · авто M${rep!=null?rep:(c.rarity==='A'?6:0)}${rep==null?' (нет пиков)':''}</div></div>
+      <select onchange="_spCfgMs('${c.id}',this.value)" style="${inSt}" title="Калибровочный майндскейп (авто = самый частый из пиков)">${msOpts.join('')}</select>
+      <span style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;color:${over?'#f5c842':'var(--sub)'};min-width:26px;text-align:center" title="итоговый M">M${eff}</span>
+      <label style="display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--sub);cursor:pointer" title="Выключить — не показывать в спарринге (напр. ещё не вышел)">
+        <input type="checkbox" ${inGame?'checked':''} onchange="_spCfgGame('${c.id}',this.checked)">в игре</label>
+    </div>`;
+  };
+  return `<div class="card" style="padding:14px 16px">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap">
+      <span style="font-size:13px;font-weight:600">Калибровочный майндскейп и «в игре»</span>
+      <input placeholder="поиск…" value="${escapeHtml(_W.spCfgQ||'')}" oninput="_spCfgSearch(this.value)" style="${inSt};min-width:180px">
+      <span id="sp-cfg-status" style="font-size:12px;color:var(--sub);margin-left:auto"></span></div>
+    <div style="font-size:11px;color:var(--sub);margin-bottom:10px;line-height:1.5">«Авто» берёт самый частый майндскейп из реальных пиков (Астра→M1, стандартные→M6). Оверрайд — для тех, кого почти не берут (Пироис). Сними «в игре» у ещё не вышедших (Сигрид, Рамиэль) — они пропадут из подбора. Сохраняется сразу.</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:6px">${chars.map(cell).join('')}</div></div>`;
+}
+function _spCfgTgl(){_W.spCfgOpen=!_W.spCfgOpen;_renderWeights();}
+function _spCfgSearch(v){_W.spCfgQ=v;_renderWeights();
+  const inp=document.querySelector('#page-content input[placeholder="поиск…"]');if(inp){inp.focus();inp.setSelectionRange(v.length,v.length);}}
+function _spCfgStatus(s,c){const el=document.getElementById('sp-cfg-status');if(el){el.textContent=s;el.style.color=c||'var(--sub)';}}
+async function _spCfgSave(cid){
+  const cf=_W.spCfg[cid]||{in_game:true};
+  const row={character_id:+cid,calib_ms:cf.calib_ms==null?null:cf.calib_ms,in_game:cf.in_game!==false,updated_at:new Date().toISOString()};
+  _spCfgStatus('сохранение…');
+  const{error}=await sb.from('sparring_config').upsert(row,{onConflict:'character_id'});
+  if(dbErr(error,'сохранение калибровки')){_spCfgStatus('ошибка','var(--red)');return;}
+  _spCfgStatus('✓ сохранено','var(--accent)');
+}
+function _spCfgMs(cid,v){const cf=_W.spCfg[cid]=_W.spCfg[cid]||{in_game:true};cf.calib_ms=v===''?null:+v;_W.spCur=null;_spCfgSave(cid);_renderWeights();}
+function _spCfgGame(cid,on){const cf=_W.spCfg[cid]=_W.spCfg[cid]||{};cf.in_game=!!on;_W.spCur=null;_spCfgSave(cid);_renderWeights();}
 function _spMode(v){_W.sparSize=v;_W.spCur=null;_W.spSession=0;_renderWeights();}
 function _spSkip(){_spNext();}
 function _spSt(s,c){const el=document.getElementById('sp-status');if(el){el.textContent=s;el.style.color=c||'var(--sub)';}}
