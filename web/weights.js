@@ -1078,15 +1078,22 @@ async function _tmDel(key){
 // sparring_votes → Брэдли-Терри (MM). Единица = состав на калибровочном M ("cid:ms|…").
 function _btKey(team){return (team||[]).map(m=>m.cid+':'+(m.ms||0)).sort().join('|');}
 // games=[{w:key,l:key}] → {key:{score 0-100, games}}
-function _btRank(games){
+// Регуляризованный Брэдли-Терри (MM): a псевдо-игр против «среднего» (p=1) тянут малоданные юниты к 50,
+// иначе непобеждённый/невыигравший с 1-2 играми улетает в крайности (кейс Чжао).
+function _btRank(games,a){
+  a=a==null?2:a;
   const ids=[...new Set(games.flatMap(g=>[g.w,g.l]))];
   if(ids.length<2)return {};
   const wins={},opp={};ids.forEach(i=>{wins[i]=0;opp[i]=[];});
   games.forEach(g=>{wins[g.w]++;opp[g.w].push(g.l);opp[g.l].push(g.w);});
   let p={};ids.forEach(i=>p[i]=1);
-  for(let it=0;it<200;it++){
+  for(let it=0;it<300;it++){
     const np={};
-    ids.forEach(i=>{let d=0;opp[i].forEach(j=>d+=1/(p[i]+p[j]));np[i]=d>0?(wins[i]||1e-3)/d:p[i];});
+    ids.forEach(i=>{
+      let d=a/(p[i]+1);                       // псевдо-игры против среднего
+      opp[i].forEach(j=>d+=1/(p[i]+p[j]));
+      np[i]=(wins[i]+a/2)/d;                  // +a/2 псевдо-побед
+    });
     let ls=0;ids.forEach(i=>ls+=Math.log(np[i]||1e-9));const g=Math.exp(ls/ids.length);
     ids.forEach(i=>np[i]=np[i]/g);p=np;
   }
@@ -1124,6 +1131,7 @@ function _renderCompare(){
     }).filter(g=>g.w!==g.l);
     const rank=_btRank(games);
     let items=Object.entries(rank).sort((a,b)=>b[1].score-a[1].score);
+    items=items.filter(([key])=>parseKey(key).every(m=>!_spHide(_W.tmCharMap[m.cid]||{})));
     const rf=_W.spCmpRole;
     if(rf)items=items.filter(([key])=>parseKey(key).some(m=>_spFRole(_W.tmCharMap[m.cid])===rf));
     items=items.slice(0,30);
@@ -1163,6 +1171,7 @@ async function _spLoad(){
   if(!_W.tagsLoaded)await _loadTags();                   // теги для подбора похожих пар
   const[votes,cfg,picks]=await Promise.all([
     _fetchAllW('sparring_votes'),_fetchAllW('sparring_config'),_fetchAllW('match_picks')]);
+  _W.spVotesAll=votes;                                   // полный лог для активного подбора
   _W.spCounts={1:0,2:0,3:0};votes.forEach(v=>_W.spCounts[v.size]=(_W.spCounts[v.size]||0)+1);
   _W.spCfg={};cfg.forEach(r=>_W.spCfg[r.character_id]={calib_ms:r.calib_ms,caps:r.caps||null,in_game:r.in_game!==false});
   // калибровочный M из пиков: самый частый майндскейп персонажа в реальных матчах
@@ -1211,7 +1220,9 @@ const _spFRole=c=>c&&c.role==='def'?'sup':(c&&c.role)||'';
 const _SP_FROLES=[['atk','ДД'],['ano','Аномалия'],['rupt','Разлом'],['stun','Стан'],['sup','Саппорт']];
 // уникальны в соло — честно не с кем сравнить, из соло-подбора убираем
 const _spSoloOut=c=>/nangong/i.test(c.name||'');
-function _spPool(size){return _W.tmChars.filter(c=>c.role&&_spInGame(c)&&!(size===1&&_spSoloOut(c)));}
+// ещё не вышли — скрываем из всех сравнений
+const _spHide=c=>/sigrid|ramiel/i.test(c.name||'');
+function _spPool(size){return _W.tmChars.filter(c=>c.role&&_spInGame(c)&&!_spHide(c)&&!(size===1&&_spSoloOut(c)));}
 const _spPick=arr=>arr[Math.floor(Math.random()*arr.length)];
 const _spShuffle=a=>{for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;};
 // валидные ролевые составы: ≤1 главный, нужен урон (main/sub), дуо — без двух саппортов
@@ -1236,15 +1247,26 @@ function _spWeighted(cands,weightFn){
 }
 // инстанс перса с выбранным M (случайный из разрешённых) + сыгранная роль
 const _spInst=(c,pr)=>({...c,_ms:_spPick(_spAllowedMs(c)),_pr:pr||null});
+// сколько раз перс участвовал в сравнениях данного размера (для активного подбора)
+function _spSeen(size){
+  const m={};(_W.spVotesAll||[]).filter(v=>v.size===size).forEach(v=>{
+    [...(v.left_team||[]),...(v.right_team||[])].forEach(u=>{m[u.cid]=(m[u.cid]||0)+1;});
+  });
+  return m;
+}
+// вес недосэмплированности: реже сравнивали → выше приоритет (плотнее и объективнее модель)
+const _spRareW=(seen,id)=>1/(1+(seen[id]||0));
 // команда по ролевой последовательности gseq (null для соло = без ограничений). left — для похожести правой.
-function _spSide(size,gseq,pool,exclude,left){
+function _spSide(size,gseq,pool,exclude,left,seen){
   const used=new Set(exclude||[]);const team=[];
   for(let i=0;i<size;i++){
     const role=gseq&&gseq[i];
     let cand=pool.filter(c=>!used.has(c.id)&&(!role||_spHas(c,role)));
     if(!cand.length)return null;
     const fresh=cand.filter(c=>!_spRecentHas(c.id));if(fresh.length)cand=fresh;
-    const c=left?_spWeighted(cand,x=>0.15+_spSim(left[i].id,x.id)):_spPick(cand);
+    const c=left
+      ? _spWeighted(cand,x=>(0.15+_spSim(left[i].id,x.id))*_spRareW(seen,x.id))
+      : _spWeighted(cand,x=>_spRareW(seen,x.id));
     used.add(c.id);team.push(_spInst(c,role));
   }
   return team;
@@ -1252,19 +1274,20 @@ function _spSide(size,gseq,pool,exclude,left){
 function _spGen(){
   const size=_W.sparSize||1;
   const pool=_spPool(size);if(pool.length<size+1)return null;
+  const seen=_spSeen(size);                                // приоритет редко сравниваемым
   for(let tries=0;tries<120;tries++){
     if(size<2){                                           // соло: сравниваем только внутри роли-группы (оборона = саппорт)
       let lc=pool.filter(c=>!_spRecentHas(c.id));if(!lc.length)lc=pool;
-      const L=_spPick(lc);
+      const L=_spWeighted(lc,x=>_spRareW(seen,x.id));
       let rc=pool.filter(c=>c.id!==L.id&&_spFRole(c)===_spFRole(L));
       if(!rc.length)continue;
       const fr=rc.filter(c=>!_spRecentHas(c.id));if(fr.length)rc=fr;
-      const R=_spWeighted(rc,x=>0.15+_spSim(L.id,x.id));
+      const R=_spWeighted(rc,x=>(0.15+_spSim(L.id,x.id))*_spRareW(seen,x.id));
       return{left:[_spInst(L)],right:[_spInst(R)]};
     }
     const gseq=_spComp(size);                             // одна ролевая раскладка на обе стороны
-    const left=_spSide(size,gseq,pool,[],null);if(!left)continue;
-    const right=_spSide(size,gseq,pool,left.map(c=>c.id),left);if(!right)continue;
+    const left=_spSide(size,gseq,pool,[],null,seen);if(!left)continue;
+    const right=_spSide(size,gseq,pool,left.map(c=>c.id),left,seen);if(!right)continue;
     const lk=left.map(c=>c.id).sort().join('|'),rk=right.map(c=>c.id).sort().join('|');
     if(lk===rk)continue;                                  // полностью одинаковые составы
     return{left,right};
@@ -1315,8 +1338,14 @@ function _renderSparring(){
       <div style="text-align:center;margin-top:14px;font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;font-size:13px;letter-spacing:.04em;color:var(--sub)">Сильнее ${side==='left'?'левый':'правый'}</div>
     </div>`;
   };
+  const seen=_spSeen(size);
+  const rare=_spPool(size).slice().sort((a,b)=>((seen[a.id]||0)-(seen[b.id]||0))).slice(0,6);
+  const suggest=rare.length?`<div style="font-size:11.5px;color:var(--sub);margin-bottom:12px;display:flex;flex-wrap:wrap;gap:6px;align-items:center">
+    <span>Реже всего сравнивались (подбор смещён к ним):</span>
+    ${rare.map(c=>`<span style="display:inline-flex;align-items:center;gap:4px;background:var(--field);border:1px solid var(--border);border-radius:6px;padding:1px 6px">${iconChar(c,16)}<span>${escapeHtml(c.name)}</span><b style="color:var(--sub)">${seen[c.id]||0}</b></span>`).join('')}</div>`:'';
   html(`${_analyticsTabs()}${tabs}
-  <div style="font-size:12px;color:var(--sub);margin-bottom:14px;line-height:1.5">Кликни вариант, который кажется сильнее (в вакууме, без учёта врагов). Роли сторон совпадают. «Сложно / ничья» — заменить пару без записи. Норма итерации — пара десятков ответов.</div>
+  <div style="font-size:12px;color:var(--sub);margin-bottom:14px;line-height:1.5">Кликни вариант, который кажется сильнее (в вакууме, без учёта врагов). Роли сторон совпадают. «Сложно / ничья» — заменить пару без записи. Система смещает подбор к редко сравниваемым персонажам — так модель становится плотнее и объективнее.</div>
+  ${suggest}
   <div style="display:flex;gap:16px;align-items:stretch;flex-wrap:wrap">
     ${sideCard(cur.left,'left')}
     <div style="display:flex;flex-direction:column;justify-content:center;gap:10px;align-self:center">
