@@ -1168,14 +1168,16 @@ async function _spLoad(){
   _W.spRecent=_W.spRecent||[];
   _W.spLoaded=true;
 }
-// калибровочный M: ручной оверрайд → самый частый из пиков → A=6/S=0
-function _spMs(c){
+// авто-M: самый частый из пиков → A=6/S=0
+function _spAutoMs(c){const rep=_W.spRepMs&&_W.spRepMs[c.id];return rep!=null?rep:(c.rarity==='A'?6:0);}
+// разрешённые M персонажа: заданный набор (сортированный) или [авто]
+function _spAllowedMs(c){
   const cf=_W.spCfg&&_W.spCfg[c.id];
-  if(cf&&cf.calib_ms!=null)return cf.calib_ms;
-  const rep=_W.spRepMs&&_W.spRepMs[c.id];
-  if(rep!=null)return rep;
-  return c.rarity==='A'?6:0;
+  const arr=cf&&Array.isArray(cf.calib_ms)?cf.calib_ms:[];
+  return arr.length?arr.slice().sort((a,b)=>a-b):[_spAutoMs(c)];
 }
+// M конкретного инстанса состава (c._ms) → фолбэк первый разрешённый
+function _spMs(c){return c._ms!=null?c._ms:_spAllowedMs(c)[0];}
 const _spInGame=c=>!(_W.spCfg&&_W.spCfg[c.id]&&_W.spCfg[c.id].in_game===false);
 function _spPool(){return _W.tmChars.filter(c=>c.role&&_spInGame(c));} // роль известна + в игре
 const _spPick=arr=>arr[Math.floor(Math.random()*arr.length)];
@@ -1192,19 +1194,21 @@ function _spWeighted(cands,weightFn){
   let r=Math.random()*tot;for(let i=0;i<cands.length;i++){r-=w[i];if(r<=0)return cands[i];}
   return cands[cands.length-1];
 }
+// инстанс перса с выбранным M (случайный из разрешённых)
+const _spInst=c=>({...c,_ms:_spPick(_spAllowedMs(c))});
 // левая команда: рандом без повторов, штраф за недавних
 function _spTeamLeft(size){
   const pool=_spPool();const team=[];const used=new Set();
   for(let i=0;i<size;i++){
     let cand=pool.filter(c=>!used.has(c.id));if(!cand.length)return null;
     const fresh=cand.filter(c=>!_spRecentHas(c.id));if(fresh.length)cand=fresh;
-    const c=_spPick(cand);used.add(c.id);team.push(c);
+    const c=_spPick(cand);used.add(c.id);team.push(_spInst(c));
   }
   return team;
 }
-// правая команда: повторяет роли левой + подбирает похожих по тегам к соответствующему левому
+// правая команда: повторяет роли левой + похожих по тегам; НЕ берёт тех же персов (разные M одного перса не сравниваем)
 function _spTeamRight(size,left){
-  const pool=_spPool();const team=[];const used=new Set();
+  const pool=_spPool();const team=[];const used=new Set(left.map(c=>c.id));
   for(let i=0;i<size;i++){
     const r=left[i].role;
     let cand=pool.filter(c=>!used.has(c.id)&&c.role===r);
@@ -1212,8 +1216,7 @@ function _spTeamRight(size,left){
     if(!cand.length)return null;
     const fresh=cand.filter(c=>!_spRecentHas(c.id));if(fresh.length)cand=fresh;
     const c=_spWeighted(cand,x=>0.15+_spSim(left[i].id,x.id)); // вес: похожесть тегов + базовый шум
-
-    used.add(c.id);team.push(c);
+    used.add(c.id);team.push(_spInst(c));
   }
   return team;
 }
@@ -1297,17 +1300,21 @@ function _spConfigPanel(){
     const cf=_W.spCfg[c.id]||{};
     const inGame=cf.in_game!==false;
     const rep=_W.spRepMs&&_W.spRepMs[c.id];
-    const eff=_spMs(c);
-    const over=cf.calib_ms!=null;
-    const msOpts=['<option value="">авто</option>'].concat([0,1,2,3,4,5,6].map(m=>`<option value="${m}" ${cf.calib_ms===m?'selected':''}>M${m}</option>`));
-    return `<div style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:8px;background:${inGame?'transparent':'rgba(255,80,80,.06)'};border:1px solid var(--line)">
-      ${iconChar(c,34)}
-      <div style="min-width:0;flex:1"><div style="font-size:12.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(c.name)}</div>
-        <div style="font-size:10.5px;color:var(--sub)">${_SP_ROLE_LBL[c.role]||c.role} · авто M${rep!=null?rep:(c.rarity==='A'?6:0)}${rep==null?' (нет пиков)':''}</div></div>
-      <select onchange="_spCfgMs('${c.id}',this.value)" style="${inSt}" title="Калибровочный майндскейп (авто = самый частый из пиков)">${msOpts.join('')}</select>
-      <span style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;color:${over?'#f5c842':'var(--sub)'};min-width:26px;text-align:center" title="итоговый M">M${eff}</span>
-      <label style="display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--sub);cursor:pointer" title="Выключить — не показывать в спарринге (напр. ещё не вышел)">
-        <input type="checkbox" ${inGame?'checked':''} onchange="_spCfgGame('${c.id}',this.checked)">в игре</label>
+    const autoM=rep!=null?rep:(c.rarity==='A'?6:0);
+    const sel=Array.isArray(cf.calib_ms)?cf.calib_ms:[];
+    const isAuto=sel.length===0;
+    const chipSt=on=>`font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;border:1px solid ${on?'var(--accent)':'var(--border)'};background:${on?'var(--accent)':'transparent'};color:${on?'#fff':'var(--sub)'};border-radius:5px;padding:2px 7px;cursor:pointer`;
+    const autoChip=`<button onclick="_spCfgAuto('${c.id}')" title="Авто = самый частый M из пиков" style="font-size:11px;font-weight:600;border:1px solid ${isAuto?'var(--accent)':'var(--border)'};background:${isAuto?'var(--accent)':'transparent'};color:${isAuto?'#fff':'var(--sub)'};border-radius:5px;padding:2px 8px;cursor:pointer">авто M${autoM}</button>`;
+    const chips=[0,1,2,3,4,5,6].map(m=>`<button onclick="_spCfgToggle('${c.id}',${m})" style="${chipSt(sel.includes(m))}">M${m}</button>`).join('');
+    return `<div style="padding:8px 10px;border-radius:8px;background:${inGame?'transparent':'rgba(255,80,80,.06)'};border:1px solid var(--border)">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:7px">
+        ${iconChar(c,34)}
+        <div style="min-width:0;flex:1"><div style="font-size:12.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(c.name)}</div>
+          <div style="font-size:10.5px;color:var(--sub)">${_SP_ROLE_LBL[c.role]||c.role}${rep==null?' · нет пиков':''}</div></div>
+        <label style="display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--sub);cursor:pointer;white-space:nowrap" title="Выключить — не показывать в спарринге (напр. ещё не вышел)">
+          <input type="checkbox" ${inGame?'checked':''} onchange="_spCfgGame('${c.id}',this.checked)">в игре</label>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:5px;align-items:center">${autoChip}${chips}</div>
     </div>`;
   };
   return `<div class="card" style="padding:14px 16px">
@@ -1315,7 +1322,7 @@ function _spConfigPanel(){
       <span style="font-size:13px;font-weight:600">Калибровочный майндскейп и «в игре»</span>
       <input placeholder="поиск…" value="${escapeHtml(_W.spCfgQ||'')}" oninput="_spCfgSearch(this.value)" style="${inSt};min-width:180px">
       <span id="sp-cfg-status" style="font-size:12px;color:var(--sub);margin-left:auto"></span></div>
-    <div style="font-size:11px;color:var(--sub);margin-bottom:10px;line-height:1.5">«Авто» берёт самый частый майндскейп из реальных пиков (Астра→M1, стандартные→M6). Оверрайд — для тех, кого почти не берут (Пироис). Сними «в игре» у ещё не вышедших (Сигрид, Рамиэль) — они пропадут из подбора. Сохраняется сразу.</div>
+    <div style="font-size:11px;color:var(--sub);margin-bottom:10px;line-height:1.5">«Авто» берёт самый частый майндскейп из реальных пиков (Астра→M1, стандартные→M6). Отметь несколько M — перса будут подбирать на каждом из них отдельно (разные M одного перса друг с другом не сталкиваются). Сними «в игре» у ещё не вышедших (Сигрид, Рамиэль). Сохраняется сразу.</div>
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:6px">${chars.map(cell).join('')}</div></div>`;
 }
 function _spCfgTgl(){_W.spCfgOpen=!_W.spCfgOpen;_renderWeights();}
@@ -1324,13 +1331,22 @@ function _spCfgSearch(v){_W.spCfgQ=v;_renderWeights();
 function _spCfgStatus(s,c){const el=document.getElementById('sp-cfg-status');if(el){el.textContent=s;el.style.color=c||'var(--sub)';}}
 async function _spCfgSave(cid){
   const cf=_W.spCfg[cid]||{in_game:true};
-  const row={character_id:+cid,calib_ms:cf.calib_ms==null?null:cf.calib_ms,in_game:cf.in_game!==false,updated_at:new Date().toISOString()};
+  const row={character_id:cid,calib_ms:cf.calib_ms==null?null:cf.calib_ms,in_game:cf.in_game!==false,updated_at:new Date().toISOString()};
   _spCfgStatus('сохранение…');
   const{error}=await sb.from('sparring_config').upsert(row,{onConflict:'character_id'});
   if(dbErr(error,'сохранение калибровки')){_spCfgStatus('ошибка','var(--red)');return;}
   _spCfgStatus('✓ сохранено','var(--accent)');
 }
-function _spCfgMs(cid,v){const cf=_W.spCfg[cid]=_W.spCfg[cid]||{in_game:true};cf.calib_ms=v===''?null:+v;_W.spCur=null;_spCfgSave(cid);_renderWeights();}
+// тумблер конкретного M в наборе разрешённых
+function _spCfgToggle(cid,m){
+  const cf=_W.spCfg[cid]=_W.spCfg[cid]||{in_game:true};
+  const arr=Array.isArray(cf.calib_ms)?cf.calib_ms.slice():[];
+  const i=arr.indexOf(m);if(i>=0)arr.splice(i,1);else arr.push(m);
+  cf.calib_ms=arr.length?arr.sort((a,b)=>a-b):null;
+  _W.spCur=null;_spCfgSave(cid);_renderWeights();
+}
+// сброс в авто (пустой набор)
+function _spCfgAuto(cid){const cf=_W.spCfg[cid]=_W.spCfg[cid]||{in_game:true};cf.calib_ms=null;_W.spCur=null;_spCfgSave(cid);_renderWeights();}
 function _spCfgGame(cid,on){const cf=_W.spCfg[cid]=_W.spCfg[cid]||{};cf.in_game=!!on;_W.spCur=null;_spCfgSave(cid);_renderWeights();}
 function _spMode(v){_W.sparSize=v;_W.spCur=null;_W.spSession=0;_renderWeights();}
 function _spSkip(){_spNext();}

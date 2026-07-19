@@ -1,10 +1,13 @@
 -- Конфигурация спарринг-калибровки (админка «Аналитика → Спарринг → ⚙ Калибровка»).
 -- На персонажа: калибровочный майндскейп (на каком M сравнивать) и флаг «в игре».
 -- calib_ms = null → авто (самый частый M из реальных пиков match_picks; фолбэк A=6/S=0).
+-- calib_ms = int[] → набор разрешённых M (перса подбирают на любом из них отдельными строками).
 -- in_game = false → перса не показываем в спарринге (напр. ещё не вышел: Сигрид, Рамиэль).
-create table if not exists public.sparring_config (
-  character_id int primary key,
-  calib_ms int,                          -- ручной оверрайд M (null = авто из пиков)
+-- character_id = uuid (characters.id — uuid, НЕ int).
+drop table if exists public.sparring_config;
+create table public.sparring_config (
+  character_id uuid primary key references characters(id) on delete cascade,
+  calib_ms int[],                        -- разрешённые M (null = авто из пиков)
   in_game boolean not null default true,
   updated_at timestamptz not null default now()
 );
