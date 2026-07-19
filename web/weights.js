@@ -1221,7 +1221,7 @@ const _SP_FROLES=[['atk','ДД'],['ano','Аномалия'],['rupt','Разло�
 // уникальны в соло — честно не с кем сравнить, из соло-подбора убираем
 const _spSoloOut=c=>/nangong/i.test(c.name||'');
 // ещё не вышли — скрываем из всех сравнений
-const _spHide=c=>/sigrid|ramiel/i.test(c.name||'');
+const _spHide=c=>/sigrid|remielle|ramiel/i.test(c.name||'');
 function _spPool(size){return _W.tmChars.filter(c=>c.role&&_spInGame(c)&&!_spHide(c)&&!(size===1&&_spSoloOut(c)));}
 const _spPick=arr=>arr[Math.floor(Math.random()*arr.length)];
 const _spShuffle=a=>{for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;};
