@@ -8,6 +8,7 @@ drop table if exists public.sparring_config;
 create table public.sparring_config (
   character_id uuid primary key references characters(id) on delete cascade,
   calib_ms int[],                        -- разрешённые M (null = авто из пиков)
+  caps text[],                           -- оверрайд ролей main/sub/sup (null = авто из тегов)
   in_game boolean not null default true,
   updated_at timestamptz not null default now()
 );

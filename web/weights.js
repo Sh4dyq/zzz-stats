@@ -1097,6 +1097,7 @@ function _btRank(games){
   return out;
 }
 async function _cmpLoadVotes(){_W.spVotes=await _fetchAllW('sparring_votes');}
+function _spCmpRoleSet(r){_W.spCmpRole=(_W.spCmpRole===r)?'':r;_renderWeights();}
 function _renderCompare(){
   if(!_W.tmLoaded){
     html(`${_analyticsTabs()}<div class="card" style="padding:22px"><span class="spinner"></span> Загружаю ростер…</div>`);
@@ -1122,8 +1123,11 @@ function _renderCompare(){
       return v.winner==='left'?{w:a,l:b}:{w:b,l:a};
     }).filter(g=>g.w!==g.l);
     const rank=_btRank(games);
-    const items=Object.entries(rank).sort((a,b)=>b[1].score-a[1].score).slice(0,30);
-    if(!items.length)return `<div style="color:var(--sub);font-size:12px;padding:8px 0">Пока нет голосов — калибруй во вкладке «Спарринг».</div>`;
+    let items=Object.entries(rank).sort((a,b)=>b[1].score-a[1].score);
+    const rf=_W.spCmpRole;
+    if(rf)items=items.filter(([key])=>parseKey(key).some(m=>_spFRole(_W.tmCharMap[m.cid])===rf));
+    items=items.slice(0,30);
+    if(!items.length)return `<div style="color:var(--sub);font-size:12px;padding:8px 0">${rf?'Нет составов этой роли.':'Пока нет голосов — калибруй во вкладке «Спарринг».'}</div>`;
     return items.map(([key,r])=>{
       const mem=parseKey(key);
       const face=mem.map(m=>{const c=_W.tmCharMap[m.cid]||{};
@@ -1135,8 +1139,14 @@ function _renderCompare(){
     }).join('');
   };
   const nGames=s=>_W.spVotes.filter(v=>v.size===s).length;
+  const rf=_W.spCmpRole||'';
+  const rbtn=(v,l)=>`<button class="tbtn" style="${rf===v?'border-color:var(--accent);color:#fff':''}" onclick="_spCmpRoleSet('${v}')">${l}</button>`;
+  const roleFilter=`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;align-items:center">
+    <span style="font-size:12px;color:var(--sub);margin-right:2px">Роль:</span>
+    ${rbtn('','Все')}${_SP_FROLES.map(([v,l])=>rbtn(v,l)).join('')}</div>`;
   html(`${_analyticsTabs()}
   <div style="font-size:12px;color:var(--sub);margin-bottom:12px;line-height:1.5">Рейтинг из парных голосов «Спарринга» (Брэдли-Терри, шкала 0-100). Единица — состав на калибровочном майндскейпе, поэтому M0 и M6 одного перса — разные строки. Это НЕ ручная калибровка — чистый результат сравнений.</div>
+  ${roleFilter}
   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px">
     <div style="${cardSt}">${hd('Соло','· '+nGames(1)+' голосов')}${col(1,'var(--grad)')}</div>
     <div style="${cardSt}">${hd('Дуо','· '+nGames(2)+' голосов')}${col(2,'#b18cff')}</div>
@@ -1154,7 +1164,7 @@ async function _spLoad(){
   const[votes,cfg,picks]=await Promise.all([
     _fetchAllW('sparring_votes'),_fetchAllW('sparring_config'),_fetchAllW('match_picks')]);
   _W.spCounts={1:0,2:0,3:0};votes.forEach(v=>_W.spCounts[v.size]=(_W.spCounts[v.size]||0)+1);
-  _W.spCfg={};cfg.forEach(r=>_W.spCfg[r.character_id]={calib_ms:r.calib_ms,in_game:r.in_game!==false});
+  _W.spCfg={};cfg.forEach(r=>_W.spCfg[r.character_id]={calib_ms:r.calib_ms,caps:r.caps||null,in_game:r.in_game!==false});
   // калибровочный M из пиков: самый частый майндскейп персонажа в реальных матчах
   const cnt={};picks.forEach(p=>{const c=cnt[p.character_id]=cnt[p.character_id]||{};c[p.mindscape]=(c[p.mindscape]||0)+1;});
   _W.spRepMs={};
@@ -1179,8 +1189,38 @@ function _spAllowedMs(c){
 // M конкретного инстанса состава (c._ms) → фолбэк первый разрешённый
 function _spMs(c){return c._ms!=null?c._ms:_spAllowedMs(c)[0];}
 const _spInGame=c=>!(_W.spCfg&&_W.spCfg[c.id]&&_W.spCfg[c.id].in_game===false);
-function _spPool(){return _W.tmChars.filter(c=>c.role&&_spInGame(c));} // роль известна + в игре
+// 3 бакета ролей для подбора состава
+const _SP_CAPS=[['main','Главный'],['sub','Саб-ДД'],['sup','Саппорт']];
+const _SP_CAP_LBL={main:'Главный',sub:'Саб-ДД',sup:'Саппорт'};
+// тег синергии → бакет роли
+const _SP_TAG_CAP={crit_dps:'main',main_anomaly:'main',sheer_dps:'main',sub_dps:'sub',sub_anomaly:'sub',stunner:'sup',support:'sup'};
+// фолбэк по specialty, если тегов нет
+const _SP_ROLE_CAP={atk:'main',ano:'main',rupt:'main',stun:'sup',sup:'sup',def:'sup'};
+// роли персонажа (набор бакетов): ручной оверрайд из панели → иначе из тегов → фолбэк по specialty
+function _spCaps(c){
+  const ov=_W.spCfg&&_W.spCfg[c.id]&&_W.spCfg[c.id].caps;
+  if(ov&&ov.length)return new Set(ov);
+  const t=_W.tags&&_W.tags[c.id];const s=new Set();
+  if(t&&t.roles)Object.keys(t.roles).forEach(r=>{const b=_SP_TAG_CAP[r];if(b&&t.roles[r])s.add(b);});
+  if(!s.size)s.add(_SP_ROLE_CAP[c.role]||'sup');
+  return s;
+}
+const _spHas=(c,role)=>_spCaps(c).has(role);
+// роль для фильтра сравнения (оборону показываем как саппорт)
+const _spFRole=c=>c&&c.role==='def'?'sup':(c&&c.role)||'';
+const _SP_FROLES=[['atk','ДД'],['ano','Аномалия'],['rupt','Разлом'],['stun','Стан'],['sup','Саппорт']];
+// уникальны в соло — честно не с кем сравнить, из соло-подбора убираем
+const _spSoloOut=c=>/nangong/i.test(c.name||'');
+function _spPool(size){return _W.tmChars.filter(c=>c.role&&_spInGame(c)&&!(size===1&&_spSoloOut(c)));}
 const _spPick=arr=>arr[Math.floor(Math.random()*arr.length)];
+const _spShuffle=a=>{for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;};
+// валидные ролевые составы: ≤1 главный, нужен урон (main/sub), дуо — без двух саппортов
+const _SP_COMPS={
+  2:[['main','sub'],['main','sup'],['sub','sub'],['sub','sup']],
+  3:[['main','sub','sup'],['main','sup','sup'],['main','sub','sub'],
+     ['sub','sub','sup'],['sub','sup','sup'],['sub','sub','sub']]
+};
+function _spComp(size){const c=_SP_COMPS[size];return c?_spShuffle(_spPick(c).slice()):null;}
 // похожесть тегов (Жаккар)
 function _spSim(a,b){
   const A=_W.spSig[a],B=_W.spSig[b];if(!A||!B||!A.size||!B.size)return 0;
@@ -1194,41 +1234,30 @@ function _spWeighted(cands,weightFn){
   let r=Math.random()*tot;for(let i=0;i<cands.length;i++){r-=w[i];if(r<=0)return cands[i];}
   return cands[cands.length-1];
 }
-// инстанс перса с выбранным M (случайный из разрешённых)
-const _spInst=c=>({...c,_ms:_spPick(_spAllowedMs(c))});
-// левая команда: рандом без повторов, штраф за недавних
-function _spTeamLeft(size){
-  const pool=_spPool();const team=[];const used=new Set();
+// инстанс перса с выбранным M (случайный из разрешённых) + сыгранная роль
+const _spInst=(c,pr)=>({...c,_ms:_spPick(_spAllowedMs(c)),_pr:pr||null});
+// команда по ролевой последовательности gseq (null для соло = без ограничений). left — для похожести правой.
+function _spSide(size,gseq,pool,exclude,left){
+  const used=new Set(exclude||[]);const team=[];
   for(let i=0;i<size;i++){
-    let cand=pool.filter(c=>!used.has(c.id));if(!cand.length)return null;
-    const fresh=cand.filter(c=>!_spRecentHas(c.id));if(fresh.length)cand=fresh;
-    const c=_spPick(cand);used.add(c.id);team.push(_spInst(c));
-  }
-  return team;
-}
-// правая команда: повторяет роли левой + похожих по тегам; НЕ берёт тех же персов (разные M одного перса не сравниваем)
-function _spTeamRight(size,left){
-  const pool=_spPool();const team=[];const used=new Set(left.map(c=>c.id));
-  for(let i=0;i<size;i++){
-    const r=left[i].role;
-    let cand=pool.filter(c=>!used.has(c.id)&&c.role===r);
-    if(!cand.length)cand=pool.filter(c=>!used.has(c.id));
+    const role=gseq&&gseq[i];
+    let cand=pool.filter(c=>!used.has(c.id)&&(!role||_spHas(c,role)));
     if(!cand.length)return null;
     const fresh=cand.filter(c=>!_spRecentHas(c.id));if(fresh.length)cand=fresh;
-    const c=_spWeighted(cand,x=>0.15+_spSim(left[i].id,x.id)); // вес: похожесть тегов + базовый шум
-    used.add(c.id);team.push(_spInst(c));
+    const c=left?_spWeighted(cand,x=>0.15+_spSim(left[i].id,x.id)):_spPick(cand);
+    used.add(c.id);team.push(_spInst(c,role));
   }
   return team;
 }
 function _spGen(){
   const size=_W.sparSize||1;
-  const pool=_spPool();if(pool.length<size+1)return null;
-  for(let tries=0;tries<80;tries++){
-    const left=_spTeamLeft(size);if(!left)continue;
-    const right=_spTeamRight(size,left);if(!right)continue;
+  const pool=_spPool(size);if(pool.length<size+1)return null;
+  for(let tries=0;tries<120;tries++){
+    const gseq=size<2?null:_spComp(size);                 // одна ролевая раскладка на обе стороны
+    const left=_spSide(size,gseq,pool,[],null);if(!left)continue;
+    const right=_spSide(size,gseq,pool,left.map(c=>c.id),left);if(!right)continue;
     const lk=left.map(c=>c.id).sort().join('|'),rk=right.map(c=>c.id).sort().join('|');
     if(lk===rk)continue;                                  // полностью одинаковые составы
-    if(size===1&&left[0].id===right[0].id)continue;       // соло: сам с собой
     return{left,right};
   }
   return null;
@@ -1306,6 +1335,9 @@ function _spConfigPanel(){
     const chipSt=on=>`font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;border:1px solid ${on?'var(--accent)':'var(--border)'};background:${on?'var(--accent)':'transparent'};color:${on?'#fff':'var(--sub)'};border-radius:5px;padding:2px 7px;cursor:pointer`;
     const autoChip=`<button onclick="_spCfgAuto('${c.id}')" title="Авто = самый частый M из пиков" style="font-size:11px;font-weight:600;border:1px solid ${isAuto?'var(--accent)':'var(--border)'};background:${isAuto?'var(--accent)':'transparent'};color:${isAuto?'#fff':'var(--sub)'};border-radius:5px;padding:2px 8px;cursor:pointer">авто M${autoM}</button>`;
     const chips=[0,1,2,3,4,5,6].map(m=>`<button onclick="_spCfgToggle('${c.id}',${m})" style="${chipSt(sel.includes(m))}">M${m}</button>`).join('');
+    const eff=_spCaps(c);const capOv=Array.isArray(cf.caps)&&cf.caps.length;
+    const roleAuto=`<button onclick="_spCfgCapAuto('${c.id}')" title="Роли авто из тегов синергии" style="font-size:11px;font-weight:600;border:1px solid ${capOv?'var(--border)':'var(--accent)'};background:${capOv?'transparent':'var(--accent)'};color:${capOv?'var(--sub)':'#fff'};border-radius:5px;padding:2px 8px;cursor:pointer">авто</button>`;
+    const roleChips=_SP_CAPS.map(([v,l])=>`<button onclick="_spCfgCap('${c.id}','${v}')" style="font-size:11px;font-weight:600;border:1px solid ${eff.has(v)?'var(--accent)':'var(--border)'};background:${eff.has(v)?'var(--accent)':'transparent'};color:${eff.has(v)?'#fff':'var(--sub)'};border-radius:5px;padding:2px 8px;cursor:pointer">${l}</button>`).join('');
     return `<div style="padding:8px 10px;border-radius:8px;background:${inGame?'transparent':'rgba(255,80,80,.06)'};border:1px solid var(--border)">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:7px">
         ${iconChar(c,34)}
@@ -1314,15 +1346,16 @@ function _spConfigPanel(){
         <label style="display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--sub);cursor:pointer;white-space:nowrap" title="Выключить — не показывать в спарринге (напр. ещё не вышел)">
           <input type="checkbox" ${inGame?'checked':''} onchange="_spCfgGame('${c.id}',this.checked)">в игре</label>
       </div>
-      <div style="display:flex;flex-wrap:wrap;gap:5px;align-items:center">${autoChip}${chips}</div>
+      <div style="display:flex;flex-wrap:wrap;gap:5px;align-items:center"><span style="font-size:10px;color:var(--sub);margin-right:2px">M:</span>${autoChip}${chips}</div>
+      <div style="display:flex;flex-wrap:wrap;gap:5px;align-items:center;margin-top:6px"><span style="font-size:10px;color:var(--sub);margin-right:2px">Роль:</span>${roleAuto}${roleChips}</div>
     </div>`;
   };
   return `<div class="card" style="padding:14px 16px">
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap">
-      <span style="font-size:13px;font-weight:600">Калибровочный майндскейп и «в игре»</span>
+      <span style="font-size:13px;font-weight:600">Майндскейп, роли и «в игре»</span>
       <input placeholder="поиск…" value="${escapeHtml(_W.spCfgQ||'')}" oninput="_spCfgSearch(this.value)" style="${inSt};min-width:180px">
       <span id="sp-cfg-status" style="font-size:12px;color:var(--sub);margin-left:auto"></span></div>
-    <div style="font-size:11px;color:var(--sub);margin-bottom:10px;line-height:1.5">«Авто» берёт самый частый майндскейп из реальных пиков (Астра→M1, стандартные→M6). Отметь несколько M — перса будут подбирать на каждом из них отдельно (разные M одного перса друг с другом не сталкиваются). Сними «в игре» у ещё не вышедших (Сигрид, Рамиэль). Сохраняется сразу.</div>
+    <div style="font-size:11px;color:var(--sub);margin-bottom:10px;line-height:1.5"><b>M:</b> «авто» — самый частый из пиков; отметь несколько — подбор на каждом отдельно (разные M одного перса не сталкиваются). <b>Роль:</b> «авто» — из тегов синергии; можно задать вручную и мультиролью (Главный/Саб-ДД/Саппорт). Дуо/трио: ≤1 главный, нужен урон, дуо без двух саппортов. Сними «в игре» у ещё не вышедших. Сохраняется сразу.</div>
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:6px">${chars.map(cell).join('')}</div></div>`;
 }
 function _spCfgTgl(){_W.spCfgOpen=!_W.spCfgOpen;_renderWeights();}
@@ -1331,7 +1364,7 @@ function _spCfgSearch(v){_W.spCfgQ=v;_renderWeights();
 function _spCfgStatus(s,c){const el=document.getElementById('sp-cfg-status');if(el){el.textContent=s;el.style.color=c||'var(--sub)';}}
 async function _spCfgSave(cid){
   const cf=_W.spCfg[cid]||{in_game:true};
-  const row={character_id:cid,calib_ms:cf.calib_ms==null?null:cf.calib_ms,in_game:cf.in_game!==false,updated_at:new Date().toISOString()};
+  const row={character_id:cid,calib_ms:cf.calib_ms==null?null:cf.calib_ms,caps:(cf.caps&&cf.caps.length)?cf.caps:null,in_game:cf.in_game!==false,updated_at:new Date().toISOString()};
   _spCfgStatus('сохранение…');
   const{error}=await sb.from('sparring_config').upsert(row,{onConflict:'character_id'});
   if(dbErr(error,'сохранение калибровки')){_spCfgStatus('ошибка','var(--red)');return;}
@@ -1347,6 +1380,15 @@ function _spCfgToggle(cid,m){
 }
 // сброс в авто (пустой набор)
 function _spCfgAuto(cid){const cf=_W.spCfg[cid]=_W.spCfg[cid]||{in_game:true};cf.calib_ms=null;_W.spCur=null;_spCfgSave(cid);_renderWeights();}
+// тумблер роли (мультивыбор); первый клик стартует с авто-набора из тегов
+function _spCfgCap(cid,role){
+  const cf=_W.spCfg[cid]=_W.spCfg[cid]||{in_game:true};
+  let arr=(Array.isArray(cf.caps)&&cf.caps.length)?cf.caps.slice():[..._spCaps(_W.tmCharMap[cid]||{id:cid})];
+  const i=arr.indexOf(role);if(i>=0)arr.splice(i,1);else arr.push(role);
+  cf.caps=arr.length?arr:null;         // пусто → снова авто из тегов
+  _W.spCur=null;_spCfgSave(cid);_renderWeights();
+}
+function _spCfgCapAuto(cid){const cf=_W.spCfg[cid]=_W.spCfg[cid]||{in_game:true};cf.caps=null;_W.spCur=null;_spCfgSave(cid);_renderWeights();}
 function _spCfgGame(cid,on){const cf=_W.spCfg[cid]=_W.spCfg[cid]||{};cf.in_game=!!on;_W.spCur=null;_spCfgSave(cid);_renderWeights();}
 function _spMode(v){_W.sparSize=v;_W.spCur=null;_W.spSession=0;_renderWeights();}
 function _spSkip(){_spNext();}
