@@ -1057,9 +1057,10 @@ function _renderTeams(size){
   </div>${picker()}`;
   // список сохранённых
   // сортировка по выбору; порядок пересчитывается только при смене режима — правка звёзд не двигает строки
-  const sortKey=_W.tmSort||'games';
+  const sortKey=_W.tmSort||'games',sortDir=_W.tmSortDir||-1;
   const rows=Object.values(_W.tmRows).filter(r=>r.size===size);
-  if(_W.tmOrderFor!==size+'|'+sortKey){
+  const manual=r=>!/^авто/.test(r.note||'')?0:1; // ручные — всегда наверху
+  if(_W.tmOrderFor!==size+'|'+sortKey+'|'+sortDir){
     const wrOf=r=>{const w=_tmWr((r.members||[]).map(m=>m.cid));return w?w.wr:-1;};
     const gOf=r=>{const w=_tmWr((r.members||[]).map(m=>m.cid));return w?w.g:-1;};
     const cmp={
@@ -1068,11 +1069,11 @@ function _renderTeams(size){
       power:(a,b)=>b.stars_power-a.stars_power,
       synergy:(a,b)=>b.stars_synergy-a.stars_synergy,
     }[sortKey];
-    rows.sort((a,b)=>cmp(a,b)||a.key.localeCompare(b.key));
-    _W.tmOrder=rows.map(r=>r.key);_W.tmOrderFor=size+'|'+sortKey;
+    rows.sort((a,b)=>manual(a)-manual(b)||cmp(a,b)*(sortDir<0?1:-1)||a.key.localeCompare(b.key));
+    _W.tmOrder=rows.map(r=>r.key);_W.tmOrderFor=size+'|'+sortKey+'|'+sortDir;
   }else{
     const pos={};_W.tmOrder.forEach((k,i)=>pos[k]=i);
-    rows.sort((a,b)=>(pos[a.key]??1e9)-(pos[b.key]??1e9));
+    rows.sort((a,b)=>manual(a)-manual(b)||(pos[a.key]??1e9)-(pos[b.key]??1e9));
     _W.tmOrder=rows.map(r=>r.key); // новые составы уходят в конец
   }
   const rowHTML=r=>{
@@ -1094,7 +1095,7 @@ function _renderTeams(size){
     <thead><tr style="font-size:11px;color:var(--sub);text-transform:uppercase;text-align:left">
       <th style="padding:10px 14px">Состав</th>
       ${_tmTh('Синергия','synergy',sortKey)}${_tmTh('Сила','power',sortKey)}
-      ${_tmTh(sortKey==='wr'?'Факт · винрейт':'Факт · игры',sortKey==='games'?'wr':'games',sortKey,['games','wr'].includes(sortKey))}
+      ${_tmTh(sortKey==='wr'?'Факт · винрейт':'Факт · игры','__fact',sortKey,['games','wr'].includes(sortKey))}
       <th style="padding:10px 8px">Заметка</th><th></th></tr></thead>
     <tbody>${rows.map(rowHTML).join('')}</tbody></table></div>`
     :`<div class="card" style="padding:18px;color:var(--sub);font-size:13px">Пока нет сохранённых ${label}. Собери первую выше.</div>`;
@@ -1109,9 +1110,21 @@ function _tmSlot(i,cid){const n=_W.tmNew;n.slots[i]=cid;
 // заголовок-сортировка; для «Факта» next переключает игры↔винрейт
 function _tmTh(label,next,cur,active){
   const on=active!==undefined?active:cur===next;
-  return `<th onclick="_tmSetSort('${next}')" title="Сортировать" style="padding:10px 8px;text-align:center;cursor:pointer;user-select:none;${on?'color:var(--accent)':''}">${label}${on?' ▼':''}</th>`;
+  const arr=on?((_W.tmSortDir||-1)<0?' ▼':' ▲'):'';
+  return `<th onclick="_tmSetSort('${next}')" title="Клик — сортировка, повторный — обратный порядок" style="padding:10px 8px;text-align:center;cursor:pointer;user-select:none;${on?'color:var(--accent)':''}">${label}${arr}</th>`;
 }
-function _tmSetSort(v){_W.tmSort=v;_W.tmOrderFor=null;_renderWeights();}
+// тот же столбец — переворот направления, другой — сортировка по убыванию
+function _tmSetSort(v){
+  if(v==='__fact'){ // игры▼ → игры▲ → винрейт▼ → винрейт▲ → …
+    const cur=_W.tmSort,d=_W.tmSortDir||-1;
+    if(cur!=='games'&&cur!=='wr'){_W.tmSort='games';_W.tmSortDir=-1;}
+    else if(d<0)_W.tmSortDir=1;
+    else{_W.tmSort=cur==='games'?'wr':'games';_W.tmSortDir=-1;}
+    _W.tmOrderFor=null;return _renderWeights();
+  }
+  if(_W.tmSort===v)_W.tmSortDir=(_W.tmSortDir||-1)*-1;
+  else{_W.tmSort=v;_W.tmSortDir=-1;}
+  _W.tmOrderFor=null;_renderWeights();}
 function _tmPickTgl(i){_W.tmPickOpen=_W.tmPickOpen===i?null:i;_W.tmPickQ='';_renderWeights();}
 function _tmPickSearch(v){_W.tmPickQ=v;const i=_W.tmPickOpen;_renderWeights();
   const inp=document.querySelector('#page-content input[placeholder="поиск…"]');if(inp){inp.focus();inp.setSelectionRange(v.length,v.length);}}
@@ -1156,7 +1169,7 @@ function _tmTagSyn(chars){
       if(chars.some(o=>o.id!==c.id&&(sig(o.id)||{}).gives&&sig(o.id).gives[k]))met++;});});
   return need?met/need:0;
 }
-const _TM_SYN_MIN=0.5,_TM_SYN_TOP={2:20,3:15}; // порог и сколько тег-составов добавлять
+const _TM_SYN_MIN=0.75,_TM_SYN_TOP={2:0,3:0}; // порог синергии; 0 = без лимита на число составов
 // перебор всех валидных составов из ростера по тег-синергии (без опоры на пики)
 function _tmTagCombos(size){
   const pool=_spPool(size).filter(c=>_W.tags&&_W.tags[c.id]);
@@ -1166,7 +1179,9 @@ function _tmTagCombos(size){
     for(let i=start;i<pool.length;i++){acc.push(pool[i]);walk(i+1,acc);acc.pop();}
   };
   walk(0,[]);
-  return out.sort((a,b)=>b.syn-a.syn).slice(0,_TM_SYN_TOP[size]||15);
+  out.sort((a,b)=>b.syn-a.syn);
+  const lim=_TM_SYN_TOP[size];
+  return lim?out.slice(0,lim):out;
 }
 async function _tmAutofill(size){
   if(!_W.spLoaded){_tmSt('загружаю теги и роли…');await _spLoad();}
