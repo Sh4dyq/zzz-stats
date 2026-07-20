@@ -1049,6 +1049,7 @@ function _renderTeams(size){
     <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap">
       ${Array.from({length:size},(_,i)=>slotSel(i)).join('<span style="color:var(--sub)">+</span>')}
       <button class="btn btn-y" onclick="_tmAdd()">Добавить</button>
+      <button class="btn" onclick="_tmAutofill(${size})">Заполнить из статистики</button>
       <span id="tm-status" style="font-size:12px;color:var(--sub)"></span>
     </div>
     <div style="font-size:11px;color:var(--sub);margin-top:8px">Клик по бейджу M — смена майндскейпа (A-ранги всегда M6). Дубликаты по составу+констам не создаются.</div>
@@ -1104,6 +1105,36 @@ async function _tmAdd(){
   const{error}=await sb.from('team_ratings').upsert(row,{onConflict:'key'});
   if(dbErr(error,'создание состава'))return _tmSt('ошибка','var(--red)');
   _W.tmRows[key]=row;_W.tmNew=null;_renderWeights();toast('Состав добавлен');
+}
+// автозаполнение: топ составов по пикам, звёзды из винрейта (сила) и популярности (синергия)
+const _TM_MING=3,_TM_TOP={2:40,3:30}; // мин. игр и сколько составов брать
+function _tmStarsFromWr(wr){return wr>=.62?5:wr>=.56?4:wr>=.5?3:wr>=.43?2:1;}
+async function _tmAutofill(size){
+  const s=_W.tmStats||{};const src=size===2?s.pair:s.trio;
+  const all=Object.entries(src||{}).filter(([,v])=>v.g>=_TM_MING)
+    .map(([k,v])=>({cids:k.split('|'),g:v.g,wr:(v.w+_KB_TM*0.5)/(v.g+_KB_TM)}))
+    .filter(x=>x.cids.every(c=>_W.tmCharMap[c]));
+  if(!all.length)return _tmSt('нет составов с '+_TM_MING+'+ играми','var(--red)');
+  all.sort((a,b)=>(b.g-a.g)||(b.wr-a.wr));
+  const top=all.slice(0,_TM_TOP[size]||30);
+  const maxG=top[0].g;
+  const rows=[];
+  top.forEach(x=>{
+    const members=x.cids.map(cid=>({cid,ms:(_W.tmCharMap[cid].rarity==='A')?6:0}));
+    const key=_tmKey(members);
+    if(_W.tmRows[key])return; // ручные правки не трогаем
+    const pop=x.g/maxG;
+    rows.push({key,size,members,
+      stars_synergy:Math.max(1,Math.round(pop*5)),
+      stars_power:_tmStarsFromWr(x.wr),
+      note:`авто: ${x.g} игр · ${Math.round(x.wr*100)}%`,
+      updated_at:new Date().toISOString()});
+  });
+  if(!rows.length)return _tmSt('всё уже добавлено','var(--sub)');
+  _tmSt('сохранение '+rows.length+'…');
+  const{error}=await sb.from('team_ratings').upsert(rows,{onConflict:'key'});
+  if(dbErr(error,'автозаполнение составов'))return _tmSt('ошибка','var(--red)');
+  rows.forEach(r=>_W.tmRows[r.key]=r);_renderWeights();toast('Добавлено: '+rows.length);
 }
 async function _tmSave(key){
   const r=_W.tmRows[key];if(!r)return;
