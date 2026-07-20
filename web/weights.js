@@ -1146,6 +1146,33 @@ async function _tmAdd(){
 }
 // автозаполнение: топ составов по пикам, звёзды из винрейта (сила) и популярности (синергия)
 const _TM_MING=3,_TM_TOP={2:40,3:30}; // мин. игр и сколько составов брать
+// коста для автосоздания: нижняя коста первого тира калибровки → типовой M из пиков → A=6/S=0
+function _tmCalibMs(c){
+  const t=_spTiers?_spTiers(c):null;
+  if(t&&t.length)return t[0].ms;
+  return c.rarity==='A'?6:0;
+}
+// чёрный список: мусорные составы. Ключ — отсортированные cid без конст.
+const _blKey=cids=>cids.map(String).sort().join('|');
+// состав мусорный, если он сам в списке или содержит мусорную пару
+function _blHas(cids){
+  const bl=_W.blRows||{};const c=cids.map(String).sort();
+  if(bl[c.join('|')])return true;
+  for(let i=0;i<c.length;i++)for(let j=i+1;j<c.length;j++)if(bl[c[i]+'|'+c[j]])return true;
+  return false;
+}
+async function _blLoad(){
+  const rows=await _fetchAllW('team_blacklist');
+  _W.blRows={};rows.forEach(r=>_W.blRows[r.key]=r);_W.blLoaded=true;
+}
+async function _blAdd(cids,note){
+  const c=cids.map(String).sort();const key=_blKey(c);
+  if(_W.blRows&&_W.blRows[key])return true;
+  const row={key,size:c.length,cids:c,note:note||'',created_at:new Date().toISOString()};
+  const{error}=await sb.from('team_blacklist').upsert(row,{onConflict:'key'});
+  if(dbErr(error,'пометка мусорного состава'))return false;
+  (_W.blRows=_W.blRows||{})[key]=row;return true;
+}
 // состав валиден, если существует раскладка ролей из _SP_COMPS (≤1 главный, нужен урон, дуо без двух саппортов)
 function _tmRoleOk(chars){
   const caps=chars.map(c=>_spCaps(c));
@@ -1175,7 +1202,7 @@ function _tmTagCombos(size){
   const pool=_spPool(size).filter(c=>_W.tags&&_W.tags[c.id]);
   const out=[];
   const walk=(start,acc)=>{
-    if(acc.length===size){if(_tmRoleOk(acc)){const v=_tmTagSyn(acc);if(v>=_TM_SYN_MIN)out.push({chars:acc.slice(),syn:v});}return;}
+    if(acc.length===size){if(_tmRoleOk(acc)&&!_blHas(acc.map(c=>c.id))){const v=_tmTagSyn(acc);if(v>=_TM_SYN_MIN)out.push({chars:acc.slice(),syn:v});}return;}
     for(let i=start;i<pool.length;i++){acc.push(pool[i]);walk(i+1,acc);acc.pop();}
   };
   walk(0,[]);
@@ -1185,16 +1212,17 @@ function _tmTagCombos(size){
 }
 async function _tmAutofill(size){
   if(!_W.spLoaded){_tmSt('загружаю теги и роли…');await _spLoad();}
+  if(!_W.blLoaded)await _blLoad();
   const s=_W.tmStats||{};const src=size===2?s.pair:s.trio;
   const all=Object.entries(src||{}).filter(([,v])=>v.g>=_TM_MING)
     .map(([k,v])=>({cids:k.split('|'),g:v.g,wr:(v.w+_KB_TM*0.5)/(v.g+_KB_TM)}))
-    .filter(x=>x.cids.every(c=>_W.tmCharMap[c]))
-    .filter(x=>_tmRoleOk(x.cids.map(c=>_W.tmCharMap[c])));
+    // реально сыгранные составы берём как есть: факт пиков важнее ролевой схемы, фильтруем только мусор
+    .filter(x=>x.cids.every(c=>_W.tmCharMap[c])&&!_blHas(x.cids));
   all.sort((a,b)=>(b.g-a.g)||(b.wr-a.wr));
   const top=all.slice(0,_TM_TOP[size]||30);
   const rows=[],seen=new Set();
   const add=(chars,stars_power,note,syn)=>{
-    const members=chars.map(c=>({cid:c.id,ms:c.rarity==='A'?6:0}));
+    const members=chars.map(c=>({cid:c.id,ms:_tmCalibMs(c)}));
     const key=_tmKey(members);
     if(_W.tmRows[key]||seen.has(key))return; // ручные правки не трогаем
     seen.add(key);
@@ -1217,7 +1245,7 @@ async function _tmPurgeBad(size){
   if(!_W.spLoaded){_tmSt('загружаю роли…');await _spLoad();}
   const bad=Object.values(_W.tmRows).filter(r=>r.size===size)
     .filter(r=>{const cs=(r.members||[]).map(m=>_W.tmCharMap[m.cid]);
-      return cs.every(Boolean)&&!_tmRoleOk(cs);});
+      return cs.every(Boolean)&&(_blHas(cs.map(c=>c.id))||!_tmRoleOk(cs));});
   if(!bad.length)return _tmSt('невалидных нет','var(--sub)');
   if(!confirm(`Удалить ${bad.length} невалидных ${size===2?'пар':'троек'}?`))return;
   const{error}=await sb.from('team_ratings').delete().in('key',bad.map(r=>r.key));
@@ -1350,6 +1378,7 @@ async function _spLoad(){
     Object.keys(t.gives||{}).forEach(k=>t.gives[k]&&s.add('g:'+k));
     Object.keys(t.needs||{}).forEach(k=>t.needs[k]&&s.add('n:'+k));
     _W.spSig[id]=s;}
+  if(!_W.blLoaded)await _blLoad();                         // мусорные составы — не предлагать в спарринге
   _W.spRecent=_W.spRecent||[];
   _W.spLoaded=true;
 }
@@ -1508,6 +1537,7 @@ function _spGen(){
     const right=_spSide(size,gseq,pool,left.map(c=>c.id),left,seen);if(!right)continue;
     const lk=left.map(c=>c.id).sort().join('|'),rk=right.map(c=>c.id).sort().join('|');
     if(lk===rk)continue;                                   // полностью одинаковые составы
+    if(_blHas(left.map(c=>c.id))||_blHas(right.map(c=>c.id)))continue; // помечен мусором (в т.ч. мусорная пара внутри трио)
     const m={left,right};fallback=fallback||m;
     if(!_spRecentM(_spMKey(left,right)))return m;          // не повторяем недавний матчап
   }
@@ -1519,6 +1549,21 @@ function _spRemember(cur){
   _W.spRecent=[...all.map(c=>String(c.id)),...(_W.spRecent||[])].slice(0,40);      // ~20 пар × 2 стороны
   _W.spRecentU=[...all.map(c=>c.id+':'+_spMs(c)),...(_W.spRecentU||[])].slice(0,30); // тир-юниты (M0 и M1 независимо)
   _W.spRecentM=[_spMKey(cur.left,cur.right),...(_W.spRecentM||[])].slice(0,25);      // ~25 матчапов
+}
+// пометить состав(ы) мусором: больше не предлагать и не автодобавлять (пара блокирует и тройки с ней)
+async function _spTrash(which){
+  const cur=_W.spCur;if(!cur)return;
+  const sides=which==='both'?['left','right']:[which];
+  const st=document.getElementById('sp-status');
+  if(st){st.textContent='помечаю…';st.style.color='var(--sub)';}
+  let n=0;
+  for(const s of sides){
+    const cids=cur[s].map(c=>c.id);
+    const names=cur[s].map(c=>c.name).join(' + ');
+    if(await _blAdd(cids,names))n++;
+  }
+  if(st){st.textContent=n?`✓ в мусор: ${n}`:'ошибка';st.style.color=n?'var(--accent)':'var(--red)';}
+  if(n)_spNext();
 }
 function _spNext(){if(_W.spCur)_spRemember(_W.spCur);_W.spCur=_spGen();_renderWeights();}
 function _renderSparring(){
@@ -1573,6 +1618,9 @@ function _renderSparring(){
       <span style="font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;font-size:22px;color:var(--sub);text-align:center">VS</span>
       <button class="btn" style="padding:8px 14px" onclick="_spSkip()">Сложно / ничья</button>
       <button class="btn" style="padding:8px 14px" onclick="_spNext()">Новая пара</button>
+      ${size>=2?`<button class="btn" style="padding:6px 12px;font-size:12px" onclick="_spTrash('left')">🚫 левый — мусор</button>
+      <button class="btn" style="padding:6px 12px;font-size:12px" onclick="_spTrash('right')">🚫 правый — мусор</button>
+      <button class="btn" style="padding:6px 12px;font-size:12px" onclick="_spTrash('both')">🚫 оба мусор</button>`:''}
     </div>
     ${sideCard(cur.right,'right')}
   </div>
