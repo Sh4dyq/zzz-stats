@@ -191,6 +191,38 @@
   .tour-pick .tt-chev{position:absolute;right:15px;top:50%;transform:translateY(-50%);width:30px;height:15px;color:var(--sub);transition:color .15s,transform .2s;pointer-events:none;z-index:1}
   .tour-pick:hover .tt-chev,.tour-pick.open .tt-chev{color:var(--red)}
   .tour-pick.open .tt-chev{transform:translateY(-50%) rotate(180deg)}
+  /* phase switch (группы / плейофф) */
+  .phaserow{display:flex;align-items:center;gap:4px;margin-left:auto;padding:0 16px}
+  .phase-btn{border:1px solid var(--line);background:none;border-radius:8px;padding:7px 14px;cursor:pointer;
+    font-family:'Rajdhani',sans-serif;font-weight:700;font-size:14px;color:var(--sub);transition:.15s}
+  .phase-btn:hover{color:var(--text)}
+  .phase-btn.active{color:#fff;border-color:var(--red);background:rgba(255,31,68,.13)}
+  .phaserow[hidden]{display:none}
+
+  /* стендинги групп (те же классы, что в админской сетке) */
+  #group-box[hidden]{display:none}
+  #group-box{padding:16px 24px 4px;border-bottom:1px solid var(--border)}
+  .gs-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px}
+  .gs-card{background:linear-gradient(180deg,#15171f,#11131a);border:1px solid var(--border);border-radius:12px;overflow:hidden;cursor:pointer;transition:.15s}
+  .gs-card:hover{border-color:#3a3a44}
+  .gs-card.sel{border-color:var(--red);box-shadow:0 0 0 1px rgba(255,31,68,.35)}
+  .gs-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 14px;border-bottom:1px solid var(--border);background:rgba(255,255,255,.02)}
+  .gs-title{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;text-transform:uppercase;font-size:14px;letter-spacing:.04em}
+  .gs-badge{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#6a6a74}
+  .gs-card.sel .gs-badge{color:var(--red)}
+  .gs-row{display:flex;align-items:center;gap:10px;padding:8px 14px}
+  .gs-row+.gs-row{border-top:1px solid var(--border)}
+  .gs-lead{background:rgba(255,31,68,.07);box-shadow:inset 3px 0 0 var(--red)}
+  .gs-rk{font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;color:#7a7a85;width:16px;text-align:center;flex-shrink:0}
+  .gs-lead .gs-rk{color:var(--red)}
+  .gs-av{width:26px;height:26px;border-radius:7px;background:#1d1d22;display:flex;align-items:center;justify-content:center;font-style:italic;font-size:10px;font-weight:900;color:var(--sub);flex-shrink:0;overflow:hidden}
+  .gs-av img{width:100%;height:100%;object-fit:cover;display:block}
+  .gs-nm{flex:1;font-weight:600;font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .gs-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+  .gs-up{background:#46d369;box-shadow:0 0 5px rgba(70,211,105,.7)}
+  .gs-dn{background:var(--red);box-shadow:0 0 5px rgba(255,31,68,.6)}
+  .gs-sc{font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:700;color:#c9c9d0;min-width:34px;text-align:right}
+
   /* custom tournament dropdown */
   .tour-menu{position:absolute;top:calc(100% + 7px);left:-1px;min-width:260px;background:var(--card);border:1px solid var(--border);border-radius:11px;padding:6px;z-index:60;box-shadow:0 20px 46px rgba(0,0,0,.6),0 0 0 1px rgba(255,31,68,.08);display:flex;flex-direction:column;gap:2px;cursor:default;animation:menuIn .14s ease}
   .tour-menu[hidden]{display:none}
@@ -284,7 +316,12 @@
     <svg class="tt-chev" viewBox="0 0 28 14" aria-hidden="true"><path d="M3 3.5 L14 11 L25 3.5" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
     <div class="tour-menu" id="tour-menu" hidden></div>
   </div>
+  <!-- фаза: показываем только для турниров с групповым этапом -->
+  <div class="phaserow" id="phase-row" hidden></div>
 </div>
+
+<!-- Стендинги групп: видны, когда выбран групповой этап; клик по карточке = фильтр по группе -->
+<div id="group-box" hidden></div>
 
 <!-- Tabs -->
 <div class="tabrow">
@@ -293,7 +330,6 @@
   <button class="tab-btn" data-tab="amps">Амплификаторы</button>
   <button class="tab-btn" data-tab="rating">Рейтинги</button>
   <button class="tab-btn" data-tab="ext">Расширенная</button>
-  <a class="tab-btn" href="predict.html" style="text-decoration:none;display:inline-flex;align-items:center">Аналитика</a>
   <button class="shiyu-btn" id="shiyu-btn" data-tab="shiyu">
     <svg class="sb-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2 4 6v6c0 5 3.4 8.3 8 10 4.6-1.7 8-5 8-10V6l-8-4z" stroke-linejoin="round"/></svg>
     Шиюй турнира
@@ -405,6 +441,7 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>document.write('<script src="web/icons.js?v='+Date.now()+'"><\/script>');</script>
+<script>document.write('<script src="web/phase.js?v='+Date.now()+'"><\/script>');</script>
 <script>
 const SB_URL='https://zoavnckfbfiejxfjakue.supabase.co';
 const SB_KEY='sb_publishable_37RZBsmdp3O1i795EuEfeg_vFpdPTFZ';
@@ -424,7 +461,7 @@ const sb=supabase.createClient(SB_URL,SB_KEY);
 
 const ROLES={atk:{bg:'#3b1010',fg:'#fca5a5'},stun:{bg:'#0f1f3b',fg:'#93c5fd'},rupt:{bg:'#2d1a00',fg:'#fcd34d'},sup:{bg:'#0a2218',fg:'#6ee7b7'},def:{bg:'#0a2218',fg:'#86efac'},ano:{bg:'#1a0d3b',fg:'#c4b5fd'}};
 
-let S={tournaments:[],characters:[],players:[],encounters:[],matches:[],picks:[],bans:[],costs:{},rosters:{},sigs:[],allCosts:[],tour:'__all__',view:'v',rview:'c',cSort:{k:'name',asc:true},aSort:{k:'name',asc:true}};
+let S={tournaments:[],characters:[],players:[],encounters:[],matches:[],picks:[],bans:[],costs:{},rosters:{},sigs:[],allCosts:[],tour:'__all__',view:'v',rview:'c',phase:'all',group:null,raw:null,bracketCache:null,cSort:{k:'name',asc:true},aSort:{k:'name',asc:true}};
 
 const ALL='__all__';
 // КПД (η): средняя теоретическая стоимость персонажа = лимит ростера 1605 / минимум 17 персонажей ≈ 94.4.
@@ -532,6 +569,13 @@ async function loadAll(){
     }else{S.picks=[];S.bans=[];}
   }else{S.matches=[];S.picks=[];S.bans=[];}
 
+  // кэш Challonge — состав групп для срезов по стадии (только в конкретном турнире)
+  S.bracketCache=null;
+  if(S.tour!==ALL){
+    const{data:bc}=await sb.from('bracket_cache').select('json').eq('tournament_id',S.tour).maybeSingle();
+    S.bracketCache=bc?.json||null;
+  }
+
   S.costs={};S.rosters={};
   if(S.tour!==ALL){
     const[cs,rs]=await Promise.all([
@@ -546,7 +590,77 @@ async function loadAll(){
   const allRs=await fetchAll(()=>sb.from('player_rosters').select('*'));
   S.rostersRaw=allRs||[];
 
+  S.raw={encounters:S.encounters,matches:S.matches,picks:S.picks,bans:S.bans};
   document.getElementById('loading').style.display='none';
+  applyPhase();
+}
+
+// Переключатель стадий: только внутри конкретного многоэтапного турнира («Все турниры» не делим —
+// этапы у разных турниров несопоставимы). Кнопки строятся из bracket_type («GROUPS->DE»).
+function renderPhaseRow(){
+  const row=document.getElementById('phase-row');
+  const stages=S.tour===ALL?[]:Phase.stagesOf(TOURS.find(t=>t.id===S.tour));
+  row.hidden=stages.length<2;
+  if(row.hidden){S.phase='all';S.group=null;row.innerHTML='';return;}
+  if(S.phase!=='all'&&!stages.some(s=>s.key===S.phase))S.phase='all';
+  row.innerHTML=[{key:'all',label:'Всё'},...stages]
+    .map(s=>`<button class="phase-btn${s.key===S.phase?' active':''}" data-phase="${s.key}" title="${s.full||'Все стадии турнира'}">${s.label}</button>`).join('');
+  row.querySelectorAll('.phase-btn').forEach(b=>b.onclick=()=>{
+    if(S.phase===b.dataset.phase)return;
+    S.phase=b.dataset.phase;S.group=null;applyPhase();
+  });
+}
+
+// Карточки-стендинги групп (как в админской сетке). Клик = фильтр статистики по группе.
+function renderGroupBox(groups,encs){
+  const box=document.getElementById('group-box');
+  const stages=S.tour===ALL?[]:Phase.stagesOf(TOURS.find(t=>t.id===S.tour));
+  const isGroupStage=stages.length>1&&S.phase===stages[0].key&&/^(GROUPS|RR|SWISS)$/.test(stages[0].fmt);
+  box.hidden=!(isGroupStage&&groups.length);
+  if(box.hidden){box.innerHTML='';return;}
+  const nickOf=pid=>S.playerMap[pid]?.nickname||'—';
+  const row=(s,rank)=>{
+    const nm=s.nm||'—',init=nm.replace(/[^A-Za-zА-Яа-я0-9$]/g,'').slice(0,2).toUpperCase()||'—';
+    const dot=(s.w||s.l)?`<span class="gs-dot ${s.w>=s.l?'gs-up':'gs-dn'}"></span>`:'';
+    return`<div class="gs-row${rank===1&&s.w?' gs-lead':''}">
+      <span class="gs-rk">${rank}</span>
+      <span class="gs-av"><img src="web/players/${esc(nm.trim().toLowerCase())}.webp" alt="" onerror="this.remove()">${init}</span>
+      <span class="gs-nm">${esc(nm)}</span>${dot}<span class="gs-sc">${s.w}:${s.l}</span>
+    </div>`;
+  };
+  box.innerHTML=`<div class="gs-grid">${groups.map(gr=>{
+    const st=Phase.standingsFor(gr,encs.filter(e=>Phase.encGroup(e,groups)===gr.name),nickOf);
+    const sel=S.group===gr.name;
+    return`<div class="gs-card${sel?' sel':''}" data-group="${esc(gr.name)}" title="${sel?'Снять фильтр':'Показать статистику только этой группы'}">
+      <div class="gs-head"><span class="gs-title">${esc(gr.name)}</span><span class="gs-badge">${sel?'фильтр активен':'групповой этап'}</span></div>
+      ${st.map((s,i)=>row(s,i+1)).join('')||'<div class="gs-row"><span class="gs-nm" style="color:var(--sub)">Нет игроков</span></div>'}
+    </div>`;}).join('')}</div>`;
+  box.querySelectorAll('.gs-card').forEach(c=>c.onclick=()=>{
+    S.group=S.group===c.dataset.group?null:c.dataset.group;applyPhase();
+  });
+}
+
+// Срез по стадии (+ группе) поверх загруженных данных: встречи → матчи → пики/баны.
+function applyPhase(){
+  renderPhaseRow();
+  const t=TOURS.find(x=>x.id===S.tour);
+  const r=S.raw||{encounters:[],matches:[],picks:[],bans:[]};
+  const nickToId={};S.players.forEach(p=>{if(p.nickname)nickToId[p.nickname.toLowerCase()]=p.id;});
+  const groups=S.tour===ALL?[]:Phase.groupsOf(t,S.bracketCache,nickToId,r.encounters);
+
+  const ctx={groups};
+  S.encounters=S.phase==='all'?r.encounters
+    :r.encounters.filter(e=>Phase.encStageKey(e,t,ctx)===S.phase);
+  if(S.group)S.encounters=S.encounters.filter(e=>Phase.encGroup(e,groups)===S.group);
+  S.encMap={};S.encounters.forEach(e=>S.encMap[e.id]=e);
+
+  const cut=S.encounters.length!==r.encounters.length;
+  S.matches=cut?r.matches.filter(m=>S.encMap[m.encounter_id]):r.matches;
+  S.matchMap={};S.matches.forEach(m=>S.matchMap[m.id]=m);
+  S.picks=cut?r.picks.filter(p=>S.matchMap[p.match_id]):r.picks;
+  S.bans=cut?r.bans.filter(b=>S.matchMap[b.match_id]):r.bans;
+
+  renderGroupBox(groups,r.encounters);
   renderAll();
 }
 
@@ -1351,7 +1465,7 @@ document.getElementById('shiyu-btn').onclick=openShiyu;
 // Init
 let TOURS=[];
 function activateTour(id,tab){
-  S.tour=id;
+  S.tour=id;S.group=null; // фильтр по группе привязан к турниру
   document.querySelectorAll('.tour-tab').forEach(t=>t.classList.remove('active'));
   if(tab)tab.classList.add('active');
   // кнопка «Шиюй турнира» — только в выбранном турнире, у которого загружена ротация

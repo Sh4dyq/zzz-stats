@@ -52,13 +52,16 @@
   const bayes=(wEq,n)=>(wEq+PRIOR_N*0.5)/((n||0)+PRIOR_N);
 
   // статистика персонажей по пикам: cid → {games,wEq,bwr}
-  function charStats(picks,matchMap){
+  // wfn(pk,m)→вес вклада пика (для веса по патчу); по умолчанию 1 → поведение без изменений
+  function charStats(picks,matchMap,wfn){
+    const w=wfn||(()=>1);
     const st={};
     (picks||[]).forEach(pk=>{
       const m=matchMap[pk.match_id];if(!m)return;
       if(!m.winner_id&&!m.is_draw)return;
+      const g=w(pk,m);if(!(g>0))return;
       const s=st[pk.character_id]||(st[pk.character_id]={games:0,wEq:0});
-      s.games++;s.wEq+=m.is_draw?0.5:(m.winner_id===pk.player_id?1:0);
+      s.games+=g;s.wEq+=g*(m.is_draw?0.5:(m.winner_id===pk.player_id?1:0));
     });
     Object.values(st).forEach(s=>s.bwr=bayes(s.wEq,s.games));
     return st;

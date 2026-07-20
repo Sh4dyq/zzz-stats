@@ -574,8 +574,49 @@ function playOrderMap(){
 
 // ---- данные (вся история, грузится один раз) ----
 const D={};
+
+// --- вес по патчу (КАРКАС, по умолчанию ВЫКЛЮЧЕН = полный no-op) ---
+// Включение при выходе патча с бафами: enabled:true + заполнить patches.
+// patch: {id, from:'YYYY-MM-DD'|null, tids:[]|null, charBuffs:{cid:mult}} — mult>1 усиливает вклад пиков перса в статистику.
+const PATCH_CFG={enabled:false,patches:[]};
+// множитель вклада пика перса cid в матче m; при выключенном конфиге всегда 1 (числа как без патч-веса)
+function patchWeight(cid,m){
+  if(!PATCH_CFG.enabled)return 1;
+  const when=m&&m.created_at,tid=m&&D.encTour&&D.encTour[m.encounter_id];
+  for(const pt of PATCH_CFG.patches){
+    const byTid=pt.tids&&pt.tids.length&&tid&&pt.tids.includes(tid);
+    const byDate=pt.from&&when&&new Date(when)>=new Date(pt.from);
+    if(byTid||byDate){const mult=pt.charBuffs&&pt.charBuffs[cid];if(mult>0)return mult;}
+  }
+  return 1;
+}
+
+// --- сигнал банов: страшных персонажей чаще банят → их WR по пикам занижен ---
+// P(бан | доступен) выше среднего = плюс к силе. Консервативно, за весом BAN_W, с усадкой по выборке; BAN_W=0 отключает.
+const BAN_W=0.15,BAN_K=40,BAN_CAP=0.08;
+function buildBanAdj(bans,picks,mmap){
+  const tOrd={};D.tours.forEach((t,i)=>tOrd[t.id]=i);      // D.tours уже отсортированы (sort_order)
+  const draftOrd=mid=>{const m=mmap[mid];return m?(tOrd[D.encTour[m.encounter_id]]??1e9):1e9;};
+  const drafts=new Set(),firstSeen={};                    // firstSeen: cid → мин. индекс появления (пик/бан) = «доступность»
+  const bump=(cid,o)=>{if(firstSeen[cid]==null||o<firstSeen[cid])firstSeen[cid]=o;};
+  picks.forEach(p=>{const m=mmap[p.match_id];if(!m||(!m.winner_id&&!m.is_draw))return;
+    drafts.add(p.match_id);bump(p.character_id,draftOrd(p.match_id));});
+  (bans||[]).forEach(b=>bump(b.character_id,draftOrd(b.match_id)));
+  const draftAt=[...drafts].map(draftOrd).sort((a,b)=>a-b);
+  const availCount=o=>{let lo=0,hi=draftAt.length;while(lo<hi){const md=(lo+hi)>>1;if(draftAt[md]<o)lo=md+1;else hi=md;}return draftAt.length-lo;};
+  const banCnt={};(bans||[]).forEach(b=>{banCnt[b.character_id]=(banCnt[b.character_id]||0)+1;});
+  const rate={},denom={};let sumR=0,nR=0;                 // частота банов по персонажу + среднее (для центрирования)
+  Object.keys(firstSeen).forEach(cid=>{const dn=Math.max(1,availCount(firstSeen[cid]));
+    denom[cid]=dn;const r=(banCnt[cid]||0)/dn;rate[cid]=r;sumR+=r;nR++;});
+  const meanR=nR?sumR/nR:0;
+  const adj={};
+  Object.keys(rate).forEach(cid=>{const conf=denom[cid]/(denom[cid]+BAN_K);
+    adj[cid]=Math.max(-BAN_CAP,Math.min(BAN_CAP,BAN_W*(rate[cid]-meanR)*conf));});
+  return adj;
+}
+
 async function boot(){
-  const[ts,ps,cs,encs,ms,pks,pa,br,bn,rs,bc]=await Promise.all([
+  const[ts,ps,cs,encs,ms,pks,pa,br,bn,rs,bc,bans]=await Promise.all([
     sb.from('tournaments').select('*').then(r=>r.data||[]),
     sb.from('players').select('*').then(r=>r.data||[]),
     sb.from('characters').select('*').then(r=>r.data||[]),
@@ -586,7 +627,8 @@ async function boot(){
     sb.from('brackets').select('*').then(r=>r.data||[],()=>[]),
     sb.from('bracket_nodes').select('*').then(r=>r.data||[],()=>[]),
     sb.from('tournament_results').select('*').then(r=>r.data||[],()=>[]),
-    sb.from('bracket_cache').select('*').then(r=>r.data||[],()=>[])
+    sb.from('bracket_cache').select('*').then(r=>r.data||[],()=>[]),
+    fetchAll(()=>sb.from('match_bans').select('*'))
   ]);
   D.tours=ts.slice().sort((a,b)=>(a.sort_order??1e9)-(b.sort_order??1e9));
   D.players=ps.slice().sort((a,b)=>(a.nickname||'').localeCompare(b.nickname||'','ru',{sensitivity:'base'}));
@@ -613,7 +655,9 @@ async function boot(){
   D.N0=8;
   D.picks=pks;D.mmap=mmap;
   D.encTour={};encs.forEach(e=>D.encTour[e.id]=e.tournament_id);
-  D.cstats=Predict.charStats(pks,mmap);
+  D.cstats=Predict.charStats(pks,mmap,(pk,m)=>patchWeight(pk.character_id,m));
+  D.banAdj=buildBanAdj(bans,pks,mmap);
+  D.bans=bans;
   D.pairLift=buildPairLift(pks,mmap,D.cstats);
   // преимущество первого пика: доля побед fp-стороны по всем играм (ничья = ½)
   {let w=0,n=0;ms.forEach(m=>{
@@ -769,8 +813,9 @@ function cstatsFor(rotKey){
     const m=D.mmap[pk.match_id];if(!m)return;
     if(!tids.has(D.encTour[m.encounter_id]))return;
     if(!m.winner_id&&!m.is_draw)return;
+    const g=patchWeight(pk.character_id,m);if(!(g>0))return;
     const s=st[pk.character_id]||(st[pk.character_id]={games:0,wEq:0});
-    s.games++;s.wEq+=m.is_draw?0.5:(m.winner_id===pk.player_id?1:0);
+    s.games+=g;s.wEq+=g*(m.is_draw?0.5:(m.winner_id===pk.player_id?1:0));
   });
   const PRIOR=6;
   Object.keys(st).forEach(cid=>{
@@ -884,7 +929,9 @@ const SYN_K=8,SYN_BOOST=1;
 const SYN_TAG_W=0.6,SYN_LIFT_W=0.3;
 const BUFF_W=0.5; // вес попадания в баф ротации Шиюй (Synergy.buffMatchup)
 function effBwr(p,stats){
-  const base=(stats[p.cid]&&stats[p.cid].bwr)||0.5;
+  // поправка на баны вливается в силу единожды здесь → её наследует и мидскейп-блендинг (base=прайор)
+  const adj=(D.banAdj&&D.banAdj[p.cid])||0;
+  const base=Math.max(0.02,Math.min(0.98,((stats[p.cid]&&stats[p.cid].bwr)||0.5)+adj));
   if(D.charMap[p.cid]&&D.charMap[p.cid].rarity==='A')return base; // A-ранги без разреза по M
   // монотонность: value(M) = максимум по m≤M (повышение M не снижает WR)
   let v=-1;
@@ -974,6 +1021,11 @@ function updateDraft(){
     parts.push(`<span>По игрокам (Elo ×${ELO_W}): <b>${fPct(pe)}</b></span>`);
     parts.push(`<span>Опыт на этих персонажах: <b>${fPct(pca)}</b> vs <b>${fPct(pcb)}</b> (вес ×${PC_W})</span>`);
   }
+  // вклад сигнала банов в силу (средняя поправка по стороне) — крупные цифры уже с ним
+  {const banOf=arr=>arr.length?arr.reduce((s,pk)=>s+((D.banAdj&&D.banAdj[pk.cid])||0),0)/arr.length:0;
+   const bA=banOf(fA),bB=banOf(fB);
+   if(Math.abs(bA)>1e-4||Math.abs(bB)>1e-4){const f=x=>(x>=0?'+':'')+x.toFixed(3);
+     parts.push(`<span class="note-micro">Поправка на баны (страшных недооценивает WR): ${f(bA)} vs ${f(bB)}</span>`);}}
   const p=sigm(L);
   // сноска «мало данных»: высокий M без статистики ИЛИ персонажа редко брали
   const RARE_GAMES=5;
