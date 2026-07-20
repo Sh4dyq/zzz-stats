@@ -1050,6 +1050,7 @@ function _renderTeams(size){
       ${Array.from({length:size},(_,i)=>slotSel(i)).join('<span style="color:var(--sub)">+</span>')}
       <button class="btn btn-y" onclick="_tmAdd()">Добавить</button>
       <button class="btn" onclick="_tmAutofill(${size})">Заполнить из статистики</button>
+      <button class="btn" onclick="_tmPurgeBad(${size})">Убрать невалидные</button>
       <span id="tm-status" style="font-size:12px;color:var(--sub)"></span>
     </div>
     <div style="font-size:11px;color:var(--sub);margin-top:8px">Клик по бейджу M — смена майндскейпа (A-ранги всегда M6). Дубликаты по составу+констам не создаются.</div>
@@ -1132,33 +1133,81 @@ async function _tmAdd(){
 }
 // автозаполнение: топ составов по пикам, звёзды из винрейта (сила) и популярности (синергия)
 const _TM_MING=3,_TM_TOP={2:40,3:30}; // мин. игр и сколько составов брать
+// состав валиден, если существует раскладка ролей из _SP_COMPS (≤1 главный, нужен урон, дуо без двух саппортов)
+function _tmRoleOk(chars){
+  const caps=chars.map(c=>_spCaps(c));
+  return (_SP_COMPS[chars.length]||[]).some(comp=>{
+    const used=new Array(caps.length).fill(false);
+    const fit=k=>{if(k===comp.length)return true;
+      for(let i=0;i<caps.length;i++)if(!used[i]&&caps[i].has(comp[k])){
+        used[i]=true;if(fit(k+1))return true;used[i]=false;}
+      return false;};
+    return fit(0);
+  });
+}
 function _tmStarsFromWr(wr){return wr>=.62?5:wr>=.56?4:wr>=.5?3:wr>=.43?2:1;}
+// комплементарность по тегам: сколько нужд одного закрывает другой (двусторонне), 0..1
+function _tmTagSyn(chars){
+  const sig=id=>_W.tags&&_W.tags[id];
+  let need=0,met=0;
+  chars.forEach(c=>{const t=sig(c.id);if(!t)return;
+    const needs=Object.keys(t.needs||{}).filter(k=>t.needs[k]);
+    needs.forEach(k=>{need++;
+      if(chars.some(o=>o.id!==c.id&&(sig(o.id)||{}).gives&&sig(o.id).gives[k]))met++;});});
+  return need?met/need:0;
+}
+const _TM_SYN_MIN=0.5,_TM_SYN_TOP={2:20,3:15}; // порог и сколько тег-составов добавлять
+// перебор всех валидных составов из ростера по тег-синергии (без опоры на пики)
+function _tmTagCombos(size){
+  const pool=_spPool(size).filter(c=>_W.tags&&_W.tags[c.id]);
+  const out=[];
+  const walk=(start,acc)=>{
+    if(acc.length===size){if(_tmRoleOk(acc)){const v=_tmTagSyn(acc);if(v>=_TM_SYN_MIN)out.push({chars:acc.slice(),syn:v});}return;}
+    for(let i=start;i<pool.length;i++){acc.push(pool[i]);walk(i+1,acc);acc.pop();}
+  };
+  walk(0,[]);
+  return out.sort((a,b)=>b.syn-a.syn).slice(0,_TM_SYN_TOP[size]||15);
+}
 async function _tmAutofill(size){
+  if(!_W.spLoaded){_tmSt('загружаю теги и роли…');await _spLoad();}
   const s=_W.tmStats||{};const src=size===2?s.pair:s.trio;
   const all=Object.entries(src||{}).filter(([,v])=>v.g>=_TM_MING)
     .map(([k,v])=>({cids:k.split('|'),g:v.g,wr:(v.w+_KB_TM*0.5)/(v.g+_KB_TM)}))
-    .filter(x=>x.cids.every(c=>_W.tmCharMap[c]));
-  if(!all.length)return _tmSt('нет составов с '+_TM_MING+'+ играми','var(--red)');
+    .filter(x=>x.cids.every(c=>_W.tmCharMap[c]))
+    .filter(x=>_tmRoleOk(x.cids.map(c=>_W.tmCharMap[c])));
   all.sort((a,b)=>(b.g-a.g)||(b.wr-a.wr));
   const top=all.slice(0,_TM_TOP[size]||30);
-  const maxG=top[0].g;
-  const rows=[];
-  top.forEach(x=>{
-    const members=x.cids.map(cid=>({cid,ms:(_W.tmCharMap[cid].rarity==='A')?6:0}));
+  const rows=[],seen=new Set();
+  const add=(chars,stars_power,note,syn)=>{
+    const members=chars.map(c=>({cid:c.id,ms:c.rarity==='A'?6:0}));
     const key=_tmKey(members);
-    if(_W.tmRows[key])return; // ручные правки не трогаем
-    const pop=x.g/maxG;
+    if(_W.tmRows[key]||seen.has(key))return; // ручные правки не трогаем
+    seen.add(key);
     rows.push({key,size,members,
-      stars_synergy:Math.max(1,Math.round(pop*5)),
-      stars_power:_tmStarsFromWr(x.wr),
-      note:`авто: ${x.g} игр · ${Math.round(x.wr*100)}%`,
-      updated_at:new Date().toISOString()});
-  });
+      stars_synergy:Math.max(1,Math.round(syn*5)),
+      stars_power,note,updated_at:new Date().toISOString()});
+  };
+  top.forEach(x=>{const chars=x.cids.map(c=>_W.tmCharMap[c]);
+    add(chars,_tmStarsFromWr(x.wr),`авто: ${x.g} игр · ${Math.round(x.wr*100)}%`,_tmTagSyn(chars));});
+  // добавка по чистой тег-синергии (даже если состав ни разу не пикали)
+  _tmTagCombos(size).forEach(x=>add(x.chars,3,`авто-теги: синергия ${Math.round(x.syn*100)}%`,x.syn));
   if(!rows.length)return _tmSt('всё уже добавлено','var(--sub)');
   _tmSt('сохранение '+rows.length+'…');
   const{error}=await sb.from('team_ratings').upsert(rows,{onConflict:'key'});
   if(dbErr(error,'автозаполнение составов'))return _tmSt('ошибка','var(--red)');
   rows.forEach(r=>_W.tmRows[r.key]=r);_renderWeights();toast('Добавлено: '+rows.length);
+}
+// разовая чистка: удалить составы, не проходящие ролевой фильтр
+async function _tmPurgeBad(size){
+  if(!_W.spLoaded){_tmSt('загружаю роли…');await _spLoad();}
+  const bad=Object.values(_W.tmRows).filter(r=>r.size===size)
+    .filter(r=>{const cs=(r.members||[]).map(m=>_W.tmCharMap[m.cid]);
+      return cs.every(Boolean)&&!_tmRoleOk(cs);});
+  if(!bad.length)return _tmSt('невалидных нет','var(--sub)');
+  if(!confirm(`Удалить ${bad.length} невалидных ${size===2?'пар':'троек'}?`))return;
+  const{error}=await sb.from('team_ratings').delete().in('key',bad.map(r=>r.key));
+  if(dbErr(error,'чистка составов'))return _tmSt('ошибка','var(--red)');
+  bad.forEach(r=>delete _W.tmRows[r.key]);_W.tmOrderFor=null;_renderWeights();toast('Удалено: '+bad.length);
 }
 async function _tmSave(key){
   const r=_W.tmRows[key];if(!r)return;
