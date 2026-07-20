@@ -1055,8 +1055,25 @@ function _renderTeams(size){
     <div style="font-size:11px;color:var(--sub);margin-top:8px">Клик по бейджу M — смена майндскейпа (A-ранги всегда M6). Дубликаты по составу+констам не создаются.</div>
   </div>${picker()}`;
   // список сохранённых
-  const rows=Object.values(_W.tmRows).filter(r=>r.size===size)
-    .sort((a,b)=>(b.stars_power-a.stars_power)||(b.stars_synergy-a.stars_synergy)||a.key.localeCompare(b.key));
+  // сортировка по выбору; порядок пересчитывается только при смене режима — правка звёзд не двигает строки
+  const sortKey=_W.tmSort||'games';
+  const rows=Object.values(_W.tmRows).filter(r=>r.size===size);
+  if(_W.tmOrderFor!==size+'|'+sortKey){
+    const wrOf=r=>{const w=_tmWr((r.members||[]).map(m=>m.cid));return w?w.wr:-1;};
+    const gOf=r=>{const w=_tmWr((r.members||[]).map(m=>m.cid));return w?w.g:-1;};
+    const cmp={
+      games:(a,b)=>gOf(b)-gOf(a),
+      wr:(a,b)=>wrOf(b)-wrOf(a),
+      power:(a,b)=>b.stars_power-a.stars_power,
+      synergy:(a,b)=>b.stars_synergy-a.stars_synergy,
+    }[sortKey];
+    rows.sort((a,b)=>cmp(a,b)||a.key.localeCompare(b.key));
+    _W.tmOrder=rows.map(r=>r.key);_W.tmOrderFor=size+'|'+sortKey;
+  }else{
+    const pos={};_W.tmOrder.forEach((k,i)=>pos[k]=i);
+    rows.sort((a,b)=>(pos[a.key]??1e9)-(pos[b.key]??1e9));
+    _W.tmOrder=rows.map(r=>r.key); // новые составы уходят в конец
+  }
   const rowHTML=r=>{
     const mem=r.members||[];
     const chips=mem.map(m=>{const c=_W.tmCharMap[m.cid]||{name:'?'};
@@ -1082,11 +1099,16 @@ function _renderTeams(size){
   html(`${_analyticsTabs()}${createForm}
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
       <span class="count-chip">${rows.length} ${label}</span>
+      <span style="font-size:12px;color:var(--sub)">Сортировка:</span>
+      <select onchange="_tmSetSort(this.value)" style="${inSt}">
+        ${[['games','по играм'],['wr','по винрейту'],['power','по силе'],['synergy','по синергии']]
+          .map(([v,t])=>`<option value="${v}"${sortKey===v?' selected':''}>${t}</option>`).join('')}</select>
       <span style="font-size:12px;color:var(--sub)">Звёзды сохраняются сразу. «Факт» — винрейт состава по реальным пикам матчей (без учёта конст).</span></div>
     ${list}`);
 }
 function _tmSlot(i,cid){const n=_W.tmNew;n.slots[i]=cid;
   const c=_W.tmCharMap[cid];n.ms[i]=(c&&c.rarity==='A')?6:0;_W.tmPickOpen=null;_W.tmPickQ='';_renderWeights();}
+function _tmSetSort(v){_W.tmSort=v;_W.tmOrderFor=null;_renderWeights();}
 function _tmPickTgl(i){_W.tmPickOpen=_W.tmPickOpen===i?null:i;_W.tmPickQ='';_renderWeights();}
 function _tmPickSearch(v){_W.tmPickQ=v;const i=_W.tmPickOpen;_renderWeights();
   const inp=document.querySelector('#page-content input[placeholder="поиск…"]');if(inp){inp.focus();inp.setSelectionRange(v.length,v.length);}}
