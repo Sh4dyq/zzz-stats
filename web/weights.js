@@ -1169,7 +1169,7 @@ function _tmTagSyn(chars){
       if(chars.some(o=>o.id!==c.id&&(sig(o.id)||{}).gives&&sig(o.id).gives[k]))met++;});});
   return need?met/need:0;
 }
-const _TM_SYN_MIN=0.75,_TM_SYN_TOP={2:0,3:0}; // порог синергии; 0 = без лимита на число составов
+const _TM_SYN_MIN=0.4,_TM_SYN_TOP={2:0,3:0}; // порог синергии; 0 = без лимита на число составов
 // перебор всех валидных составов из ростера по тег-синергии (без опоры на пики)
 function _tmTagCombos(size){
   const pool=_spPool(size).filter(c=>_W.tags&&_W.tags[c.id]);
