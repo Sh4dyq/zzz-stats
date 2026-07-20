@@ -1091,23 +1091,25 @@ function _renderTeams(size){
   };
   const list=rows.length?`<div class="card" style="padding:0;overflow:hidden"><table style="width:100%;border-collapse:collapse">
     <thead><tr style="font-size:11px;color:var(--sub);text-transform:uppercase;text-align:left">
-      <th style="padding:10px 14px">Состав</th><th style="padding:10px 8px;text-align:center">Синергия</th>
-      <th style="padding:10px 8px;text-align:center">Сила</th><th style="padding:10px 8px;text-align:center">Факт (пики)</th>
+      <th style="padding:10px 14px">Состав</th>
+      ${_tmTh('Синергия','synergy',sortKey)}${_tmTh('Сила','power',sortKey)}
+      ${_tmTh(sortKey==='wr'?'Факт · винрейт':'Факт · игры',sortKey==='games'?'wr':'games',sortKey,['games','wr'].includes(sortKey))}
       <th style="padding:10px 8px">Заметка</th><th></th></tr></thead>
     <tbody>${rows.map(rowHTML).join('')}</tbody></table></div>`
     :`<div class="card" style="padding:18px;color:var(--sub);font-size:13px">Пока нет сохранённых ${label}. Собери первую выше.</div>`;
   html(`${_analyticsTabs()}${createForm}
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
       <span class="count-chip">${rows.length} ${label}</span>
-      <span style="font-size:12px;color:var(--sub)">Сортировка:</span>
-      <select onchange="_tmSetSort(this.value)" style="${inSt}">
-        ${[['games','по играм'],['wr','по винрейту'],['power','по силе'],['synergy','по синергии']]
-          .map(([v,t])=>`<option value="${v}"${sortKey===v?' selected':''}>${t}</option>`).join('')}</select>
       <span style="font-size:12px;color:var(--sub)">Звёзды сохраняются сразу. «Факт» — винрейт состава по реальным пикам матчей (без учёта конст).</span></div>
     ${list}`);
 }
 function _tmSlot(i,cid){const n=_W.tmNew;n.slots[i]=cid;
   const c=_W.tmCharMap[cid];n.ms[i]=(c&&c.rarity==='A')?6:0;_W.tmPickOpen=null;_W.tmPickQ='';_renderWeights();}
+// заголовок-сортировка; для «Факта» next переключает игры↔винрейт
+function _tmTh(label,next,cur,active){
+  const on=active!==undefined?active:cur===next;
+  return `<th onclick="_tmSetSort('${next}')" title="Сортировать" style="padding:10px 8px;text-align:center;cursor:pointer;user-select:none;${on?'color:var(--accent)':''}">${label}${on?' ▼':''}</th>`;
+}
 function _tmSetSort(v){_W.tmSort=v;_W.tmOrderFor=null;_renderWeights();}
 function _tmPickTgl(i){_W.tmPickOpen=_W.tmPickOpen===i?null:i;_W.tmPickQ='';_renderWeights();}
 function _tmPickSearch(v){_W.tmPickQ=v;const i=_W.tmPickOpen;_renderWeights();
