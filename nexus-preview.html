@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>NEXUS · превью переноса</title>
+<!-- Скрытая страница (ссылок с сайта нет): превью разделов Статистика/Аналитика
+     в том виде, в котором они переедут на nexus-shiyu. Вход — логин админки
+     (Supabase). Рендерит РЕАЛЬНЫЕ React-компоненты модуля nexus-stats
+     (web/nexus-preview.js, собирается nexus-stats/tools/preview/build.mjs). -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Saira:ital,wght@0,700;0,800;1,800&family=Manrope:wght@400;600;700&family=Chakra+Petch:wght@400;700&display=swap" rel="stylesheet">
+<style>
+/* Токены nexus (срез из app/globals.css нового сайта; шрифты — Google-замены по дизайн-скиллу) */
+:root{
+  --ink-0:#000;--ink-1:#0B0B0E;--ink-2:#16161B;--ink-3:#222229;--ink-4:#33333D;--ink-5:#4A4A55;
+  --paper:#FFF;--paper-2:#E7E7EC;--paper-3:#A6A6B0;--paper-4:#6B6B75;
+  --red-1:#FF2E45;--red-2:#D11628;--red-3:#9C0E1C;--magenta:#E91E63;--cyan:#3CD9E5;--lime:#C8FF00;
+  --win:#1FBF67;--warn:#F5A623;
+  --fill-1:rgba(255,255,255,.04);--fill-2:rgba(255,255,255,.08);--fill-3:rgba(255,255,255,.12);
+  --border:rgba(255,255,255,.12);--border-strong:rgba(255,255,255,.7);
+  --shadow-glow:0 0 24px rgba(255,46,69,.35);--shadow-card:0 8px 24px rgba(0,0,0,.5);
+  --ease-out:cubic-bezier(.22,.61,.36,1);
+  --font-saira:'Saira';--font-manrope:'Manrope';--font-chakra:'Chakra Petch';
+  --font-display:'Saira',sans-serif;--font-body:'Manrope',sans-serif;--font-mono:'Chakra Petch',monospace;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{background:var(--ink-1);color:var(--paper);-webkit-font-smoothing:antialiased;font-family:var(--font-body)}
+::selection{background:var(--red-2);color:var(--paper)}
+/* Логин-экран в стилистике nexus */
+#login-screen{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
+.login-card{width:340px;background:var(--ink-2);border:1px solid var(--border);border-radius:14px;padding:24px;box-shadow:var(--shadow-card);position:relative}
+.login-card h1{font-family:var(--font-display);font-size:18px;font-weight:800;text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px}
+.login-card p.sub{font-size:12px;color:var(--paper-4);margin-bottom:18px}
+.login-card label{display:block;font-family:var(--font-display);font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.1em;color:var(--paper-4);margin:0 0 6px}
+.login-card input{width:100%;padding:10px 12px;border-radius:10px;background:var(--ink-3);border:1px solid var(--border);color:var(--paper);font-family:var(--font-body);font-size:13px;outline:none;margin-bottom:14px}
+.login-card input:focus{border-color:var(--red-2)}
+.login-card button{width:100%;padding:11px;border-radius:10px;border:1px solid var(--red-2);background:var(--red-2);color:var(--paper);font-family:var(--font-display);font-size:12px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;cursor:pointer}
+.login-card button:hover{background:var(--red-1);border-color:var(--red-1);box-shadow:var(--shadow-glow)}
+#auth-msg{margin-top:12px;font-size:12px;color:var(--red-1);min-height:16px}
+.tape{position:absolute;width:32px;height:32px;background-image:repeating-linear-gradient(-45deg,rgba(255,255,255,.65) 0 2.5px,transparent 2.5px 6px);pointer-events:none}
+</style>
+</head>
+<body>
+
+<div id="login-screen">
+  <div class="login-card">
+    <div class="tape" style="top:0;left:0"></div>
+    <div class="tape" style="top:0;right:0"></div>
+    <h1>Nexus · превью</h1>
+    <p class="sub">Разделы Статистика и Аналитика в том виде, в котором переедут. Вход — учётка админки.</p>
+    <label>Email</label><input id="p-email" type="email" autocomplete="username">
+    <label>Пароль</label><input id="p-pass" type="password" autocomplete="current-password">
+    <button onclick="pvSignIn()">Войти</button>
+    <div id="auth-msg"></div>
+  </div>
+</div>
+
+<div id="nexus-preview-root"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+const SB_URL='https://zoavnckfbfiejxfjakue.supabase.co';
+const SB_KEY='sb_publishable_37RZBsmdp3O1i795EuEfeg_vFpdPTFZ';
+const sb=supabase.createClient(SB_URL,SB_KEY);
+
+let mounted=false,authed=false;
+// Бандл грузится последним — монтируем, когда готовы обе стороны (сессия + скрипт).
+function showApp(){
+  authed=true;
+  if(mounted||!window.NexusPreview)return;
+  mounted=true;
+  document.getElementById('login-screen').style.display='none';
+  NexusPreview.mount();
+}
+window.addEventListener('nexus-preview-ready',()=>{if(authed)showApp();});
+async function pvSignIn(){
+  const email=document.getElementById('p-email').value,pass=document.getElementById('p-pass').value;
+  const{error}=await sb.auth.signInWithPassword({email,password:pass});
+  if(error)document.getElementById('auth-msg').textContent=error.message;
+}
+document.getElementById('p-pass').addEventListener('keydown',e=>{if(e.key==='Enter')pvSignIn();});
+sb.auth.onAuthStateChange((_,session)=>{if(session)showApp();});
+sb.auth.getSession().then(({data:{session}})=>{if(session)showApp();});
+// Dev-байпас как в admin.html: только file:/localhost.
+if(location.protocol==='file:'||location.hostname==='localhost'||location.hostname==='127.0.0.1')showApp();
+</script>
+<script src="web/nexus-preview.js"></script>
+</body>
+</html>
