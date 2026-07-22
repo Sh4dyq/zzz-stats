@@ -1144,8 +1144,7 @@ async function _tmAdd(){
   if(dbErr(error,'создание состава'))return _tmSt('ошибка','var(--red)');
   _W.tmRows[key]=row;_W.tmNew=null;_renderWeights();toast('Состав добавлен');
 }
-// автозаполнение: топ составов по пикам, звёзды из винрейта (сила) и популярности (синергия)
-const _TM_MING=3,_TM_TOP={2:40,3:30}; // мин. игр и сколько составов брать
+// автозаполнение: все сыгранные составы (без границы по числу пиков) + чисто синергирующие по тегам
 // коста для автосоздания: нижняя коста первого тира калибровки → типовой M из пиков → A=6/S=0
 function _tmCalibMs(c){
   const t=_spTiers?_spTiers(c):null;
@@ -1214,12 +1213,12 @@ async function _tmAutofill(size){
   if(!_W.spLoaded){_tmSt('загружаю теги и роли…');await _spLoad();}
   if(!_W.blLoaded)await _blLoad();
   const s=_W.tmStats||{};const src=size===2?s.pair:s.trio;
-  const all=Object.entries(src||{}).filter(([,v])=>v.g>=_TM_MING)
+  const all=Object.entries(src||{})
     .map(([k,v])=>({cids:k.split('|'),g:v.g,wr:(v.w+_KB_TM*0.5)/(v.g+_KB_TM)}))
     // реально сыгранные составы берём как есть: факт пиков важнее ролевой схемы, фильтруем только мусор
     .filter(x=>x.cids.every(c=>_W.tmCharMap[c])&&!_blHas(x.cids));
   all.sort((a,b)=>(b.g-a.g)||(b.wr-a.wr));
-  const top=all.slice(0,_TM_TOP[size]||30);
+  const top=all; // без границы по числу пиков — берём все сыгранные составы
   const rows=[],seen=new Set();
   const add=(chars,stars_power,note,syn)=>{
     const members=chars.map(c=>({cid:c.id,ms:_tmCalibMs(c)}));

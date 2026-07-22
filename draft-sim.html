@@ -1,0 +1,967 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<title>Nexus Stats — Симулятор драфта</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Saira+Condensed:ital,wght@0,700;0,800;0,900;1,800;1,900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0b0b0d;--card:#161618;--panel-2:#1c1c20;--panel-3:#242429;
+    --border:#26262c;--line:rgba(255,255,255,.07);
+    --red:#ff1f44;--pink:#ec1862;--grad:linear-gradient(95deg,#ff1f44,#ec1862);
+    --accent:#ff1f44;--gold:#f5c842;--cyan:#3dd9d6;
+    --lime:#c4f500;--purple:#a970ff;--green:#4ade80;
+    --text:#f3f3f5;--sub:#8a8a93;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font-family:'Rajdhani',sans-serif;min-height:100vh}
+  .facets{position:fixed;inset:0;width:100%;height:100%;z-index:0;pointer-events:none}
+  .topstripe{height:4px;background:var(--grad);position:sticky;top:0;z-index:50}
+  body>*:not(.facets){position:relative;z-index:1}
+  ::-webkit-scrollbar{width:6px;height:6px}
+  ::-webkit-scrollbar-track{background:var(--card)}
+  ::-webkit-scrollbar-thumb{background:#34343b;border-radius:3px}
+  ::-webkit-scrollbar-thumb:hover{background:var(--red)}
+  .spinner{width:22px;height:22px;border:2px solid var(--border);border-top-color:var(--red);border-radius:50%;animation:spin .7s linear infinite;margin:0 auto}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  select,input[type=text]{background:var(--panel-2);border:1px solid var(--border);color:var(--text);border-radius:8px;padding:8px 12px;font-family:'Rajdhani',sans-serif;font-weight:600;font-size:14px;transition:.15s}
+  select{cursor:pointer}
+  select:focus,input:focus{outline:none;border-color:var(--red)}
+  .hdr{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:16px 28px;border-bottom:1px solid var(--border);background:rgba(11,11,13,.72);backdrop-filter:blur(12px)}
+  .hdr>div{flex-shrink:0}
+  .brand{display:flex;align-items:center;gap:11px;flex-shrink:0}
+  .brand .mk{height:42px;width:auto;display:block}
+  .brand .wm{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;font-size:25px;letter-spacing:.02em;text-transform:uppercase;background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent;padding-right:.16em}
+  .brand .suf{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;font-size:25px;color:#fff;text-transform:uppercase;margin-left:-4px}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(255,31,68,.5)}70%{box-shadow:0 0 0 7px rgba(255,31,68,0)}100%{box-shadow:0 0 0 0 rgba(255,31,68,0)}}
+  .livetw{display:flex;align-items:center;gap:10px;padding:9px 16px;border-radius:10px;background:rgba(145,70,255,.12);border:1px solid rgba(145,70,255,.4);font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;font-size:15px;letter-spacing:.04em;color:#fff;transition:.15s;text-decoration:none}
+  .livetw:hover{background:rgba(145,70,255,.22)}
+  .livetw .dot{width:9px;height:9px;border-radius:50%;background:var(--red);flex-shrink:0;animation:pulse 1.8s infinite}
+  .livetw .vbar{width:1px;height:18px;background:rgba(255,255,255,.18)}
+  .livetw svg{width:17px;height:17px;fill:var(--purple)}
+  .livetw .tw{color:var(--purple)}
+  .livetw.offline .dot{background:#5e5e66;box-shadow:none;animation:none}
+  .livetw.offline .lv{color:var(--sub)}
+  .hbbtn{display:flex;align-items:center;justify-content:center;padding:10px 16px;border-radius:10px;background:var(--panel-2);border:1px solid var(--border);transition:.15s;flex-shrink:0}
+  .hbbtn:hover{border-color:var(--lime)}
+  .hbbtn img{height:20px;width:auto;display:block;mix-blend-mode:lighten}
+  .nav{display:flex;align-items:center;gap:2px;flex-shrink:0}
+  @media (max-width:980px){.nav{display:none}}
+  .nav a{position:relative;font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;font-size:17px;letter-spacing:.02em;color:var(--sub);padding:8px 15px;transition:.15s;text-decoration:none}
+  .nav a:hover{color:var(--text)}
+  .nav a.active{color:#fff}
+  .nav a.active::after{content:"";position:absolute;left:15px;right:15px;bottom:-2px;height:3px;border-radius:3px;background:var(--grad)}
+  .pane{max-width:1180px;margin:24px auto 0;padding:0 24px}
+  .note{color:var(--sub);font-size:13px;line-height:1.6}
+  .sect{border:1px solid var(--border);border-radius:14px;background:var(--card);margin-bottom:16px;overflow:hidden}
+  .sect-h{padding:15px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+  .sect-t{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;font-size:19px;letter-spacing:.02em}
+  .sect-b{padding:18px 20px}
+  .btn{border:1px solid var(--border);background:var(--panel-2);color:var(--text);border-radius:8px;padding:9px 17px;font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;font-size:14px;letter-spacing:.03em;cursor:pointer;transition:.15s}
+  .btn:hover{border-color:var(--sub)}
+  .btn.primary{background:var(--grad);border-color:transparent;color:#fff}
+  .btn.cyan{background:linear-gradient(95deg,#22b8b5,#3dd9d6);border-color:transparent;color:#04211f}
+  .btn:disabled{opacity:.4;cursor:not-allowed}
+  .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .cost-bar{margin:14px 0 6px;height:12px;border-radius:6px;background:var(--panel-3);overflow:hidden}
+  .cost-bar i{display:block;height:100%;background:var(--grad);transition:width .3s}
+  .cost-bar i.over{background:linear-gradient(95deg,#ff4d4d,#ff1f44)}
+  .cost-meta{display:flex;justify-content:space-between;font-family:'JetBrains Mono',monospace;font-size:12.5px;color:var(--sub)}
+  .cost-meta b{color:var(--text)}
+  .cost-meta .bad{color:#ff6b6b}
+  .cost-meta .good{color:var(--green)}
+  .palette{display:flex;flex-wrap:wrap;gap:6px;max-height:340px;overflow-y:auto;padding:8px;border:1px solid var(--border);border-radius:10px;background:var(--panel-2)}
+  .pit{position:relative;width:58px;border-radius:9px;cursor:pointer;border:1px solid transparent;opacity:.85;transition:.1s;text-align:center;padding-bottom:2px}
+  .pit:hover{border-color:var(--sub);opacity:1}
+  .pit.on{border-color:var(--red);background:rgba(255,31,68,.14);opacity:1}
+  .pit.dis{opacity:.28;pointer-events:none;filter:grayscale(.6)}
+  .pit .cc{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--sub);line-height:1.2}
+  .pit.on .cc{color:#ff7587}
+  .pit .el{position:absolute;left:3px;top:3px;width:8px;height:8px;border-radius:50%;border:1px solid rgba(0,0,0,.4)}
+  .pit .msb{position:absolute;right:2px;top:2px;z-index:2;font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:600;line-height:1;padding:2px 3px;border-radius:5px;background:var(--panel-3);border:1px solid var(--border);color:var(--gold);cursor:pointer}
+  .pit .msb.static{color:var(--sub);cursor:default}
+  .slot .msb{position:absolute;right:-4px;bottom:-4px;z-index:2;font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:600;line-height:1;padding:2px 4px;border-radius:5px;background:var(--panel-3);border:1px solid var(--border);color:var(--gold)}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media(max-width:900px){.grid2{grid-template-columns:1fr}}
+  .side{border:1px solid var(--border);border-radius:12px;background:var(--panel-2);padding:14px}
+  .side.you{border-top:3px solid var(--cyan)}
+  .side.bot{border-top:3px solid var(--red)}
+  .side-lbl{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;font-size:14px;letter-spacing:.05em;color:var(--sub);margin-bottom:10px}
+  .squads{display:flex;flex-direction:column;gap:10px}
+  .squad{display:flex;gap:8px;align-items:center}
+  .squad .qh{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;color:var(--sub);width:26px;flex-shrink:0}
+  .slot{width:72px;height:72px;border:1px dashed #34343b;border-radius:12px;display:flex;align-items:center;justify-content:center;background:var(--panel-3);position:relative;flex-shrink:0}
+  .slot.filled{border-style:solid;border-color:#3f3f48}
+  .slot .x{position:absolute;top:-6px;right:-6px;width:18px;height:18px;border-radius:50%;background:var(--card);border:1px solid var(--border);color:var(--sub);font-size:11px;display:none;align-items:center;justify-content:center;cursor:pointer}
+  .side.you .slot.filled:hover .x{display:flex}
+  .banzone{display:flex;gap:6px;flex-wrap:wrap;min-height:44px;margin-top:8px}
+  .ban{width:40px;height:40px;border-radius:8px;position:relative;opacity:.6;filter:grayscale(.7)}
+  .ban::after{content:"✕";position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--red);font-size:20px;font-weight:800}
+  .turn-banner{border:1px solid var(--border);border-radius:12px;background:var(--card);padding:14px 18px;margin-bottom:14px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  .turn-badge{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;text-transform:uppercase;font-size:16px;padding:6px 14px;border-radius:8px}
+  .turn-badge.you{background:rgba(61,217,214,.16);color:var(--cyan)}
+  .turn-badge.bot{background:rgba(255,31,68,.16);color:#ff7587}
+  .turn-badge.ban{background:rgba(255,31,68,.2);color:#ff9d9d}
+  .turn-txt{color:var(--sub);font-size:14.5px}
+  .turn-txt b{color:var(--text)}
+  .res-panel{border:1px solid var(--border);border-radius:14px;background:var(--card);padding:20px 22px;margin-top:6px}
+  .res-nums{display:flex;justify-content:space-between;align-items:baseline;font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;font-size:42px;line-height:1}
+  .res-nums .na{color:var(--cyan)}
+  .res-nums .nb{color:#ff5c75}
+  .res-nums .rn{font-size:15px;color:var(--sub);margin:0 8px;font-weight:800}
+  .res-bar{height:14px;border-radius:7px;overflow:hidden;display:flex;background:var(--panel-3);margin:12px 0 10px}
+  .res-bar .fa{background:linear-gradient(90deg,#22b8b5,#3dd9d6)}
+  .res-bar .fb{background:var(--grad);flex:1}
+  .res-break{display:flex;gap:20px;flex-wrap:wrap;justify-content:center;font-family:'JetBrains Mono',monospace;font-size:12.5px;color:var(--sub);margin-top:6px}
+  .res-break b{color:var(--text)}
+  .pool-search{width:100%;margin-bottom:8px}
+  .seg{display:flex;gap:2px;border:1px solid var(--border);border-radius:7px;overflow:hidden;width:fit-content}
+  .seg button{border:none;background:none;padding:7px 15px;font-family:'Saira Condensed',sans-serif;font-weight:800;text-transform:uppercase;font-size:13px;color:var(--sub);cursor:pointer;transition:.15s}
+  .seg button.on{background:var(--grad);color:#fff}
+  .tag{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--sub);padding:2px 8px;border:1px solid var(--border);border-radius:6px}
+  .tag.buff{color:var(--cyan);border-color:rgba(61,217,214,.4)}
+  /* фильтры ростера */
+  .filt-bar{display:flex;flex-wrap:wrap;gap:14px;margin:10px 0 4px;align-items:center}
+  .filt-grp{display:flex;gap:4px;align-items:center}
+  .filt-grp .fl{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:700;text-transform:uppercase;font-size:11px;color:var(--sub);margin-right:2px}
+  .fchip{display:inline-flex;align-items:center;justify-content:center;min-width:28px;height:28px;padding:0 7px;border:1px solid var(--border);border-radius:7px;background:var(--panel-2);color:var(--sub);cursor:pointer;font-family:'Saira Condensed',sans-serif;font-weight:800;font-size:12px;transition:.12s}
+  .fchip:hover{border-color:var(--sub);color:var(--text)}
+  .fchip.on{border-color:var(--red);background:rgba(255,31,68,.14);color:#fff}
+  .fchip img{width:18px;height:18px;object-fit:contain;display:block}
+  /* ===== драфт-борд (визуал как на nexus-shiyu) ===== */
+  #draft-board{--youc:var(--cyan);--botc:var(--red)}
+  .db-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:6px 8px 14px}
+  .db-pl{display:flex;align-items:center;gap:12px;min-width:0}
+  .db-pl.r{flex-direction:row-reverse;text-align:right}
+  .db-av{width:56px;height:56px;border-radius:14px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;font-size:24px;background:var(--panel-3);overflow:hidden}
+  .db-av img{width:100%;height:100%;object-fit:cover}
+  .db-you .db-av{box-shadow:0 0 0 2px var(--cyan)}
+  .db-bot .db-av{box-shadow:0 0 0 2px var(--red)}
+  .db-nm{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;font-size:20px;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .db-cost{font-family:'JetBrains Mono',monospace;font-size:11.5px;color:var(--sub)}
+  .db-cost b{color:var(--text)}
+  .db-mid{display:flex;flex-direction:column;align-items:center;gap:4px;flex-shrink:0}
+  .db-vs{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;font-size:22px;color:#2e2e35}
+  .db-shiyu{font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--cyan);opacity:.8;white-space:nowrap}
+  /* ряды бан/пик */
+  .db-row{display:flex;align-items:flex-start;gap:8px;padding:0 4px 6px}
+  .db-side-steps{flex:1;display:flex}
+  .db-side-steps.l{justify-content:flex-end}
+  .db-side-steps.r{justify-content:flex-start}
+  .db-mlabel{width:64px;flex-shrink:0;align-self:stretch;display:flex;align-items:center;justify-content:center;font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;letter-spacing:.12em;font-size:11px}
+  .db-mlabel.ban{color:rgba(255,31,68,.6)}
+  .db-mlabel.pick{color:rgba(196,245,0,.6)}
+  .db-steps{display:grid;gap:5px}
+  .step-slot{width:64px;height:64px;border-radius:14px;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;flex-shrink:0;border:2px solid}
+  .step-slot.ban{border-color:rgba(255,31,68,.9)}
+  .step-slot.pick{border-color:rgba(196,245,0,.9)}
+  .step-slot img{width:100%;height:100%;object-fit:cover;object-position:top center}
+  .step-slot.ban img{filter:grayscale(1)}
+  .step-slot .snum{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;color:rgba(255,255,255,.32)}
+  .step-slot.done .snum{color:rgba(255,255,255,.16)}
+  .step-slot.cur{animation:stepPulse 1.8s ease-in-out infinite}
+  .step-slot.cur .snum{color:rgba(255,255,255,.9);font-size:24px}
+  @keyframes stepPulse{0%,100%{box-shadow:0 0 4px 0 rgba(255,255,255,.15)}50%{box-shadow:0 0 20px 3px rgba(255,255,255,.4)}}
+  /* точки очерёдности */
+  .db-dots{display:flex;align-items:center;padding:8px 4px 12px}
+  .dots{flex:1;display:flex;gap:3px}
+  .dots.l{justify-content:flex-end}
+  .dots.r{justify-content:flex-start}
+  .dot-s{width:20px;height:5px;border-radius:3px;background:rgba(255,255,255,.09)}
+  .dot-s.done{background:rgba(255,255,255,.22)}
+  .dot-s.done.ban{background:rgba(255,31,68,.4)}
+  .dot-s.cur{background:rgba(255,255,255,.6)}
+  .db-dgap{width:64px;flex-shrink:0}
+  /* пул: колонки 1fr / центр-иконка роли / 1fr, строки = роли */
+  .db-pool{display:grid;grid-template-columns:1fr 60px 1fr;align-items:center;column-gap:6px;row-gap:8px}
+  .db-pool .pc-left{display:flex;flex-wrap:wrap;gap:5px;justify-content:flex-end}
+  .db-pool .pc-right{display:flex;flex-wrap:wrap;gap:5px;justify-content:flex-start}
+  .db-pool .pc-role{display:flex;align-items:center;justify-content:center}
+  .db-pool .pc-role img{width:30px;height:30px;object-fit:contain;opacity:.6}
+  .pcard{position:relative;width:74px;height:74px;border-radius:16px;overflow:hidden;border:2px solid rgba(255,255,255,.07);background:var(--panel-3);cursor:default;flex-shrink:0;transition:transform .12s,border-color .12s}
+  .pcard img{width:100%;height:100%;object-fit:cover;object-position:top center;filter:grayscale(1) brightness(.6);transition:filter .15s}
+  .pcard.active img{filter:none}
+  .pcard.dim img{filter:grayscale(1) brightness(.4)}
+  .pcard.clk{cursor:pointer}
+  .pcard.clk:hover{border-color:rgba(255,255,255,.35);transform:scale(.94)}
+  .pcard.used img{filter:grayscale(1) brightness(.28)}
+  .pcard.ban{border-color:rgba(255,31,68,.9)}
+  .pcard.ban::after{content:"";position:absolute;inset:0;background:radial-gradient(circle,transparent 55%,rgba(255,31,68,.12));}
+  .pcard .bslash{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:rgba(255,31,68,.85);font-size:30px;font-weight:800}
+  .pcard .pm{position:absolute;bottom:0;right:0;min-width:22px;text-align:center;padding:2px 5px 2px;border-radius:9px 0 14px 0;font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;font-size:12px;color:#fff;background:rgba(0,0,0,.78)}
+  .pcard .pm.hot{background:rgba(223,2,75,.9)}
+  /* описание бафа Шиюй */
+  .buff-desc{margin-top:12px;border:1px solid var(--border);border-radius:10px;background:var(--panel-2);padding:12px 14px}
+  .buff-desc .bd-h{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;font-size:12px;letter-spacing:.05em;color:var(--cyan);margin-bottom:7px}
+  .buff-desc .bd-l{font-size:13.5px;line-height:1.5;color:var(--text);margin:3px 0;padding-left:12px;position:relative}
+  .buff-desc .bd-l::before{content:"›";position:absolute;left:0;color:var(--cyan)}
+  .buff-desc .hl{color:var(--gold);font-weight:600}
+  /* финал: тройки + ввод таймера */
+  .fin-teams{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:16px}
+  @media(max-width:760px){.fin-teams{grid-template-columns:1fr}}
+  .fin-side{border:1px solid var(--border);border-radius:12px;background:var(--panel-2);padding:14px}
+  .fin-team{margin-bottom:12px}
+  .fin-th{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;font-size:12px;letter-spacing:.05em;color:var(--sub);margin-bottom:6px}
+  .fin-row{display:flex;gap:6px}
+  .fin-c{position:relative;width:58px;height:58px;border-radius:12px;overflow:hidden;border:1px solid var(--border);background:var(--panel-3)}
+  .fin-c img{width:100%;height:100%;object-fit:cover;object-position:top center}
+  .fin-c .pm{position:absolute;bottom:0;right:0;min-width:18px;text-align:center;padding:1px 4px;border-radius:7px 0 11px 0;font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;font-size:10px;color:#fff;background:rgba(0,0,0,.78)}
+  .fin-c .pm.hot{background:rgba(223,2,75,.9)}
+  .fin-tm{margin-top:6px;font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--sub);display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .fin-tm b{color:var(--text)}
+  .tinp{width:80px;background:var(--panel-3);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:5px 9px;font-family:'JetBrains Mono',monospace;font-size:12px}
+  .tinp:focus{outline:none;border-color:var(--cyan)}
+  .fin-total{margin-top:8px;font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--sub)}
+  .fin-total b{color:var(--cyan)}
+  /* слоты сборки отрядов */
+  .sq-row{display:flex;gap:8px}
+  .sq-slot{position:relative;width:66px;height:66px;border-radius:13px;border:1px dashed #3a3a42;background:var(--panel-3);display:flex;align-items:center;justify-content:center;overflow:hidden}
+  .sq-slot.filled{border-style:solid;border-color:#3f3f48}
+  .sq-slot.edit{cursor:pointer;transition:border-color .12s}
+  .sq-slot.edit:hover{border-color:var(--cyan)}
+  .sq-slot img{width:100%;height:100%;object-fit:cover;object-position:top center}
+  .sq-slot .sq-plus{font-size:26px;color:var(--sub)}
+  .sq-slot .pm{position:absolute;bottom:0;right:0;min-width:18px;text-align:center;padding:1px 4px;border-radius:7px 0 11px 0;font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;font-size:10px;color:#fff;background:rgba(0,0,0,.78)}
+  .sq-slot .pm.hot{background:rgba(223,2,75,.9)}
+  /* попап выбора персонажа в слот */
+  .slot-menu{position:fixed;z-index:1000;background:var(--card);border:1px solid var(--cyan);border-radius:12px;padding:12px;box-shadow:0 14px 40px rgba(0,0,0,.55);max-width:320px}
+  .slot-menu .sm-h{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;font-size:12px;color:var(--sub);margin-bottom:8px}
+  .slot-menu .sm-grid{display:flex;flex-wrap:wrap;gap:6px;max-width:296px}
+  .slot-menu .sm-c{position:relative;width:52px;height:52px;border-radius:11px;overflow:hidden;border:1px solid var(--border);cursor:pointer;transition:.12s}
+  .slot-menu .sm-c:hover{border-color:var(--cyan)}
+  .slot-menu .sm-c.cur{border-color:var(--cyan);box-shadow:0 0 0 2px rgba(61,217,214,.35)}
+  .slot-menu .sm-c img{width:100%;height:100%;object-fit:cover;object-position:top center}
+  .slot-menu .sm-c .pm{position:absolute;bottom:0;right:0;padding:1px 3px;border-radius:6px 0 9px 0;font-family:'Saira Condensed',sans-serif;font-weight:900;font-size:9px;color:#fff;background:rgba(0,0,0,.78)}
+  .slot-menu .sm-c .pm.hot{background:rgba(223,2,75,.9)}
+  footer{border-top:1px solid var(--border);background:#08080a;margin-top:48px}
+  .foot{max-width:1280px;margin:0 auto;padding:24px 40px 18px;display:flex;flex-direction:column;align-items:center;gap:16px;text-align:center}
+  .fnav{display:flex;gap:6px;flex-wrap:wrap;justify-content:center}
+  .fnav a{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;font-size:15px;letter-spacing:.03em;color:var(--sub);padding:6px 12px;transition:.15s;text-decoration:none}
+  .fnav a:hover{color:#fff}
+  .fcopy{max-width:1280px;margin:0 auto;padding:14px 40px 20px;border-top:1px solid var(--border);font-family:'JetBrains Mono',monospace;font-size:11px;color:#5e5e66;text-align:center}
+  .fcopy a{color:#5e5e66;text-decoration:none}
+  .lockup{display:inline-flex;align-items:center;gap:22px;background:#121215;padding:14px 28px;clip-path:polygon(16px 0,100% 0,100% calc(100% - 16px),calc(100% - 16px) 100%,0 100%,0 16px)}
+  .lockup .mk{height:42px}.lockup .spark{width:20px;height:20px;fill:#fff;opacity:.9}.lockup .hbmk{height:26px;mix-blend-mode:lighten}
+</style>
+</head>
+<body>
+<svg class="facets" preserveAspectRatio="xMidYMid slice" viewBox="0 0 1440 900">
+  <defs><pattern id="poly" width="240" height="210" patternUnits="userSpaceOnUse">
+    <rect width="240" height="210" fill="#0b0b0d"/>
+    <polygon points="0,0 130,55 0,120" fill="#0e0e11"/>
+    <polygon points="130,55 240,0 240,110 150,140" fill="#0d0d10"/>
+    <polygon points="0,120 150,140 70,210 0,210" fill="#101014"/>
+    <polygon points="150,140 240,110 240,210 130,210" fill="#0c0c0f"/>
+    <polygon points="70,210 130,210 150,140" fill="#0f0f13"/>
+  </pattern></defs>
+  <rect width="1440" height="900" fill="url(#poly)"/>
+</svg>
+<div class="topstripe"></div>
+
+<div class="hdr">
+  <div style="display:flex;align-items:center;gap:18px">
+    <div class="brand"><img class="mk" src="nexus-logo.png" alt="NEXUS"><span class="wm">Nexus</span><span class="suf">Stats</span></div>
+    <nav class="nav">
+      <a href="index.html">Главная</a>
+      <a href="statistics.html">Статистика</a>
+      <a href="bracket.html">Турнирная сетка</a>
+      <a href="predict.html">Аналитика</a>
+      <a href="#" class="active">Симулятор</a>
+      <a href="wheel.html">Колесо</a>
+    </nav>
+  </div>
+  <div style="display:flex;align-items:center;gap:14px">
+    <a href="https://hornybox.ru/?r=Nexus_Shiyu" target="_blank" rel="noopener noreferrer" class="hbbtn"><img src="hornybox-logo.png" alt="HornyBox"></a>
+    <a href="https://twitch.tv/Nexus_Shiyu" target="_blank" class="livetw">
+      <svg viewBox="0 0 24 24"><path d="M4 2 2 6v14h5v3l3-3h4l6-6V2H4zm16 11-3 3h-4l-3 3v-3H6V4h14v9z"/><path d="M15 7h2v5h-2zM10 7h2v5h-2z"/></svg>
+      <span class="tw">Twitch</span><span class="vbar"></span><span class="lv">Live</span><span class="dot"></span>
+    </a>
+  </div>
+</div>
+
+<div id="loading" style="padding:60px 0;text-align:center"><div class="spinner"></div></div>
+
+<div class="pane" id="app" style="display:none">
+  <!-- настройки -->
+  <div class="sect">
+    <div class="sect-h">
+      <span class="sect-t">Условия</span>
+      <div class="row">
+        <span class="side-lbl" style="margin:0">Кост-система</span>
+        <select id="tour-sel" onchange="onTour()"></select>
+      </div>
+    </div>
+    <div class="sect-b">
+      <div id="shiyu-info" class="row" style="gap:8px"></div>
+      <div id="buff-desc"></div>
+      <div class="note" style="margin-top:8px">Лимит косту <b id="lim-txt" style="color:var(--text)"></b>, минимум персонажей в ростере <b style="color:var(--text)">17</b>. Все персонажи считаются на базовом майндскейпе. Бот собирает оптимальный ростер под баф и мобов текущей ротации Шиюй.</div>
+    </div>
+  </div>
+
+  <!-- ростер -->
+  <div class="sect" id="sect-roster">
+    <div class="sect-h">
+      <span class="sect-t">Твой ростер</span>
+      <div class="row">
+        <button class="btn" onclick="genRoster('random')">🎲 Случайный</button>
+        <button class="btn" onclick="genRoster('optimal')">⚡ Оптимальный</button>
+        <button class="btn" onclick="clearRoster()">Очистить</button>
+      </div>
+    </div>
+    <div class="sect-b">
+      <div class="cost-bar"><i id="rc-fill"></i></div>
+      <div class="cost-meta">
+        <span>Персонажей: <b id="rc-count">0</b> / 17 <span id="rc-count-ok"></span></span>
+        <span>Кост: <b id="rc-cost">0</b> / <b id="rc-limit">1605</b> <span id="rc-cost-ok"></span></span>
+      </div>
+      <input type="text" class="pool-search" id="pool-search" placeholder="Поиск персонажа…" oninput="renderPool()" style="margin-top:12px">
+      <div class="filt-bar" id="filt-bar"></div>
+      <div class="palette" id="pool"></div>
+    </div>
+  </div>
+
+  <!-- ростер бота -->
+  <div class="sect" id="sect-botroster">
+    <div class="sect-h">
+      <span class="sect-t">Ростер бота</span>
+      <div class="seg" id="bot-src">
+        <button class="on" data-src="auto" onclick="setBotSrc('auto')">Авто</button>
+        <button data-src="player" onclick="setBotSrc('player')">Игрок</button>
+        <button data-src="manual" onclick="setBotSrc('manual')">Вручную</button>
+      </div>
+    </div>
+    <div class="sect-b">
+      <div id="bot-auto" class="note">Бот соберёт оптимальный ростер под баф, мобов и статистику Шиюй.</div>
+      <div id="bot-player" style="display:none">
+        <div class="row" style="gap:10px;margin-bottom:10px">
+          <span class="side-lbl" style="margin:0">Игрок</span>
+          <select id="bp-player" onchange="onBotPlayer()"></select>
+          <span class="side-lbl" style="margin:0">Ростер</span>
+          <select id="bp-roster" onchange="loadBotPlayerRoster()"></select>
+        </div>
+      </div>
+      <div id="bot-manual" style="display:none">
+        <div class="row" style="justify-content:flex-end;margin-bottom:8px">
+          <button class="btn" onclick="genBotRoster('random')">🎲 Случайный</button>
+          <button class="btn" onclick="genBotRoster('optimal')">⚡ Оптимальный</button>
+          <button class="btn" onclick="clearBotRoster()">Очистить</button>
+        </div>
+        <input type="text" class="pool-search" id="bpool-search" placeholder="Поиск персонажа…" oninput="renderBotPool()">
+        <div class="palette" id="bpool" style="max-height:240px"></div>
+      </div>
+      <div class="cost-bar" style="margin-top:12px"><i id="brc-fill"></i></div>
+      <div class="cost-meta">
+        <span>Персонажей: <b id="brc-count">—</b> / 17 <span id="brc-count-ok"></span></span>
+        <span>Кост: <b id="brc-cost">—</b> / <b id="brc-limit">1605</b> <span id="brc-cost-ok"></span></span>
+      </div>
+      <div class="row" style="margin-top:14px;justify-content:flex-end">
+        <span class="side-lbl" style="margin:0">Первый пик</span>
+        <select id="fp-sel">
+          <option value="you">Ты</option>
+          <option value="bot">Бот</option>
+          <option value="random" selected>Жребий</option>
+        </select>
+        <button class="btn primary" id="start-btn" onclick="startDraft()">Начать драфт против бота →</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- драфт -->
+  <div class="sect" id="sect-draft" style="display:none">
+    <div class="sect-h">
+      <span class="sect-t">Драфт</span>
+      <button class="btn" onclick="resetAll()">↺ Заново</button>
+    </div>
+    <div class="sect-b">
+      <div id="draft-board"></div>
+      <div class="res-panel" id="draft-res" style="margin-top:16px;display:none"></div>
+    </div>
+  </div>
+</div>
+
+<footer>
+  <div class="foot">
+    <div class="lockup">
+      <img class="mk" src="nexus-logo.png" alt="NEXUS">
+      <svg class="spark" viewBox="0 0 24 24"><path d="M12 0c.6 6 5.4 10.8 12 12-6.6 1.2-11.4 6-12 12-.6-6-5.4-10.8-12-12C6.6 10.8 11.4 6 12 0z"></path></svg>
+      <a href="https://hornybox.ru/?r=Nexus_Shiyu" target="_blank" rel="noopener noreferrer"><img class="hbmk" src="hornybox-logo.png" alt="HornyBox"></a>
+    </div>
+    <nav class="fnav">
+      <a href="index.html">Главная</a>
+      <a href="statistics.html">Статистика</a>
+      <a href="bracket.html">Турнирная сетка</a>
+      <a href="predict.html">Аналитика</a>
+      <a href="draft-sim.html">Симулятор</a>
+      <a href="wheel.html">Колесо</a>
+    </nav>
+  </div>
+  <div class="fcopy">NEXUS SHIYU © 2026 · Турнирный организатор по Zenless Zone Zero<br>
+    <a href="https://twitch.tv/Nexus_Shiyu" target="_blank" rel="noopener noreferrer">Twitch</a> ·
+    <a href="https://t.me/nexus_shiyu" target="_blank" rel="noopener noreferrer">Telegram</a> ·
+    <a href="https://discord.gg/6nKP7kWR78" target="_blank" rel="noopener noreferrer">Discord</a>
+  </div>
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>document.write('<script src="web/icons.js?v='+Date.now()+'"><\/script>');</script>
+<script>document.write('<script src="web/predict.js?v='+Date.now()+'"><\/script>');</script>
+<script>document.write('<script src="web/synergy.js?v='+Date.now()+'"><\/script>');</script>
+<script>document.write('<script src="web/draft-sim.js?v='+Date.now()+'"><\/script>');</script>
+<script>
+const SB_URL='https://zoavnckfbfiejxfjakue.supabase.co';
+const SB_KEY='sb_publishable_37RZBsmdp3O1i795EuEfeg_vFpdPTFZ';
+const sb=supabase.createClient(SB_URL,SB_KEY);
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const ELEM_C={ice:'#7dd3fc',fire:'#fb923c',electric:'#1e90ff',physical:'#fbbf24',ether:'#f472b6',wind:'#64b5f6'};
+
+// Twitch live pill
+(function(){const pill=document.querySelector('.livetw'),lv=pill&&pill.querySelector('.lv');if(!pill)return;
+  const apply=on=>{pill.classList.toggle('offline',!on);if(lv)lv.textContent=on?'Live':'Offline';};apply(false);
+  fetch('https://decapi.me/twitch/uptime/Nexus_Shiyu',{cache:'no-store'}).then(r=>r.ok?r.text():Promise.reject())
+    .then(t=>apply(!/offline|not found|error|unable/i.test(t))).catch(()=>{});})();
+
+async function fetchAll(makeQuery){const N=1000;const out=[];let from=0;
+  for(;;){const{data,error}=await makeQuery().order('id',{ascending:true}).range(from,from+N-1);
+    if(error){console.error(error);break;}if(!data||!data.length)break;out.push(...data);if(data.length<N)break;from+=N;}
+  return out;}
+
+const D={};
+let CS=null, CTX=null, TID=null;
+
+async function boot(){
+  const[ts,cs,pks,bns,ms,encs,costs,synRows,players,prosters]=await Promise.all([
+    sb.from('tournaments').select('*').then(r=>r.data||[]),
+    sb.from('characters').select('*').then(r=>r.data||[]),
+    fetchAll(()=>sb.from('match_picks').select('*')),
+    fetchAll(()=>sb.from('match_bans').select('match_id,player_id,character_id')),
+    fetchAll(()=>sb.from('matches').select('*')),
+    fetchAll(()=>sb.from('encounters').select('*')),
+    fetchAll(()=>sb.from('tournament_costs').select('*')),
+    sb.from('synergy_tags').select('character_id,data').then(r=>r.data||[],()=>[]),
+    sb.from('players').select('id,nickname').then(r=>r.data||[],()=>[]),
+    fetchAll(()=>sb.from('player_rosters').select('tournament_id,player_id,character_id,mindscape'))
+  ]);
+  D.tours=ts.slice().sort((a,b)=>(a.sort_order??1e9)-(b.sort_order??1e9));
+  D.chars=cs;D.charMap={};cs.forEach(c=>D.charMap[c.id]=c);
+  D.players=(players||[]).slice().sort((a,b)=>(a.nickname||'').localeCompare(b.nickname||'','ru'));
+  // ростеры игроков: player_id → tournament_id → [{cid,ms}]
+  D.prosters={};(prosters||[]).forEach(r=>{
+    const byP=D.prosters[r.player_id]||(D.prosters[r.player_id]={});
+    (byP[r.tournament_id]=byP[r.tournament_id]||[]).push({cid:r.character_id,ms:r.mindscape||0});});
+  const mmap={};ms.forEach(m=>mmap[m.id]=m);
+  const encById={};encs.forEach(e=>encById[e.id]=e);
+  D.picks=pks;D.mmap=mmap;D.encById=encById;D.bans=bns;
+  // множество cid ростера игрока на турнире — жертвы, доступные к бану соперником
+  D.rosterSet={};(prosters||[]).forEach(r=>{
+    const k=r.player_id+'|'+r.tournament_id;(D.rosterSet[k]=D.rosterSet[k]||new Set()).add(r.character_id);});
+  const rosterOf=(pid,tid)=>D.rosterSet[pid+'|'+tid]||null;
+  // модель банов из истории (общая — эмпирический порог бана перса при наличии у соперника)
+  D.banModel=DraftSim.buildBanModel(ms,encById,rosterOf,bns);
+  D.cstats=Predict.charStats(pks,mmap);   // общая статистика (вся история)
+  // винрейт пика в разрезе майндскейпа (cid:ms) — чтобы конста давала прирост силы
+  D.msStats={};
+  pks.forEach(pk=>{const m=mmap[pk.match_id];if(!m||(!m.winner_id&&!m.is_draw))return;
+    const wEq=m.is_draw?0.5:(m.winner_id===pk.player_id?1:0);
+    const k=pk.character_id+':'+(pk.mindscape||0);
+    const s=D.msStats[k]||(D.msStats[k]={games:0,wEq:0});s.games++;s.wEq+=wEq;});
+  // средний таймер зачистки по персонажу: таймер игрока за матч, где перс был в пике
+  D.charTimer={};
+  pks.forEach(pk=>{const m=mmap[pk.match_id];if(!m)return;const e=encById[m.encounter_id];if(!e)return;
+    const t=pk.player_id===e.player1_id?m.player1_timer_sec:(pk.player_id===e.player2_id?m.player2_timer_sec:null);
+    if(!t||t<=0)return;const s=D.charTimer[pk.character_id]||(D.charTimer[pk.character_id]={n:0,sum:0});s.n++;s.sum+=t;});
+  D.costs={};costs.forEach(r=>{(D.costs[r.tournament_id]=D.costs[r.tournament_id]||[]).push(r);});
+  // теги синергии (фолбэк на статический JSON)
+  const map=synRows.length?{}:null;synRows.forEach(x=>map[x.character_id]=x.data);
+  try{await Synergy.load(map);}catch(e){console.warn('synergy',e);}
+  // турниры с костами
+  const withCosts=D.tours.filter(t=>D.costs[t.id]&&D.costs[t.id].length);
+  $('tour-sel').innerHTML=withCosts.map(t=>`<option value="${t.id}">${esc(t.name)}</option>`).join('');
+  $('loading').style.display='none';$('app').style.display='block';
+  if(withCosts.length){TID=withCosts[0].id;$('tour-sel').value=TID;onTour();}
+}
+
+function shiyuOf(tid){const t=D.tours.find(x=>x.id===tid);return(t&&t.shiyu_data)||null;}
+function onTour(){
+  TID=$('tour-sel').value;
+  const sh=shiyuOf(TID);
+  const rooms=(sh&&sh.rooms)||[], buffTag=(sh&&sh.buff_tag)||null;
+  const limit=(sh&&sh.cost_limit)||1605;
+  CS=DraftSim.buildCostSystem(D.costs[TID],limit);
+  // статистика этого турнира (средне) + общая как прайор (слабо)
+  const tourPicks=(D.picks||[]).filter(pk=>{const m=D.mmap[pk.match_id];const e=m&&D.encById[m.encounter_id];return e&&e.tournament_id===TID;});
+  const tourStats=Predict.charStats(tourPicks,D.mmap);
+  CTX=DraftSim.makeCtx(D.cstats,tourStats,D.charMap,buffTag,rooms,D.msStats,D.banModel);
+  $('lim-txt').textContent=limit;$('rc-limit').textContent=limit;
+  // инфо о шиюй
+  const weaks=[...new Set(rooms.flatMap(r=>(r.weakness||r.monsters&&r.monsters.flatMap(m=>m.weak||[])||[])))];
+  const buffTitle=(sh&&sh.buff&&sh.buff.title)||'—';
+  const bEls=DraftSim.buffElems(buffTag);
+  $('shiyu-info').innerHTML=
+    `<span class="tag buff">Баф: ${esc(buffTitle)}</span>`+
+    (bEls.length?`<span class="tag buff">Элементы бафа: ${bEls.join(', ')}</span>`:'')+
+    (weaks.length?`<span class="tag">Слабости мобов: ${weaks.join(', ')}</span>`:'');
+  // что делает баф (описание из shiyu_data)
+  const lines=(sh&&sh.buff&&sh.buff.lines)||[];
+  $('buff-desc').innerHTML=lines.length
+    ?`<div class="buff-desc"><div class="bd-h">Эффект бафа Шиюй</div>${lines.map(l=>`<div class="bd-l">${l}</div>`).join('')}</div>`:'';
+  ROSTER_BOT=[];renderBotMeter();
+  if(BOT_SRC==='manual')renderBotPool();
+  if(BOT_SRC==='player'){$('bp-roster').innerHTML='<option value="">— ростер —</option>';}
+  clearRoster();
+  resetAll();
+}
+
+// ---- ростер (набор entries {cid,ms}) ----
+let ROSTER=[];
+const rosterIdx=cid=>ROSTER.findIndex(e=>e.cid===cid);
+const rosterHas=cid=>rosterIdx(cid)>=0;
+const dMs=cid=>DraftSim.defaultMs(CS,CTX,cid);      // A-ранг → M6, S-ранг → мин. доступная
+const isA=cid=>{const c=D.charMap[cid];return c&&c.rarity==='A';};
+function rosterCost(){return DraftSim.rosterCost(ROSTER,CS);}
+function rosterValid(){return ROSTER.length>=17 && rosterCost()<=CS.limit;}
+function toggleChar(cid){
+  const i=rosterIdx(cid);
+  if(i>=0)ROSTER.splice(i,1);
+  else{const ms=dMs(cid);if(rosterCost()+CS.costOf(cid,ms)>CS.limit){toast('Не хватает косту');return;}ROSTER.push({cid,ms});}
+  renderRoster();
+}
+// клик по бейджу M — след. доступная конста. Только S-ранг (A всегда M6).
+function cycleMs(ev,cid){
+  ev.stopPropagation();
+  if(isA(cid))return;
+  const e=ROSTER[rosterIdx(cid)];if(!e)return;
+  const opts=CS.msOptions(cid);if(opts.length<2)return;
+  const k=opts.findIndex(o=>o.ms===e.ms),next=opts[(k+1)%opts.length];
+  const delta=next.cost-CS.costOf(cid,e.ms);
+  if(rosterCost()+delta>CS.limit){toast('Не хватает косту на M'+next.ms);return;}
+  e.ms=next.ms;renderRoster();
+}
+function genRoster(mode){
+  const r=DraftSim.buildRoster(CS,CTX,{mode,minChars:17});
+  ROSTER=r.roster;renderRoster();
+  if(!r.ok)toast('Не удалось уложиться в условия');
+}
+function clearRoster(){ROSTER=[];renderRoster();}
+function renderRoster(){
+  const cost=rosterCost(),lim=CS.limit,cnt=ROSTER.length;
+  const fill=$('rc-fill');fill.style.width=Math.min(100,cost/lim*100)+'%';fill.classList.toggle('over',cost>lim);
+  $('rc-count').textContent=cnt;$('rc-cost').textContent=cost;
+  $('rc-count-ok').innerHTML=cnt>=17?'<span class="good">✓</span>':'<span class="bad">мало</span>';
+  $('rc-cost-ok').innerHTML=cost<=lim?'<span class="good">✓</span>':'<span class="bad">перебор</span>';
+  renderFilters();renderPool();updateStart();
+}
+// фильтры: ранг / элемент / роль
+const FILT={rank:'',el:'',role:''};
+const ROLE_ORD=['atk','stun','ano','sup','def','rupt'];
+const EL_ORD=['ice','fire','electric','physical','ether','wind'];
+function setFilt(k,v){FILT[k]=FILT[k]===v?'':v;renderFilters();renderPool();}
+function renderFilters(){
+  const chip=(k,v,inner)=>`<span class="fchip${FILT[k]===v?' on':''}" onclick="setFilt('${k}','${v}')" title="${esc(v)}">${inner}</span>`;
+  const rank=`<div class="filt-grp"><span class="fl">Ранг</span>${['S','A'].map(r=>chip('rank',r,iconRarity(r,18)||r)).join('')}</div>`;
+  const el=`<div class="filt-grp"><span class="fl">Элемент</span>${EL_ORD.map(e=>chip('el',e,iconElement(e,18)||e[0])).join('')}</div>`;
+  const role=`<div class="filt-grp"><span class="fl">Роль</span>${ROLE_ORD.map(r=>chip('role',r,iconRole(r,18)||r)).join('')}</div>`;
+  $('filt-bar').innerHTML=rank+el+role;
+}
+function poolChars(){
+  const q=($('pool-search').value||'').toLowerCase().trim();
+  return[...CS.allowed].map(cid=>D.charMap[cid]).filter(Boolean)
+    .filter(c=>!q||(c.name||'').toLowerCase().includes(q))
+    .filter(c=>!FILT.rank||c.rarity===FILT.rank)
+    .filter(c=>!FILT.el||(c.element||'').toLowerCase()===FILT.el)
+    .filter(c=>!FILT.role||c.role===FILT.role)
+    .sort((a,b)=>(a.name||'').localeCompare(b.name||'','ru'));   // по алфавиту
+}
+function pitHtml(cid,on,dis){
+  const c=D.charMap[cid],el=(c.element||'').toLowerCase();
+  const e=on?ROSTER[rosterIdx(cid)]:null;
+  const ms=e?e.ms:dMs(cid);
+  const cost=CS.costOf(cid,ms);
+  const cyc=on&&!isA(cid)&&CS.msOptions(cid).length>1;
+  const msBadge=cyc?`<span class="msb" title="Констелляция — клик меняет" onclick="cycleMs(event,'${cid}')">M${ms}</span>`:(ms?`<span class="msb static">M${ms}</span>`:'');
+  return`<div class="pit${on?' on':''}${dis?' dis':''}" data-cid="${cid}" title="${esc(c.name)} · M${ms} · ${cost} кост" onclick="toggleChar('${cid}')">
+    ${el?`<span class="el" style="background:${ELEM_C[el]||'#888'}"></span>`:''}
+    ${msBadge}${iconChar(c,52)}<div class="cc">${cost}</div></div>`;
+}
+function renderPool(){
+  $('pool').innerHTML=poolChars().map(c=>{
+    const on=rosterHas(c.id);
+    const dis=!on && rosterCost()+CS.costOf(c.id,dMs(c.id))>CS.limit;
+    return pitHtml(c.id,on,dis);
+  }).join('');
+}
+
+// ================= РОСТЕР БОТА (авто / игрок / вручную) =================
+let BOT_SRC='auto', ROSTER_BOT=[];
+function setBotSrc(src){
+  BOT_SRC=src;
+  document.querySelectorAll('#bot-src button').forEach(b=>b.classList.toggle('on',b.dataset.src===src));
+  $('bot-auto').style.display=src==='auto'?'':'none';
+  $('bot-player').style.display=src==='player'?'':'none';
+  $('bot-manual').style.display=src==='manual'?'':'none';
+  if(src==='player'&&!$('bp-player').options.length)initBotPlayers();
+  if(src==='manual')renderBotPool();
+  renderBotMeter();updateStart();
+}
+// источник: список персонажей ростера бота (entries) — для manual/player
+const botRoster=()=>ROSTER_BOT;
+const botRosterCost=()=>DraftSim.rosterCost(ROSTER_BOT,CS);
+const botRosterValid=()=>ROSTER_BOT.length>=17 && botRosterCost()<=CS.limit;
+function renderBotMeter(){
+  const auto=BOT_SRC==='auto';
+  const cost=auto?0:botRosterCost(),cnt=auto?0:ROSTER_BOT.length,lim=CS.limit;
+  $('brc-limit').textContent=lim;
+  $('brc-fill').style.width=auto?'0%':Math.min(100,cost/lim*100)+'%';
+  $('brc-fill').classList.toggle('over',!auto&&cost>lim);
+  $('brc-count').textContent=auto?'авто':cnt;
+  $('brc-cost').textContent=auto?'авто':cost;
+  $('brc-count-ok').innerHTML=auto?'':(cnt>=17?'<span class="good">✓</span>':'<span class="bad">мало</span>');
+  $('brc-cost-ok').innerHTML=auto?'':(cost<=lim?'<span class="good">✓</span>':'<span class="bad">перебор</span>');
+}
+function updateStart(){
+  const botOk=BOT_SRC==='auto'||botRosterValid();
+  $('start-btn').disabled=!(rosterValid()&&botOk);
+}
+// --- бот = существующий игрок + его ростер ---
+function initBotPlayers(){
+  const opts=D.players.filter(p=>D.prosters[p.id]).map(p=>`<option value="${p.id}">${esc(p.nickname)}</option>`).join('');
+  $('bp-player').innerHTML='<option value="">— игрок —</option>'+opts;
+  $('bp-roster').innerHTML='<option value="">— ростер —</option>';
+}
+function onBotPlayer(){
+  const pid=$('bp-player').value;
+  const byT=D.prosters[pid]||{};
+  // ростер текущего турнира — первым (он валиден под текущий кост)
+  const tids=Object.keys(byT).sort((a,b)=>(a===TID?-1:0)-(b===TID?-1:0));
+  const opts=tids.map(tid=>{const t=D.tours.find(x=>x.id===tid);
+    return`<option value="${tid}">${esc(t?t.name:'турнир')} · ${byT[tid].length} чел.${tid===TID?' (текущий)':''}</option>`;}).join('');
+  $('bp-roster').innerHTML='<option value="">— ростер —</option>'+opts;
+  ROSTER_BOT=[];
+  if(byT[TID]){$('bp-roster').value=TID;loadBotPlayerRoster();}   // авто-выбор текущего
+  else{renderBotMeter();updateStart();}
+}
+function loadBotPlayerRoster(){
+  const pid=$('bp-player').value,tid=$('bp-roster').value;
+  const src=(D.prosters[pid]||{})[tid]||[];
+  // только персонажи, допустимые в текущей кост-системе; ms из ростера (или дефолт)
+  ROSTER_BOT=src.filter(e=>CS.allowed.has(e.cid)).map(e=>{
+    const opts=CS.msOptions(e.cid),has=opts.some(o=>o.ms===e.ms);
+    return{cid:e.cid,ms:has?e.ms:dMs(e.cid)};});
+  renderBotMeter();updateStart();
+  if(ROSTER_BOT.length<17)toast('В ростере <17 подходящих под кост-систему');
+  else if(botRosterCost()>CS.limit)toast('Ростер превышает лимит косту под этой системой');
+}
+// --- бот вручную ---
+function botIdx(cid){return ROSTER_BOT.findIndex(e=>e.cid===cid);}
+function toggleBotChar(cid){
+  const i=botIdx(cid);
+  if(i>=0)ROSTER_BOT.splice(i,1);
+  else{const ms=dMs(cid);if(botRosterCost()+CS.costOf(cid,ms)>CS.limit){toast('Не хватает косту');return;}ROSTER_BOT.push({cid,ms});}
+  renderBotMeter();renderBotPool();updateStart();
+}
+function cycleBotMs(ev,cid){ev.stopPropagation();if(isA(cid))return;
+  const e=ROSTER_BOT[botIdx(cid)];if(!e)return;const opts=CS.msOptions(cid);if(opts.length<2)return;
+  const k=opts.findIndex(o=>o.ms===e.ms),next=opts[(k+1)%opts.length];
+  if(botRosterCost()+next.cost-CS.costOf(cid,e.ms)>CS.limit){toast('Не хватает косту');return;}
+  e.ms=next.ms;renderBotMeter();renderBotPool();}
+function genBotRoster(mode){const r=DraftSim.buildRoster(CS,CTX,{mode,minChars:17});ROSTER_BOT=r.roster;renderBotMeter();renderBotPool();updateStart();}
+function clearBotRoster(){ROSTER_BOT=[];renderBotMeter();renderBotPool();updateStart();}
+function renderBotPool(){
+  const q=($('bpool-search').value||'').toLowerCase().trim();
+  const list=[...CS.allowed].map(cid=>D.charMap[cid]).filter(Boolean)
+    .filter(c=>!q||(c.name||'').toLowerCase().includes(q))
+    .sort((a,b)=>(a.name||'').localeCompare(b.name||'','ru'));
+  $('bpool').innerHTML=list.map(c=>{
+    const on=botIdx(c.id)>=0,e=on?ROSTER_BOT[botIdx(c.id)]:null,ms=e?e.ms:dMs(c.id),cost=CS.costOf(c.id,ms);
+    const el=(c.element||'').toLowerCase();
+    const cyc=on&&!isA(c.id)&&CS.msOptions(c.id).length>1;
+    const badge=cyc?`<span class="msb" onclick="cycleBotMs(event,'${c.id}')">M${ms}</span>`:(ms?`<span class="msb static">M${ms}</span>`:'');
+    const dis=!on&&botRosterCost()+CS.costOf(c.id,dMs(c.id))>CS.limit;
+    return`<div class="pit${on?' on':''}${dis?' dis':''}" title="${esc(c.name)} · M${ms} · ${cost} кост" onclick="toggleBotChar('${c.id}')">
+      ${el?`<span class="el" style="background:${ELEM_C[el]||'#888'}"></span>`:''}${badge}${iconChar(c,52)}<div class="cc">${cost}</div></div>`;
+  }).join('');
+}
+
+// ================= ДРАФТ =================
+// Реальная система Nexus (реконструирована по ban_order/pick_order матчей): 18 шагов,
+// по 3 бана и 6 пиков у каждого. fp = первый пик. Первые 3 пика стороны → тройка 1, следующие 3 → тройка 2.
+const CANON=[
+  ['ban','fp'],['ban','sp'],['ban','sp'],['ban','fp'],
+  ['pick','fp'],['pick','sp'],['pick','sp'],['pick','fp'],['pick','fp'],['pick','sp'],
+  ['pick','sp'],['pick','fp'],
+  ['ban','fp'],['ban','sp'],
+  ['pick','sp'],['pick','fp'],['pick','fp'],['pick','sp']
+];
+let SEQ=[];
+function buildSeq(fp){const sp=fp==='you'?'bot':'you';
+  SEQ=CANON.map(([type,role])=>({type,side:role==='fp'?fp:sp}));}
+
+let G=null; // состояние игры
+const opp=side=>side==='you'?'bot':'you';
+function startDraft(){
+  if(!rosterValid())return;
+  let fp=$('fp-sel').value;
+  if(fp==='random')fp=Math.random()<0.5?'you':'bot';
+  buildSeq(fp);
+  let botR;
+  if(BOT_SRC==='auto')botR=DraftSim.buildRoster(CS,CTX,{mode:'optimal',minChars:17,jitter:true}).roster;
+  else{if(!botRosterValid()){toast('Ростер бота невалиден (нужно ≥17 и ≤лимит)');return;}botR=ROSTER_BOT.slice();}
+  G={you:{roster:ROSTER.slice()},bot:{roster:botR},picks:[],step:0,fp};
+  $('sect-roster').style.display='none';$('sect-botroster').style.display='none';
+  $('sect-draft').style.display='block';
+  $('draft-res').style.display='none';
+  advance();
+}
+function resetAll(){G=null;$('sect-roster').style.display='';$('sect-botroster').style.display='';$('sect-draft').style.display='none';renderRoster();renderBotMeter();}
+
+// ---- производные из picks ----
+const pickEntries=side=>G.picks.filter(p=>p.type==='pick'&&p.side===side).map(p=>({cid:p.cid,ms:p.ms}));
+const bannedCids=()=>G.picks.filter(p=>p.type==='ban').map(p=>p.cid);
+function usedSet(){const s=new Set(bannedCids());G.picks.forEach(p=>{if(p.type==='pick')s.add(p.cid);});return s;}
+// доступно для ПИКА = свой ростер − использованное; для БАНА = ростер соперника − использованное
+// пик — из своего ростера; бан — из ростера соперника. usedSet = баны + ВСЕ пики
+// (забаненные и пикнутые заблокированы для обеих сторон).
+function availPick(side){const u=usedSet();return G[side].roster.filter(e=>!u.has(e.cid));}
+function availBan(side){const u=usedSet();return G[opp(side)].roster.filter(e=>!u.has(e.cid));}
+
+function advance(){
+  if(G.step>=SEQ.length){enterSquadPhase();return;}
+  renderDraft();
+  const st=SEQ[G.step];
+  if(st.side==='bot')setTimeout(()=>doBot(st),480);
+}
+function pushStep(st,cid,ms){G.picks.push({stepIndex:G.step,type:st.type,side:st.side,cid,ms:ms||0});G.step++;advance();}
+function doBot(st){
+  if(st.type==='ban'){
+    // бот банит лучший для тебя вариант; в себя — только если персонаж тебе в разы важнее,
+    // и не банит если может украсть его сам следующим пиком (пик бота раньше твоего)
+    const nextPickIdx=side=>{for(let i=G.step+1;i<SEQ.length;i++)if(SEQ[i].type==='pick'&&SEQ[i].side===side)return i;return Infinity;};
+    const canSteal=nextPickIdx('bot')<nextPickIdx('you');
+    const cid=DraftSim.botBan(availBan('bot'),CTX,availPick('bot'),pickEntries('you'),canSteal);
+    if(cid)pushStep(st,cid,0);else{G.step++;advance();}
+  }else{
+    // пик в общий пул (6); учитывается лучшее разбиение пула на две тройки
+    const e=DraftSim.botPickPool(availPick('bot'),pickEntries('bot'),CTX);
+    if(e)pushStep(st,e.cid,e.ms);else{G.step++;advance();}
+  }
+}
+// твой ход: клик по карточке в пуле
+function draftClick(cid){
+  const st=SEQ[G.step];if(!st||st.side!=='you')return;
+  if(st.type==='ban'){const e=availBan('you').find(e=>e.cid===cid);if(!e)return;pushStep(st,cid,e.ms);}
+  else{const e=availPick('you').find(e=>e.cid===cid);if(!e)return;pushStep(st,cid,e.ms);}
+}
+
+// ---- утилиты ----
+const fmtSec=t=>t==null?'—':Math.floor(t/60)+':'+String(Math.round(t%60)).padStart(2,'0');
+function teamTimer(cids){const v=cids.map(cid=>{const s=D.charTimer[cid];return s&&s.n?s.sum/s.n:null}).filter(x=>x!=null);
+  return v.length?v.reduce((a,b)=>a+b,0)/v.length:null;}
+const fieldCost=side=>pickEntries(side).reduce((s,e)=>s+(CS.costOf(e.cid,e.ms)||0),0);
+const initials=t=>t.toUpperCase();
+const currentTarget=()=>{const st=SEQ[G&&G.step];if(!st||st.side!=='you')return null;return st.type==='pick'?'you':'bot';};
+
+// ---- рендер борда (визуал как на nexus-shiyu) ----
+function stepGridHtml(side,type){
+  const steps=SEQ.map((s,i)=>({...s,gi:i})).filter(s=>s.side===side&&s.type===type);
+  if(side==='you')steps.reverse();                 // ранний шаг ближе к центру (как creator в nexus)
+  const byStep={};G.picks.forEach(p=>byStep[p.stepIndex]=p);
+  const cells=steps.map(s=>{
+    const done=s.gi<G.step,cur=s.gi===G.step,p=byStep[s.gi],c=p&&D.charMap[p.cid];
+    const img=c?iconChar(c,60):'';
+    return`<div class="step-slot ${type}${done?' done':''}${cur?' cur':''}" title="Шаг ${s.gi+1}">${
+      c?img:`<span class="snum">${s.gi+1}</span>`}</div>`;
+  }).join('');
+  return`<div class="db-steps" style="grid-template-columns:repeat(${Math.max(1,steps.length)},64px)">${cells}</div>`;
+}
+function dotsHtml(side){
+  const steps=SEQ.map((s,i)=>({...s,gi:i})).filter(s=>s.side===side);
+  if(side==='you')steps.reverse();
+  return steps.map(s=>{const done=s.gi<G.step,cur=s.gi===G.step;
+    return`<span class="dot-s${done?' done':''}${cur?' cur':''}${s.type==='ban'?' ban':''}"></span>`;}).join('');
+}
+function pcardHtml(cid,side){
+  const c=D.charMap[cid];if(!c)return'';
+  const e=G[side].roster.find(x=>x.cid===cid),ms=e?e.ms:0,cost=CS.costOf(cid,ms);
+  const banned=bannedCids().includes(cid);
+  const pickedYou=pickEntries('you').some(x=>x.cid===cid),pickedBot=pickEntries('bot').some(x=>x.cid===cid);
+  const used=banned||pickedYou||pickedBot;
+  const tgt=currentTarget();
+  const active=tgt===side&&!used;
+  const dim=tgt&&tgt!==side&&!used;
+  const clk=active;
+  const cls=['pcard'];if(active)cls.push('active');if(dim)cls.push('dim');if(used&&!banned)cls.push('used');if(banned)cls.push('ban');if(clk)cls.push('clk');
+  const hot=ms>0&&c.rarity!=='A';
+  return`<div class="${cls.join(' ')}" title="${esc(c.name)} · M${ms} · ${cost} кост"${clk?` onclick="draftClick('${cid}')"`:''}>
+    ${iconChar(c,70)}
+    ${banned?'<span class="bslash">✕</span>':''}
+    <span class="pm${hot?' hot':''}">M${ms}</span></div>`;
+}
+function poolHtml(){
+  const rows=ROLE_ORD.map(role=>{
+    const you=G.you.roster.filter(e=>D.charMap[e.cid]&&D.charMap[e.cid].role===role)
+      .sort((a,b)=>(D.charMap[a.cid].name||'').localeCompare(D.charMap[b.cid].name||'','ru'));
+    const bot=G.bot.roster.filter(e=>D.charMap[e.cid]&&D.charMap[e.cid].role===role)
+      .sort((a,b)=>(D.charMap[a.cid].name||'').localeCompare(D.charMap[b.cid].name||'','ru'));
+    if(!you.length&&!bot.length)return'';
+    return`<div class="pc-left">${you.map(e=>pcardHtml(e.cid,'you')).join('')}</div>
+      <div class="pc-role" title="${IC_ROLE_LBL?(IC_ROLE_LBL[role]||role):role}">${iconRole(role,30)}</div>
+      <div class="pc-right">${bot.map(e=>pcardHtml(e.cid,'bot')).join('')}</div>`;
+  }).join('');
+  return`<div class="db-pool">${rows}</div>`;
+}
+// таймеры только для ПОЛНЫХ троек (3 пика)
+function timersHtml(){
+  const cell=side=>{const es=pickEntries(side);
+    return[0,1].map(t=>{const team=es.slice(t*3,t*3+3);if(team.length<3)return'';
+      return`<span class="tag" title="Ориентировочный таймер тройки ${t+1}">Тройка ${t+1}: ⏱ ${fmtSec(teamTimer(team.map(x=>x.cid)))}</span>`;}).join(' ');};
+  const y=cell('you'),b=cell('bot');
+  if(!y&&!b)return'';
+  return`<div class="db-row" style="justify-content:space-between;padding-top:14px">
+    <div style="display:flex;gap:8px;flex-wrap:wrap">${y}</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">${b}</div></div>`;
+}
+function renderDraft(){
+  if(!G)return;
+  const st=G.step<SEQ.length?SEQ[G.step]:null;
+  const sh=shiyuOf(TID),shTitle=(sh&&sh.buff&&sh.buff.title)||'Шиюй';
+  const status=st?`${st.type==='ban'?'Бан':'Пик'} · ${st.side==='you'?'ТЫ':'БОТ'} · шаг ${G.step+1}/${SEQ.length}`:'Драфт завершён';
+  const head=`<div class="db-head">
+    <div class="db-pl db-you"><span class="db-av">${initials('ты')}</span>
+      <div><div class="db-nm">Ты</div><div class="db-cost">Кост агентов: <b>${fieldCost('you')}</b> / ${CS.limit}</div></div></div>
+    <div class="db-mid"><span class="db-vs">VS</span>
+      <span class="db-shiyu">${esc(shTitle)}</span>
+      <span class="db-shiyu" style="color:var(--sub)">${status} · 1-й пик: ${G.fp==='you'?'ты':'бот'}</span></div>
+    <div class="db-pl db-bot r"><span class="db-av">${initials('бот')}</span>
+      <div><div class="db-nm">Бот</div><div class="db-cost">Кост агентов: <b>${fieldCost('bot')}</b> / ${CS.limit}</div></div></div>
+  </div>`;
+  const bansRow=`<div class="db-row">
+    <div class="db-side-steps l">${stepGridHtml('you','ban')}</div>
+    <div class="db-mlabel ban">БАНЫ</div>
+    <div class="db-side-steps r">${stepGridHtml('bot','ban')}</div></div>`;
+  const dots=`<div class="db-dots"><div class="dots l">${dotsHtml('you')}</div><div class="db-dgap"></div><div class="dots r">${dotsHtml('bot')}</div></div>`;
+  const picksRow=`<div class="db-row">
+    <div class="db-side-steps l">${stepGridHtml('you','pick')}</div>
+    <div class="db-mlabel pick">ПИКИ</div>
+    <div class="db-side-steps r">${stepGridHtml('bot','pick')}</div></div>`;
+  const hint=st&&st.side==='you'
+    ?`<div class="note" style="text-align:center;margin:2px 0 10px;color:var(--cyan)">${st.type==='ban'?'Твой бан — выбери персонажа из ростера бота (справа)':'Твой пик в общий пул (6) — выбери из своего ростера (слева); тройки распределятся после драфта'}</div>`
+    :(st?`<div class="note" style="text-align:center;margin:2px 0 10px">Бот думает…</div>`:'');
+  $('draft-board').innerHTML=head+bansRow+dots+picksRow+hint+poolHtml()+timersHtml();
+}
+function miniChar(e){const c=D.charMap[e.cid];const hot=e.ms>0&&c.rarity!=='A';
+  return`<div class="fin-c" title="${esc(c.name)} · M${e.ms}">${iconChar(c,54)}<span class="pm${hot?' hot':''}">M${e.ms}</span></div>`;}
+function teamBlock(split,side,editable){
+  return split.teams.map((team,ti)=>{
+    if(!team.length)return'';
+    return`<div class="fin-team">
+      <div class="fin-th">Тройка ${ti+1}</div>
+      <div class="fin-row">${team.map(miniChar).join('')}</div>
+      ${editable?`<div class="fin-tm">Твой таймер тройки: <input class="tinp" id="${side}-tm-${ti}" placeholder="м:сс" oninput="recalcTimers()"></div>`:''}
+    </div>`;}).join('');
+}
+function parseTime(s){s=(s||'').trim();if(!s)return null;
+  if(/^\d+$/.test(s))return +s;const m=s.match(/^(\d+):(\d{1,2})$/);return m?(+m[1]*60+ +m[2]):null;}
+function recalcTimers(){let tot=0,any=false;
+  [0,1].forEach(i=>{const el=$('you-tm-'+i);if(!el)return;const v=parseTime(el.value);if(v!=null){tot+=v;any=true;}});
+  const el=$('you-total');if(el)el.textContent=any?fmtSec(tot):'—';}
+// ---- фаза сборки отрядов: бот — авто (лучшее разбиение), игрок — вручную по слотам ----
+function enterSquadPhase(){
+  G.phase='squad';
+  G.bot.squads=DraftSim.poolSplit(pickEntries('bot'),CTX).teams.map(t=>t.map(e=>({cid:e.cid,ms:e.ms})));
+  while(G.bot.squads.length<2)G.bot.squads.push([]);
+  G.you.squads=[[null,null,null],[null,null,null]];
+  renderSquadPhase();
+}
+const youPlacedCids=()=>new Set(G.you.squads.flat().filter(Boolean).map(e=>e.cid));
+const youPlacedN=()=>G.you.squads.flat().filter(Boolean).length;
+function squadSlotHtml(side,ti,si){
+  const e=G[side].squads[ti][si];const c=e&&D.charMap[e.cid];
+  const hot=e&&e.ms>0&&c.rarity!=='A';
+  const click=side==='you'?` onclick="openSlotMenu(${ti},${si},this)"`:'';
+  return`<div class="sq-slot${e?' filled':''}${side==='you'?' edit':''}"${click} title="${c?esc(c.name)+' · M'+e.ms:'Пусто — выбрать'}">${
+    c?`${iconChar(c,60)}<span class="pm${hot?' hot':''}">M${e.ms}</span>`:'<span class="sq-plus">+</span>'}</div>`;
+}
+function squadTeamsHtml(side){
+  return[0,1].map(ti=>
+    `<div class="fin-team"><div class="fin-th">Тройка ${ti+1}</div>
+      <div class="sq-row">${[0,1,2].map(si=>squadSlotHtml(side,ti,si)).join('')}</div></div>`).join('');
+}
+// общий таймер стороны (обе тройки = вся проходка Шиюй), одно число
+const sideTimer=side=>teamTimer(G[side].squads.flat().filter(Boolean).map(e=>e.cid));
+function renderSquadPhase(){
+  const n=youPlacedN();
+  const botTm=fmtSec(sideTimer('bot'));
+  $('draft-board').innerHTML=`
+    <div class="note" style="text-align:center;margin-bottom:12px;color:var(--cyan)">Собери свои две тройки: нажми на слот и выбери персонажа из своего пула. Бот распределил свой пул автоматически (лучшая синергия).</div>
+    <div class="fin-teams">
+      <div class="fin-side"><div class="side-lbl" style="color:var(--cyan)">Твои тройки (${n}/6)</div>${squadTeamsHtml('you')}</div>
+      <div class="fin-side"><div class="side-lbl">Тройки бота · ⏱ ${botTm} <span style="font-weight:400;text-transform:none">(общий таймер)</span></div>${squadTeamsHtml('bot')}</div>
+    </div>
+    <div class="row" style="justify-content:center;margin-top:16px">
+      <button class="btn primary" id="sq-done" ${n<6?'disabled':''} onclick="finalizeResult()">Показать итог →</button>
+    </div>`;
+}
+// попап выбора персонажа в слот (как SquadBuilder на nexus)
+let slotMenu=null;
+function closeSlotMenu(){if(slotMenu){slotMenu.remove();slotMenu=null;document.removeEventListener('mousedown',outsideClose);}}
+function outsideClose(e){if(slotMenu&&!slotMenu.contains(e.target))closeSlotMenu();}
+function openSlotMenu(ti,si,el){
+  closeSlotMenu();
+  const placed=youPlacedCids(),cur=G.you.squads[ti][si];
+  const avail=pickEntries('you').filter(e=>!placed.has(e.cid)||(cur&&e.cid===cur.cid));
+  const m=document.createElement('div');m.className='slot-menu';
+  m.innerHTML=`<div class="sm-h">Тройка ${ti+1} · слот ${si+1}</div>
+    <div class="sm-grid">${avail.map(e=>{const c=D.charMap[e.cid],hot=e.ms>0&&c.rarity!=='A';
+      return`<div class="sm-c${cur&&cur.cid===e.cid?' cur':''}" title="${esc(c.name)} · M${e.ms}" onclick="placeSlot(${ti},${si},'${e.cid}')">${iconChar(c,52)}<span class="pm${hot?' hot':''}">M${e.ms}</span></div>`;}).join('')||'<span class="note">Все персонажи уже расставлены</span>'}</div>
+    ${cur?`<button class="btn" style="margin-top:8px;width:100%" onclick="clearSlot(${ti},${si})">Убрать из слота</button>`:''}`;
+  document.body.appendChild(m);
+  const r=el.getBoundingClientRect(),mw=m.offsetWidth,mh=m.offsetHeight;   // fixed → координаты вьюпорта
+  const left=Math.max(8,Math.min(window.innerWidth-mw-8,r.left));
+  let top=r.bottom+8; if(top+mh>window.innerHeight-8)top=Math.max(8,r.top-mh-8); // флип вверх у нижнего края
+  m.style.left=left+'px';m.style.top=top+'px';
+  slotMenu=m;setTimeout(()=>document.addEventListener('mousedown',outsideClose),0);
+}
+function placeSlot(ti,si,cid){const e=pickEntries('you').find(x=>x.cid===cid);
+  // если этот перс уже стоит в другом слоте — убрать оттуда
+  G.you.squads.forEach(t=>t.forEach((x,i)=>{if(x&&x.cid===cid)t[i]=null;}));
+  G.you.squads[ti][si]=e?{cid:e.cid,ms:e.ms}:null;closeSlotMenu();renderSquadPhase();}
+function clearSlot(ti,si){G.you.squads[ti][si]=null;closeSlotMenu();renderSquadPhase();}
+
+// ---- финал: вероятность по выбранным отрядам + ввод таймера ----
+function finalizeResult(){
+  G.phase='done';
+  const yTeams=G.you.squads.map(t=>t.filter(Boolean)), bTeams=G.bot.squads.map(t=>t.filter(Boolean));
+  const sa=yTeams.reduce((s,t)=>s+DraftSim.teamScore(t,CTX),0);
+  const sbb=bTeams.reduce((s,t)=>s+DraftSim.teamScore(t,CTX),0);
+  const p=1/(1+Math.exp(-(sa-sbb)*6));
+  const pa=(p*100).toFixed(1),pb=((1-p)*100).toFixed(1);
+  const r=$('draft-res');r.style.display='block';
+  r.innerHTML=`<div class="res-nums"><span><span class="na">${pa}%</span><span class="rn">Ты</span></span><span><span class="rn">Бот</span><span class="nb">${pb}%</span></span></div>
+    <div class="res-bar"><div class="fa" style="width:${pa}%"></div><div class="fb"></div></div>
+    <div class="res-break">
+      <span>Сила отрядов (синергия+баф+мобы): <b>${sa.toFixed(3)}</b> vs <b>${sbb.toFixed(3)}</b></span>
+      <span>Кост: <b>${fieldCost('you')}</b> vs <b>${fieldCost('bot')}</b></span>
+      <span>Первый пик: <b>${G.fp==='you'?'ты':'бот'}</b></span>
+    </div>
+    <div class="fin-teams">
+      <div class="fin-side"><div class="side-lbl" style="color:var(--cyan)">Твои тройки · пройди их в игре и впиши таймер</div>
+        ${teamBlock({teams:yTeams},'you',true)}
+        <div class="fin-total">Твой суммарный таймер: <b id="you-total">—</b></div></div>
+      <div class="fin-side"><div class="side-lbl">Тройки бота · ⏱ ${fmtSec(teamTimer(bTeams.flat().map(e=>e.cid)))} <span style="font-weight:400;text-transform:none">(общий)</span></div>${teamBlock({teams:bTeams},'bot',false)}</div>
+    </div>
+    <div class="note" style="text-align:center;margin-top:12px">Таймер бота — общая оценка проходки по средним историческим таймерам персонажей. Свой реальный впиши после проходок (у тебя биса/консты могут сильно ускорить). Вероятность ориентировочна (синергия+баф+мобы, без Elo).</div>`;
+  r.scrollIntoView({behavior:'smooth',block:'nearest'});
+  recalcTimers();
+}
+
+function toast(m){const el=document.createElement('div');el.textContent=m;
+  el.style.cssText='position:fixed;bottom:20px;right:20px;z-index:999;background:var(--card);border:1px solid var(--red);color:var(--text);padding:10px 16px;border-radius:8px;font-weight:600';
+  document.body.appendChild(el);setTimeout(()=>el.remove(),3000);}
+
+boot().catch(e=>{console.error(e);$('loading').innerHTML='<span class="note">Ошибка загрузки: '+esc(e.message)+'</span>';});
+</script>
+</body>
+</html>
