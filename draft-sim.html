@@ -62,6 +62,8 @@
   .sect-b{padding:18px 20px}
   .btn{border:1px solid var(--border);background:var(--panel-2);color:var(--text);border-radius:8px;padding:9px 17px;font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;font-size:14px;letter-spacing:.03em;cursor:pointer;transition:.15s}
   .btn:hover{border-color:var(--sub)}
+  .btn.sm{padding:6px 11px;font-size:12px}
+  .preset-lbl{font-size:12px;color:var(--sub);align-self:center;margin-left:6px;text-transform:uppercase;letter-spacing:.04em}
   .btn.primary{background:var(--grad);border-color:transparent;color:#fff}
   .btn.cyan{background:linear-gradient(95deg,#22b8b5,#3dd9d6);border-color:transparent;color:#04211f}
   .btn:disabled{opacity:.4;cursor:not-allowed}
@@ -347,6 +349,13 @@
         <div class="row" style="justify-content:flex-end;margin-bottom:8px">
           <button class="btn" onclick="genBotRoster('random')">🎲 Случайный</button>
           <button class="btn" onclick="genBotRoster('optimal')">⚡ Оптимальный</button>
+          <span class="preset-lbl">Пресеты:</span>
+          <button class="btn sm" onclick="genRosterArch('bot',['atk'])">Атакер</button>
+          <button class="btn sm" onclick="genRosterArch('bot',['ano'])">Аномалия</button>
+          <button class="btn sm" onclick="genRosterArch('bot',['rupt'])">Разрушение</button>
+          <button class="btn sm" onclick="genRosterArch('bot',['atk','ano'])">Атк+Аном</button>
+          <button class="btn sm" onclick="genRosterArch('bot',['atk','rupt'])">Атк+Разр</button>
+          <button class="btn sm" onclick="genRosterArch('bot',['ano','rupt'])">Аном+Разр</button>
           <button class="btn" onclick="clearBotRoster()">Очистить</button>
         </div>
         <input type="text" class="pool-search" id="bpool-search" placeholder="Поиск персонажа…" oninput="renderBotPool()">
@@ -394,7 +403,6 @@
       <a href="statistics.html">Статистика</a>
       <a href="bracket.html">Турнирная сетка</a>
       <a href="predict.html">Аналитика</a>
-      <a href="draft-sim.html">Симулятор</a>
       <a href="wheel.html">Колесо</a>
     </nav>
   </div>
@@ -433,7 +441,7 @@ const D={};
 let CS=null, CTX=null, TID=null;
 
 async function boot(){
-  const[ts,cs,pks,bns,ms,encs,costs,synRows,players,prosters]=await Promise.all([
+  const[ts,cs,pks,bns,ms,encs,costs,synRows,players,prosters,cwRows,ccwRows]=await Promise.all([
     sb.from('tournaments').select('*').then(r=>r.data||[]),
     sb.from('characters').select('*').then(r=>r.data||[]),
     fetchAll(()=>sb.from('match_picks').select('*')),
@@ -443,7 +451,9 @@ async function boot(){
     fetchAll(()=>sb.from('tournament_costs').select('*')),
     sb.from('synergy_tags').select('character_id,data').then(r=>r.data||[],()=>[]),
     sb.from('players').select('id,nickname').then(r=>r.data||[],()=>[]),
-    fetchAll(()=>sb.from('player_rosters').select('tournament_id,player_id,character_id,mindscape'))
+    fetchAll(()=>sb.from('player_rosters').select('tournament_id,player_id,character_id,mindscape')),
+    sb.from('char_weights').select('character_id,manual_weight').then(r=>r.data||[],()=>[]),
+    sb.from('char_const_weights').select('character_id,mindscape,manual_weight').then(r=>r.data||[],()=>[])
   ]);
   D.tours=ts.slice().sort((a,b)=>(a.sort_order??1e9)-(b.sort_order??1e9));
   D.chars=cs;D.charMap={};cs.forEach(c=>D.charMap[c.id]=c);
@@ -452,6 +462,9 @@ async function boot(){
   D.prosters={};(prosters||[]).forEach(r=>{
     const byP=D.prosters[r.player_id]||(D.prosters[r.player_id]={});
     (byP[r.tournament_id]=byP[r.tournament_id]||[]).push({cid:r.character_id,ms:r.mindscape||0});});
+  // ручная калибровка силы из админки (char_weights + по мидскейпам)
+  D.charW={};(cwRows||[]).forEach(r=>{if(r.manual_weight!=null)D.charW[r.character_id]=r.manual_weight;});
+  D.charConstW={};(ccwRows||[]).forEach(r=>{if(r.manual_weight!=null)(D.charConstW[r.character_id]=D.charConstW[r.character_id]||{})[r.mindscape]=r.manual_weight;});
   const mmap={};ms.forEach(m=>mmap[m.id]=m);
   const encById={};encs.forEach(e=>encById[e.id]=e);
   D.picks=pks;D.mmap=mmap;D.encById=encById;D.bans=bns;
@@ -468,11 +481,14 @@ async function boot(){
     const wEq=m.is_draw?0.5:(m.winner_id===pk.player_id?1:0);
     const k=pk.character_id+':'+(pk.mindscape||0);
     const s=D.msStats[k]||(D.msStats[k]={games:0,wEq:0});s.games++;s.wEq+=wEq;});
-  // средний таймер зачистки по персонажу: таймер игрока за матч, где перс был в пике
-  D.charTimer={};
-  pks.forEach(pk=>{const m=mmap[pk.match_id];if(!m)return;const e=encById[m.encounter_id];if(!e)return;
-    const t=pk.player_id===e.player1_id?m.player1_timer_sec:(pk.player_id===e.player2_id?m.player2_timer_sec:null);
-    if(!t||t<=0)return;const s=D.charTimer[pk.character_id]||(D.charTimer[pk.character_id]={n:0,sum:0});s.n++;s.sum+=t;});
+  // модель таймера: регрессия по чистым прогонам (0 рестартов), тройка = base/2 + Σ вкладов
+  const pByRun={};pks.forEach(p=>{(pByRun[p.match_id+'|'+p.player_id]=pByRun[p.match_id+'|'+p.player_id]||[]).push(p.character_id);});
+  const timeSamples=[];
+  ms.forEach(m=>{const e=encById[m.encounter_id];if(!e)return;
+    [['player1',e.player1_id],['player2',e.player2_id]].forEach(([p,pid])=>{
+      const t=m[p+'_timer_sec'],r=m[p+'_restarts'],cids=pByRun[m.id+'|'+pid];
+      if(t>0&&!r&&cids&&cids.length===6)timeSamples.push({cids,t});});});
+  D.timeModel=DraftSim.fitTimeModel(timeSamples);
   D.costs={};costs.forEach(r=>{(D.costs[r.tournament_id]=D.costs[r.tournament_id]||[]).push(r);});
   // теги синергии (фолбэк на статический JSON)
   const map=synRows.length?{}:null;synRows.forEach(x=>map[x.character_id]=x.data);
@@ -494,7 +510,7 @@ function onTour(){
   // статистика этого турнира (средне) + общая как прайор (слабо)
   const tourPicks=(D.picks||[]).filter(pk=>{const m=D.mmap[pk.match_id];const e=m&&D.encById[m.encounter_id];return e&&e.tournament_id===TID;});
   const tourStats=Predict.charStats(tourPicks,D.mmap);
-  CTX=DraftSim.makeCtx(D.cstats,tourStats,D.charMap,buffTag,rooms,D.msStats,D.banModel);
+  CTX=DraftSim.makeCtx(D.cstats,tourStats,D.charMap,buffTag,rooms,D.msStats,D.banModel,{charW:D.charW,charConstW:D.charConstW});
   $('lim-txt').textContent=limit;$('rc-limit').textContent=limit;
   // инфо о шиюй
   const weaks=[...new Set(rooms.flatMap(r=>(r.weakness||r.monsters&&r.monsters.flatMap(m=>m.weak||[])||[])))];
@@ -546,6 +562,13 @@ function genRoster(mode){
   if(!r.ok)toast('Не удалось уложиться в условия');
 }
 function clearRoster(){ROSTER=[];renderRoster();}
+// пресет по архетипу для 'you' или 'bot'
+function genRosterArch(side,roles){
+  const r=DraftSim.buildArchetypeRoster(CS,CTX,roles,{minChars:17,jitter:true});
+  if(side==='bot'){ROSTER_BOT=r.roster;renderBotMeter();renderBotPool();updateStart();}
+  else{ROSTER=r.roster;renderRoster();}
+  if(!r.ok)toast('Не удалось уложиться в условия');
+}
 function renderRoster(){
   const cost=rosterCost(),lim=CS.limit,cnt=ROSTER.length;
   const fill=$('rc-fill');fill.style.width=Math.min(100,cost/lim*100)+'%';fill.classList.toggle('over',cost>lim);
@@ -707,7 +730,9 @@ function startDraft(){
   if(fp==='random')fp=Math.random()<0.5?'you':'bot';
   buildSeq(fp);
   let botR;
-  if(BOT_SRC==='auto')botR=DraftSim.buildRoster(CS,CTX,{mode:'optimal',minChars:17,jitter:true}).roster;
+  if(BOT_SRC==='auto'){ // авто-бот: случайный когерентный архетип (а не размазанный по всем векторам)
+    const P=[['atk'],['ano'],['rupt'],['atk','ano'],['atk','rupt'],['ano','rupt']];
+    botR=DraftSim.buildArchetypeRoster(CS,CTX,P[(Math.random()*P.length)|0],{minChars:17,jitter:true}).roster;}
   else{if(!botRosterValid()){toast('Ростер бота невалиден (нужно ≥17 и ≤лимит)');return;}botR=ROSTER_BOT.slice();}
   G={you:{roster:ROSTER.slice()},bot:{roster:botR},picks:[],step:0,fp};
   $('sect-roster').style.display='none';$('sect-botroster').style.display='none';
@@ -743,8 +768,12 @@ function doBot(st){
     const cid=DraftSim.botBan(availBan('bot'),CTX,availPick('bot'),pickEntries('you'),canSteal);
     if(cid)pushStep(st,cid,0);else{G.step++;advance();}
   }else{
-    // пик в общий пул (6); учитывается лучшее разбиение пула на две тройки
-    const e=DraftSim.botPickPool(availPick('bot'),pickEntries('bot'),CTX);
+    // пик в общий пул (6); учитывается лучшее разбиение пула на две тройки.
+    // срочность: если игрок пикнет раньше след. пика бота — общих героев могут украсть
+    const nextPickIdx=side=>{for(let i=G.step+1;i<SEQ.length;i++)if(SEQ[i].type==='pick'&&SEQ[i].side===side)return i;return Infinity;};
+    const atRisk=nextPickIdx('you')<nextPickIdx('bot');
+    const playerCids=new Set(availPick('you').map(e=>e.cid));
+    const e=DraftSim.botPickPool(availPick('bot'),pickEntries('bot'),CTX,{atRisk,playerCids});
     if(e)pushStep(st,e.cid,e.ms);else{G.step++;advance();}
   }
 }
@@ -757,8 +786,9 @@ function draftClick(cid){
 
 // ---- утилиты ----
 const fmtSec=t=>t==null?'—':Math.floor(t/60)+':'+String(Math.round(t%60)).padStart(2,'0');
-function teamTimer(cids){const v=cids.map(cid=>{const s=D.charTimer[cid];return s&&s.n?s.sum/s.n:null}).filter(x=>x!=null);
-  return v.length?v.reduce((a,b)=>a+b,0)/v.length:null;}
+// оценка таймера тройки из модели (регрессия по чистым прогонам статистики)
+const estTriple=cids=>D.timeModel?D.timeModel.tripleTime(cids):null;
+const estTripleFmt=cids=>{const t=estTriple(cids);return t==null?'—':fmtSec(t);};
 const fieldCost=side=>pickEntries(side).reduce((s,e)=>s+(CS.costOf(e.cid,e.ms)||0),0);
 const initials=t=>t.toUpperCase();
 const currentTarget=()=>{const st=SEQ[G&&G.step];if(!st||st.side!=='you')return null;return st.type==='pick'?'you':'bot';};
@@ -812,17 +842,6 @@ function poolHtml(){
   }).join('');
   return`<div class="db-pool">${rows}</div>`;
 }
-// таймеры только для ПОЛНЫХ троек (3 пика)
-function timersHtml(){
-  const cell=side=>{const es=pickEntries(side);
-    return[0,1].map(t=>{const team=es.slice(t*3,t*3+3);if(team.length<3)return'';
-      return`<span class="tag" title="Ориентировочный таймер тройки ${t+1}">Тройка ${t+1}: ⏱ ${fmtSec(teamTimer(team.map(x=>x.cid)))}</span>`;}).join(' ');};
-  const y=cell('you'),b=cell('bot');
-  if(!y&&!b)return'';
-  return`<div class="db-row" style="justify-content:space-between;padding-top:14px">
-    <div style="display:flex;gap:8px;flex-wrap:wrap">${y}</div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">${b}</div></div>`;
-}
 function renderDraft(){
   if(!G)return;
   const st=G.step<SEQ.length?SEQ[G.step]:null;
@@ -849,17 +868,23 @@ function renderDraft(){
   const hint=st&&st.side==='you'
     ?`<div class="note" style="text-align:center;margin:2px 0 10px;color:var(--cyan)">${st.type==='ban'?'Твой бан — выбери персонажа из ростера бота (справа)':'Твой пик в общий пул (6) — выбери из своего ростера (слева); тройки распределятся после драфта'}</div>`
     :(st?`<div class="note" style="text-align:center;margin:2px 0 10px">Бот думает…</div>`:'');
-  $('draft-board').innerHTML=head+bansRow+dots+picksRow+hint+poolHtml()+timersHtml();
+  $('draft-board').innerHTML=head+bansRow+dots+picksRow+hint+poolHtml();
+  // на твоём ходу подскроллить пул (кликабельный ростер) в вид — иначе он «в подвале» под бордом
+  if(st&&st.side==='you')requestAnimationFrame(()=>{
+    const pl=document.querySelector('#draft-board .db-pool');
+    if(pl&&pl.getBoundingClientRect().bottom>window.innerHeight)pl.scrollIntoView({behavior:'smooth',block:'center'});
+  });
 }
 function miniChar(e){const c=D.charMap[e.cid];const hot=e.ms>0&&c.rarity!=='A';
   return`<div class="fin-c" title="${esc(c.name)} · M${e.ms}">${iconChar(c,54)}<span class="pm${hot?' hot':''}">M${e.ms}</span></div>`;}
 function teamBlock(split,side,editable){
   return split.teams.map((team,ti)=>{
     if(!team.length)return'';
+    const est=estTripleFmt(team.map(e=>e.cid));
     return`<div class="fin-team">
-      <div class="fin-th">Тройка ${ti+1}</div>
+      <div class="fin-th">Тройка ${ti+1} <span style="font-weight:400;color:var(--sub);text-transform:none">· ≈ ${est}</span></div>
       <div class="fin-row">${team.map(miniChar).join('')}</div>
-      ${editable?`<div class="fin-tm">Твой таймер тройки: <input class="tinp" id="${side}-tm-${ti}" placeholder="м:сс" oninput="recalcTimers()"></div>`:''}
+      ${editable?`<div class="fin-tm">Твой таймер тройки: <input class="tinp" id="${side}-tm-${ti}" placeholder="${est}" oninput="recalcTimers()"></div>`:''}
     </div>`;}).join('');
 }
 function parseTime(s){s=(s||'').trim();if(!s)return null;
@@ -885,20 +910,19 @@ function squadSlotHtml(side,ti,si){
     c?`${iconChar(c,60)}<span class="pm${hot?' hot':''}">M${e.ms}</span>`:'<span class="sq-plus">+</span>'}</div>`;
 }
 function squadTeamsHtml(side){
-  return[0,1].map(ti=>
-    `<div class="fin-team"><div class="fin-th">Тройка ${ti+1}</div>
-      <div class="sq-row">${[0,1,2].map(si=>squadSlotHtml(side,ti,si)).join('')}</div></div>`).join('');
+  return[0,1].map(ti=>{
+    const team=G[side].squads[ti].filter(Boolean);
+    const est=team.length===3?` <span style="font-weight:400;color:var(--sub);text-transform:none">· ≈ ${estTripleFmt(team.map(e=>e.cid))}</span>`:'';
+    return`<div class="fin-team"><div class="fin-th">Тройка ${ti+1}${est}</div>
+      <div class="sq-row">${[0,1,2].map(si=>squadSlotHtml(side,ti,si)).join('')}</div></div>`;}).join('');
 }
-// общий таймер стороны (обе тройки = вся проходка Шиюй), одно число
-const sideTimer=side=>teamTimer(G[side].squads.flat().filter(Boolean).map(e=>e.cid));
 function renderSquadPhase(){
   const n=youPlacedN();
-  const botTm=fmtSec(sideTimer('bot'));
   $('draft-board').innerHTML=`
     <div class="note" style="text-align:center;margin-bottom:12px;color:var(--cyan)">Собери свои две тройки: нажми на слот и выбери персонажа из своего пула. Бот распределил свой пул автоматически (лучшая синергия).</div>
     <div class="fin-teams">
       <div class="fin-side"><div class="side-lbl" style="color:var(--cyan)">Твои тройки (${n}/6)</div>${squadTeamsHtml('you')}</div>
-      <div class="fin-side"><div class="side-lbl">Тройки бота · ⏱ ${botTm} <span style="font-weight:400;text-transform:none">(общий таймер)</span></div>${squadTeamsHtml('bot')}</div>
+      <div class="fin-side"><div class="side-lbl">Тройки бота</div>${squadTeamsHtml('bot')}</div>
     </div>
     <div class="row" style="justify-content:center;margin-top:16px">
       <button class="btn primary" id="sq-done" ${n<6?'disabled':''} onclick="finalizeResult()">Показать итог →</button>
@@ -950,7 +974,7 @@ function finalizeResult(){
       <div class="fin-side"><div class="side-lbl" style="color:var(--cyan)">Твои тройки · пройди их в игре и впиши таймер</div>
         ${teamBlock({teams:yTeams},'you',true)}
         <div class="fin-total">Твой суммарный таймер: <b id="you-total">—</b></div></div>
-      <div class="fin-side"><div class="side-lbl">Тройки бота · ⏱ ${fmtSec(teamTimer(bTeams.flat().map(e=>e.cid)))} <span style="font-weight:400;text-transform:none">(общий)</span></div>${teamBlock({teams:bTeams},'bot',false)}</div>
+      <div class="fin-side"><div class="side-lbl">Тройки бота</div>${teamBlock({teams:bTeams},'bot',false)}</div>
     </div>
     <div class="note" style="text-align:center;margin-top:12px">Таймер бота — общая оценка проходки по средним историческим таймерам персонажей. Свой реальный впиши после проходок (у тебя биса/консты могут сильно ускорить). Вероятность ориентировочна (синергия+баф+мобы, без Elo).</div>`;
   r.scrollIntoView({behavior:'smooth',block:'nearest'});
