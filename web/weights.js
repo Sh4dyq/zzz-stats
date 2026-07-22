@@ -1187,18 +1187,18 @@ function _tmRoleOk(chars){
 function _tmStarsFromWr(wr){return wr>=.62?5:wr>=.56?4:wr>=.5?3:wr>=.43?2:1;}
 // комплементарность по тегам: сколько нужд одного закрывает другой (двусторонне), 0..1
 function _tmTagSyn(chars){
-  const sig=id=>_W.tags&&_W.tags[id];
+  const sig=c=>_spTagOf(c);
   let need=0,met=0;
-  chars.forEach(c=>{const t=sig(c.id);if(!t)return;
+  chars.forEach(c=>{const t=sig(c);if(!t)return;
     const needs=Object.keys(t.needs||{}).filter(k=>t.needs[k]);
     needs.forEach(k=>{need++;
-      if(chars.some(o=>o.id!==c.id&&(sig(o.id)||{}).gives&&sig(o.id).gives[k]))met++;});});
+      if(chars.some(o=>o.id!==c.id&&(sig(o)||{}).gives&&sig(o).gives[k]))met++;});});
   return need?met/need:0;
 }
 const _TM_SYN_MIN=0.4,_TM_SYN_TOP={2:0,3:0}; // порог синергии; 0 = без лимита на число составов
 // перебор всех валидных составов из ростера по тег-синергии (без опоры на пики)
 function _tmTagCombos(size){
-  const pool=_spPool(size).filter(c=>_W.tags&&_W.tags[c.id]);
+  const pool=_spPool(size).filter(c=>_spTagOf(c));
   const out=[];
   const walk=(start,acc)=>{
     if(acc.length===size){if(_tmRoleOk(acc)&&!_blHas(acc.map(c=>c.id))){const v=_tmTagSyn(acc);if(v>=_TM_SYN_MIN)out.push({chars:acc.slice(),syn:v});}return;}
@@ -1403,8 +1403,11 @@ function _spTierLbl(t){
 }
 // M конкретного инстанса состава (c._ms) → фолбэк rep первого тира
 function _spMs(c){return c._ms!=null?c._ms:_spTiers(c)[0].ms;}
+// synergy_tags ключатся по enka_id, а не UUID — единый резолвер тегов персонажа
+const _spTagKey=c=>c&&c.enka_id!=null?String(c.enka_id).split('_')[0]:null;
+const _spTagOf=c=>{const k=_spTagKey(c);return k&&_W.tags?_W.tags[k]:null;};
 // элемент персонажа (из тегов — единый формат)
-const _spElem=c=>c&&_W.tags&&_W.tags[c.id]&&_W.tags[c.id].element||'';
+const _spElem=c=>{const t=_spTagOf(c);return t&&t.element||'';};
 const _spInGame=c=>!(_W.spCfg&&_W.spCfg[c.id]&&_W.spCfg[c.id].in_game===false);
 // 3 бакета ролей для подбора состава
 const _SP_CAPS=[['main','Главный'],['sub','Саб-ДД'],['sup','Саппорт']];
@@ -1417,7 +1420,7 @@ const _SP_ROLE_CAP={atk:'main',ano:'main',rupt:'main',stun:'sup',sup:'sup',def:'
 function _spCaps(c){
   const ov=_W.spCfg&&_W.spCfg[c.id]&&_W.spCfg[c.id].caps;
   if(ov&&ov.length)return new Set(ov);
-  const t=_W.tags&&_W.tags[c.id];const s=new Set();
+  const t=_spTagOf(c);const s=new Set();
   if(t&&t.roles)Object.keys(t.roles).forEach(r=>{const b=_SP_TAG_CAP[r];if(b&&t.roles[r])s.add(b);});
   if(!s.size)s.add(_SP_ROLE_CAP[c.role]||'sup');
   return s;
@@ -1442,7 +1445,7 @@ const _SP_COMPS={
 function _spComp(size){const c=_SP_COMPS[size];return c?_spShuffle(_spPick(c).slice()):null;}
 // похожесть кандидата x к левому персонажу lc: теги (Жаккар) + элемент + близость консты
 function _spSim(lc,x){
-  const A=_W.spSig[lc.id],B=_W.spSig[x.id];let tj=0;
+  const A=_W.spSig[_spTagKey(lc)],B=_W.spSig[_spTagKey(x)];let tj=0;
   if(A&&B&&A.size&&B.size){let inter=0;A.forEach(k=>{if(B.has(k))inter++;});tj=inter/(A.size+B.size-inter);}
   const le=_spElem(lc),xe=_spElem(x);const el=(le&&xe&&le===xe)?1:0;
   const lm=lc._ms!=null?lc._ms:_spAutoMs(lc),xm=_spAutoMs(x);const mc=1-Math.abs(lm-xm)/6;
