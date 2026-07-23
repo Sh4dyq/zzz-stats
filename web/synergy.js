@@ -43,7 +43,10 @@ function rid(x){ // tag id | полное имя | короткое/DB-имя
 const isDmg=id=>Math.max(...DMG.map(k=>roleOf(id,k)),0)>=2;
 
 function gateActive(id,team){
-  const me=SYN[id],gt=me&&me.trigger;if(!gt)return false;
+  const me=SYN[id];if(!me)return false;
+  // условие из редактируемых тегов (БД) приоритетно; фолбэк — датамайн-JSON. null = нет гейта.
+  const dbTr=TAGS[id]&&TAGS[id].trigger;
+  const gt=(TAGS[id]&&('trigger'in TAGS[id]))?dbTr:me.trigger;if(!gt)return false;
   for(const o of team){ if(o===id)continue; const oo=SYN[o];if(!oo)continue;
     if(gt.faction&&oo.faction&&oo.faction===me.faction)return true;
     if(gt.attribute&&oo.element&&oo.element===me.element)return true;

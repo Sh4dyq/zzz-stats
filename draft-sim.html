@@ -229,7 +229,8 @@
   .sq-slot .pm{position:absolute;bottom:0;right:0;min-width:18px;text-align:center;padding:1px 4px;border-radius:7px 0 11px 0;font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;font-size:10px;color:#fff;background:rgba(0,0,0,.78)}
   .sq-slot .pm.hot{background:rgba(223,2,75,.9)}
   /* попап выбора персонажа в слот */
-  .slot-menu{position:fixed;z-index:1000;background:var(--card);border:1px solid var(--cyan);border-radius:12px;padding:12px;box-shadow:0 14px 40px rgba(0,0,0,.55);max-width:320px}
+  .slot-overlay{position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.45)}
+  .slot-menu{position:fixed;z-index:1001;background:var(--card);border:1px solid var(--cyan);border-radius:12px;padding:14px;box-shadow:0 14px 40px rgba(0,0,0,.55);max-width:340px;max-height:82vh;overflow:auto}
   .slot-menu .sm-h{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;font-size:12px;color:var(--sub);margin-bottom:8px}
   .slot-menu .sm-grid{display:flex;flex-wrap:wrap;gap:6px;max-width:296px}
   .slot-menu .sm-c{position:relative;width:52px;height:52px;border-radius:11px;overflow:hidden;border:1px solid var(--border);cursor:pointer;transition:.12s}
@@ -311,6 +312,10 @@
         <button class="btn" onclick="genRoster('random')">🎲 Случайный</button>
         <button class="btn" onclick="genRoster('optimal')">⚡ Оптимальный</button>
         <button class="btn" onclick="clearRoster()">Очистить</button>
+        <span class="preset-lbl">Сохранённые:</span>
+        <select id="saved-sel" onchange="loadRoster(this.value)" style="background:var(--field);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:6px 8px;font-size:13px"></select>
+        <button class="btn sm" onclick="saveRoster()">💾 Сохранить</button>
+        <button class="btn sm" onclick="deleteSavedRoster()" title="Удалить выбранное сохранение">🗑</button>
       </div>
     </div>
     <div class="sect-b">
@@ -468,6 +473,9 @@ async function boot(){
   const mmap={};ms.forEach(m=>mmap[m.id]=m);
   const encById={};encs.forEach(e=>encById[e.id]=e);
   D.picks=pks;D.mmap=mmap;D.encById=encById;D.bans=bns;
+  // эмпирические комбо: реальные тройки из турниров (match_picks.team_slot) → lift-модель совместной игры
+  const triGroups={};pks.forEach(p=>{if(!p.team_slot)return;const k=p.match_id+'|'+p.player_id+'|'+p.team_slot;(triGroups[k]=triGroups[k]||[]).push(p.character_id);});
+  D.comboModel=DraftSim.buildComboModel(Object.values(triGroups));
   // множество cid ростера игрока на турнире — жертвы, доступные к бану соперником
   D.rosterSet={};(prosters||[]).forEach(r=>{
     const k=r.player_id+'|'+r.tournament_id;(D.rosterSet[k]=D.rosterSet[k]||new Set()).add(r.character_id);});
@@ -503,6 +511,7 @@ async function boot(){
 function shiyuOf(tid){const t=D.tours.find(x=>x.id===tid);return(t&&t.shiyu_data)||null;}
 function onTour(){
   TID=$('tour-sel').value;
+  renderSavedRosters();
   const sh=shiyuOf(TID);
   const rooms=(sh&&sh.rooms)||[], buffTag=(sh&&sh.buff_tag)||null;
   const limit=(sh&&sh.cost_limit)||1605;
@@ -510,7 +519,7 @@ function onTour(){
   // статистика этого турнира (средне) + общая как прайор (слабо)
   const tourPicks=(D.picks||[]).filter(pk=>{const m=D.mmap[pk.match_id];const e=m&&D.encById[m.encounter_id];return e&&e.tournament_id===TID;});
   const tourStats=Predict.charStats(tourPicks,D.mmap);
-  CTX=DraftSim.makeCtx(D.cstats,tourStats,D.charMap,buffTag,rooms,D.msStats,D.banModel,{charW:D.charW,charConstW:D.charConstW});
+  CTX=DraftSim.makeCtx(D.cstats,tourStats,D.charMap,buffTag,rooms,D.msStats,D.banModel,{charW:D.charW,charConstW:D.charConstW},D.comboModel);
   $('lim-txt').textContent=limit;$('rc-limit').textContent=limit;
   // инфо о шиюй
   const weaks=[...new Set(rooms.flatMap(r=>(r.weakness||r.monsters&&r.monsters.flatMap(m=>m.weak||[])||[])))];
@@ -562,6 +571,32 @@ function genRoster(mode){
   if(!r.ok)toast('Не удалось уложиться в условия');
 }
 function clearRoster(){ROSTER=[];renderRoster();}
+// ---- сохранение ростера в localStorage (по турниру, чтобы не прокликивать каждый раз) ----
+const SAVED_KEY='dsim_rosters';
+function savedAll(){try{return JSON.parse(localStorage.getItem(SAVED_KEY))||[];}catch(e){return[];}}
+function savedWrite(a){localStorage.setItem(SAVED_KEY,JSON.stringify(a));}
+function renderSavedRosters(){
+  const sel=$('saved-sel');if(!sel)return;const all=savedAll();
+  const opts=all.map((s,i)=>({s,i})).filter(x=>x.s.tid===TID)
+    .map(x=>`<option value="${x.i}">${esc(x.s.name)} (${x.s.roster.length})</option>`).join('');
+  sel.innerHTML='<option value="">— загрузить —</option>'+opts;
+}
+function saveRoster(){
+  if(!ROSTER.length){toast('Ростер пуст');return;}
+  const name=prompt('Название сохранения:','Ростер '+(savedAll().filter(s=>s.tid===TID).length+1));
+  if(!name)return;
+  const all=savedAll();all.push({name,tid:TID,roster:ROSTER.map(e=>({cid:e.cid,ms:e.ms}))});savedWrite(all);
+  renderSavedRosters();toast('Ростер сохранён');
+}
+function loadRoster(idx){
+  if(idx===''||idx==null)return;const s=savedAll()[+idx];if(!s)return;
+  ROSTER=s.roster.filter(e=>CS.allowed.has(e.cid)).map(e=>({cid:e.cid,ms:e.ms}));  // только доступные в этой кост-системе
+  renderRoster();toast('Загружено: '+s.name);
+}
+function deleteSavedRoster(){
+  const sel=$('saved-sel');if(!sel||sel.value==='')return{};
+  const all=savedAll();all.splice(+sel.value,1);savedWrite(all);renderSavedRosters();toast('Удалено');
+}
 // пресет по архетипу для 'you' или 'bot'
 function genRosterArch(side,roles){
   const r=DraftSim.buildArchetypeRoster(CS,CTX,roles,{minChars:17,jitter:true});
@@ -773,7 +808,8 @@ function doBot(st){
     const nextPickIdx=side=>{for(let i=G.step+1;i<SEQ.length;i++)if(SEQ[i].type==='pick'&&SEQ[i].side===side)return i;return Infinity;};
     const atRisk=nextPickIdx('you')<nextPickIdx('bot');
     const playerCids=new Set(availPick('you').map(e=>e.cid));
-    const e=DraftSim.botPickPool(availPick('bot'),pickEntries('bot'),CTX,{atRisk,playerCids});
+    const picksLeft=(()=>{let n=0;for(let i=G.step;i<SEQ.length;i++)if(SEQ[i].type==='pick'&&SEQ[i].side==='bot')n++;return n;})();
+    const e=DraftSim.botPickPool(availPick('bot'),pickEntries('bot'),CTX,{atRisk,playerCids,picksLeft});
     if(e)pushStep(st,e.cid,e.ms);else{G.step++;advance();}
   }
 }
@@ -786,9 +822,23 @@ function draftClick(cid){
 
 // ---- утилиты ----
 const fmtSec=t=>t==null?'—':Math.floor(t/60)+':'+String(Math.round(t%60)).padStart(2,'0');
-// оценка таймера тройки из модели (регрессия по чистым прогонам статистики)
-const estTriple=cids=>D.timeModel?D.timeModel.tripleTime(cids):null;
-const estTripleFmt=cids=>{const t=estTriple(cids);return t==null?'—':fmtSec(t);};
+// оценка таймера тройки: регрессия по чистым прогонам (сильные про-составы ~1:00-1:25) + замедление
+// за СТРУКТУРНЫЕ дефекты (нет саппорта/дд, 2 станера — compPenalty) и слабость персонажей. Привязка к
+// compPenalty, а не к общему teamScore: сильная когерентная тройка → чистая регрессия (не завышаем её,
+// как раньше из-за недооценки teamScore). team = [{cid,ms}].
+const STRUCT_K=110;              // сек за единицу структурного штрафа (нет сапа −0.20 → +22с ≈ 1:30)
+const WEAK_REF=0.05, WEAK_K=120; // мягкое замедление за слабый по силе состав
+function estTriple(team){
+  team=(team||[]).filter(Boolean);if(!D.timeModel||team.length<3)return null;
+  const base=D.timeModel.tripleTime(team.map(e=>e.cid));
+  const struct=Math.max(0,-DraftSim.compPenalty(team,CTX))*STRUCT_K;   // дефекты состава
+  const avgVal=team.reduce((s,e)=>s+DraftSim.charValue(e,CTX),0)/team.length;
+  const weak=Math.max(0,WEAK_REF-avgVal)*WEAK_K;                       // слабый состав
+  return Math.round(base+struct+weak);
+}
+const estTripleFmt=team=>{const t=estTriple(team);return t==null?'—':fmtSec(t);};
+// суммарный таймер стороны (обе тройки)
+const estTotalFmt=teams=>{let t=0,ok=false;teams.forEach(tm=>{const e=estTriple(tm);if(e!=null){t+=e;ok=true;}});return ok?fmtSec(t):'—';};
 const fieldCost=side=>pickEntries(side).reduce((s,e)=>s+(CS.costOf(e.cid,e.ms)||0),0);
 const initials=t=>t.toUpperCase();
 const currentTarget=()=>{const st=SEQ[G&&G.step];if(!st||st.side!=='you')return null;return st.type==='pick'?'you':'bot';};
@@ -868,7 +918,9 @@ function renderDraft(){
   const hint=st&&st.side==='you'
     ?`<div class="note" style="text-align:center;margin:2px 0 10px;color:var(--cyan)">${st.type==='ban'?'Твой бан — выбери персонажа из ростера бота (справа)':'Твой пик в общий пул (6) — выбери из своего ростера (слева); тройки распределятся после драфта'}</div>`
     :(st?`<div class="note" style="text-align:center;margin:2px 0 10px">Бот думает…</div>`:'');
-  $('draft-board').innerHTML=head+bansRow+dots+picksRow+hint+poolHtml();
+  const canUndo=G.picks.some(p=>p.side==='you');
+  const controls=canUndo?`<div class="row" style="justify-content:center;margin:4px 0 10px"><button class="btn" onclick="undoStep()">← Шаг назад</button></div>`:'';
+  $('draft-board').innerHTML=head+bansRow+dots+picksRow+hint+controls+poolHtml();
   // на твоём ходу подскроллить пул (кликабельный ростер) в вид — иначе он «в подвале» под бордом
   if(st&&st.side==='you')requestAnimationFrame(()=>{
     const pl=document.querySelector('#draft-board .db-pool');
@@ -880,7 +932,7 @@ function miniChar(e){const c=D.charMap[e.cid];const hot=e.ms>0&&c.rarity!=='A';
 function teamBlock(split,side,editable){
   return split.teams.map((team,ti)=>{
     if(!team.length)return'';
-    const est=estTripleFmt(team.map(e=>e.cid));
+    const est=estTripleFmt(team);
     return`<div class="fin-team">
       <div class="fin-th">Тройка ${ti+1} <span style="font-weight:400;color:var(--sub);text-transform:none">· ≈ ${est}</span></div>
       <div class="fin-row">${team.map(miniChar).join('')}</div>
@@ -912,7 +964,7 @@ function squadSlotHtml(side,ti,si){
 function squadTeamsHtml(side){
   return[0,1].map(ti=>{
     const team=G[side].squads[ti].filter(Boolean);
-    const est=team.length===3?` <span style="font-weight:400;color:var(--sub);text-transform:none">· ≈ ${estTripleFmt(team.map(e=>e.cid))}</span>`:'';
+    const est=team.length===3?` <span style="font-weight:400;color:var(--sub);text-transform:none">· ≈ ${estTripleFmt(team)}</span>`:'';
     return`<div class="fin-team"><div class="fin-th">Тройка ${ti+1}${est}</div>
       <div class="sq-row">${[0,1,2].map(si=>squadSlotHtml(side,ti,si)).join('')}</div></div>`;}).join('');
 }
@@ -922,15 +974,17 @@ function renderSquadPhase(){
     <div class="note" style="text-align:center;margin-bottom:12px;color:var(--cyan)">Собери свои две тройки: нажми на слот и выбери персонажа из своего пула. Бот распределил свой пул автоматически (лучшая синергия).</div>
     <div class="fin-teams">
       <div class="fin-side"><div class="side-lbl" style="color:var(--cyan)">Твои тройки (${n}/6)</div>${squadTeamsHtml('you')}</div>
-      <div class="fin-side"><div class="side-lbl">Тройки бота</div>${squadTeamsHtml('bot')}</div>
+      <div class="fin-side"><div class="side-lbl">Тройки бота</div>${squadTeamsHtml('bot')}
+        <div class="fin-total">Суммарный таймер бота: <b>${estTotalFmt(G.bot.squads)}</b></div></div>
     </div>
-    <div class="row" style="justify-content:center;margin-top:16px">
+    <div class="row" style="justify-content:center;gap:10px;margin-top:16px">
+      <button class="btn" onclick="undoStep()">← Шаг назад</button>
       <button class="btn primary" id="sq-done" ${n<6?'disabled':''} onclick="finalizeResult()">Показать итог →</button>
     </div>`;
 }
 // попап выбора персонажа в слот (как SquadBuilder на nexus)
 let slotMenu=null;
-function closeSlotMenu(){if(slotMenu){slotMenu.remove();slotMenu=null;document.removeEventListener('mousedown',outsideClose);}}
+function closeSlotMenu(){if(slotMenu){if(slotMenu._overlay)slotMenu._overlay.remove();slotMenu.remove();slotMenu=null;document.removeEventListener('mousedown',outsideClose);}}
 function outsideClose(e){if(slotMenu&&!slotMenu.contains(e.target))closeSlotMenu();}
 function openSlotMenu(ti,si,el){
   closeSlotMenu();
@@ -941,11 +995,16 @@ function openSlotMenu(ti,si,el){
     <div class="sm-grid">${avail.map(e=>{const c=D.charMap[e.cid],hot=e.ms>0&&c.rarity!=='A';
       return`<div class="sm-c${cur&&cur.cid===e.cid?' cur':''}" title="${esc(c.name)} · M${e.ms}" onclick="placeSlot(${ti},${si},'${e.cid}')">${iconChar(c,52)}<span class="pm${hot?' hot':''}">M${e.ms}</span></div>`;}).join('')||'<span class="note">Все персонажи уже расставлены</span>'}</div>
     ${cur?`<button class="btn" style="margin-top:8px;width:100%" onclick="clearSlot(${ti},${si})">Убрать из слота</button>`:''}`;
-  document.body.appendChild(m);
-  const r=el.getBoundingClientRect(),mw=m.offsetWidth,mh=m.offsetHeight;   // fixed → координаты вьюпорта
-  const left=Math.max(8,Math.min(window.innerWidth-mw-8,r.left));
-  let top=r.bottom+8; if(top+mh>window.innerHeight-8)top=Math.max(8,r.top-mh-8); // флип вверх у нижнего края
-  m.style.left=left+'px';m.style.top=top+'px';
+  // оверлей + попап НАД нажатой кнопкой. position:fixed форсим инлайном (CSS-каша иначе даёт relative,
+  // и попап улетал под футер). Координаты — от вьюпорта (fixed).
+  const ov=document.createElement('div');ov.className='slot-overlay';ov.onclick=closeSlotMenu;
+  document.body.appendChild(ov);document.body.appendChild(m);m._overlay=ov;
+  m.style.position='fixed';m.style.transform='none';
+  const r=el.getBoundingClientRect(),mw=m.offsetWidth,mh=m.offsetHeight;
+  const left=Math.max(8,Math.min(window.innerWidth-mw-8,r.left+r.width/2-mw/2));  // по центру кнопки
+  let top=r.top-mh-8;                                    // НАД кнопкой
+  if(top<8)top=Math.min(window.innerHeight-mh-8,r.bottom+8);  // не влезло сверху → под кнопкой
+  m.style.left=left+'px';m.style.top=Math.max(8,top)+'px';
   slotMenu=m;setTimeout(()=>document.addEventListener('mousedown',outsideClose),0);
 }
 function placeSlot(ti,si,cid){const e=pickEntries('you').find(x=>x.cid===cid);
@@ -974,11 +1033,25 @@ function finalizeResult(){
       <div class="fin-side"><div class="side-lbl" style="color:var(--cyan)">Твои тройки · пройди их в игре и впиши таймер</div>
         ${teamBlock({teams:yTeams},'you',true)}
         <div class="fin-total">Твой суммарный таймер: <b id="you-total">—</b></div></div>
-      <div class="fin-side"><div class="side-lbl">Тройки бота</div>${teamBlock({teams:bTeams},'bot',false)}</div>
+      <div class="fin-side"><div class="side-lbl">Тройки бота</div>${teamBlock({teams:bTeams},'bot',false)}
+        <div class="fin-total">Суммарный таймер бота: <b>${estTotalFmt(bTeams)}</b></div></div>
     </div>
-    <div class="note" style="text-align:center;margin-top:12px">Таймер бота — общая оценка проходки по средним историческим таймерам персонажей. Свой реальный впиши после проходок (у тебя биса/консты могут сильно ускорить). Вероятность ориентировочна (синергия+баф+мобы, без Elo).</div>`;
+    <div class="row" style="justify-content:center;margin-top:14px"><button class="btn" onclick="undoStep()">← Шаг назад</button></div>
+    <div class="note" style="text-align:center;margin-top:12px">Таймер = регрессия по чистым историческим прогонам + замедление за слабость состава. Свой реальный впиши после проходок (у тебя биса/консты могут сильно ускорить). Вероятность ориентировочна (синергия+баф+мобы, без Elo).</div>`;
   r.scrollIntoView({behavior:'smooth',block:'nearest'});
   recalcTimers();
+}
+// шаг назад: из результата → к сборке отрядов; из сборки/драфта → откат последнего ХОДА игрока
+function undoStep(){
+  if(!G)return;
+  if(G.phase==='done'){G.phase='squad';$('draft-res').style.display='none';renderSquadPhase();return;}
+  const mine=G.picks.filter(p=>p.side==='you');
+  if(!mine.length){toast('Нечего отменять');return;}
+  const last=Math.max(...mine.map(p=>p.stepIndex));
+  G.picks=G.picks.filter(p=>p.stepIndex<last);
+  G.step=last;G.phase=null;G.you.squads=null;G.bot.squads=null;
+  $('draft-res').style.display='none';
+  renderDraft();
 }
 
 function toast(m){const el=document.createElement('div');el.textContent=m;

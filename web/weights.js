@@ -375,14 +375,23 @@ async function _loadTags(){
   if(!D.chars||!D.chars.length){ // прямой заход на вкладку тегов — карточки персонажей (иконки) ещё не загружены
     D.chars=await _fetchAllW('characters');D.charMap={};D.chars.forEach(c=>D.charMap[c.id]=c);_W.charIdx=null;
   }
-  const[base,rows]=await Promise.all([
+  const[base,rows,synJson]=await Promise.all([
     fetch('web/data/synergy_tags.json?v='+Date.now()).then(r=>r.json()).catch(()=>({})),
-    _fetchAllW('synergy_tags')
+    _fetchAllW('synergy_tags'),
+    fetch('web/data/characters_synergy.json?v='+Date.now()).then(r=>r.json()).catch(()=>({}))
   ]);
   const map={};
   for(const cid in base)map[cid]=_msNorm(JSON.parse(JSON.stringify(base[cid])));
   _W.tagDb=new Set();
   rows.forEach(r=>{map[r.character_id]=_msNorm(r.data);_W.tagDb.add(String(r.character_id));});
+  // Additional Ability: атрибуты (фракция/элемент/спец) — из nanoka (только для показа гейта);
+  // условие (trigger) бэкфиллим в тег-данные, если в БД его ещё нет → станет редактируемым.
+  const syn=(synJson&&synJson.agents)||synJson||{};
+  _W.synAttr={};
+  for(const cid in map){const s=syn[cid];const t=map[cid];
+    if(s){_W.synAttr[cid]={faction:s.faction,element:s.element,specialty:s.specialty};
+      if(t.trigger===undefined)t.trigger=s.trigger?JSON.parse(JSON.stringify(s.trigger)):null;}
+    else if(t.trigger===undefined)t.trigger=null;}
   _W.tags=map;_W.tagsLoaded=true;
 }
 
@@ -514,6 +523,8 @@ function _tagForm(id){
     ${H('Базовые теги на M0 (0-4)')}
     <div style="font-size:12px;color:var(--sub);margin:-4px 0 8px">«Даёт команде» — сила эффекта. «Нужно» — насколько критично агенту. Наведи на заголовок — полное название.</div>
     ${baseTable}
+    ${H('Доп. способность (Additional Ability)')}
+    ${_addAbilityBlock(id,t)}
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:24px;margin-top:4px">
       <div>${H('Майндскейпы — даёт себе')}${msTable('gives_self')}</div>
       <div>${H('Майндскейпы — даёт команде')}${msTable('gives')}</div>
@@ -533,6 +544,37 @@ function _tagForm(id){
 function _tagSearch(v){_W.tagQ=v;_renderTagsEditor();}
 function _tagToggle(id){_W.tagExpand=_W.tagExpand===id?null:id;_renderTagsEditor();}
 // числовые поля (onchange по blur) — БЕЗ ре-рендера, иначе теряется фокус
+// ---- Additional Ability: важность (passive_use 0-4) + условие активации (trigger) ----
+// trigger = ИЛИ из: тиммейт со спецом из spec[], элементом из elem[], та же фракция, тот же элемент.
+// null = пассивка активна всегда (без гейта). Атрибуты агента (фракция/элемент/спец) — из датамайна.
+const _SPEC_VOCAB=[['Attack','Атака'],['Stun','Стан'],['Anomaly','Аномалия'],['Support','Саппорт'],['Defense','Защита'],['Rupture','Разрушение']];
+const _ELEM_VOCAB=[['Ice','Лёд'],['Fire','Пожар'],['Electric','Электро'],['Physical','Физ'],['Ether','Эфир'],['Wind','Ветер']];
+function _addAbilityBlock(id,t){
+  const attr=(_W.synAttr&&_W.synAttr[id])||{};
+  const tr=t.trigger;   // undefined уже не бывает (бэкфилл в _loadTags), либо объект, либо null
+  const pill=(on,label,call)=>`<span onclick="${call}" style="cursor:pointer;user-select:none;display:inline-block;padding:3px 10px;margin:2px;border-radius:12px;font-size:12px;border:1px solid ${on?'var(--accent)':'var(--border)'};background:${on?'var(--accent)':'transparent'};color:${on?'#181820':'var(--sub)'}">${label}</span>`;
+  const chk=(on,label,call)=>`<label style="display:inline-flex;align-items:center;gap:6px;font-size:13px;margin-right:16px;cursor:pointer"><input type="checkbox" ${on?'checked':''} onchange="${call}">${label}</label>`;
+  const numIn=`<input type="number" min="0" max="4" step="1" value="${t.passive_use!=null?t.passive_use:''}" onchange="_tagPassive('${id}',this.value)" style="width:46px;background:var(--field);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:3px 4px;font-size:13px;text-align:center">`;
+  const attrLine=`<div style="font-size:12px;color:var(--sub);margin:2px 0 10px">Атрибуты агента (датамайн): фракция <b>${attr.faction||'—'}</b> · элемент <b>${attr.element||'—'}</b> · спец <b>${attr.specialty||'—'}</b></div>`;
+  const importance=`<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px"><span style="font-size:13px">Важность (0-4):</span>${numIn}<span style="font-size:12px;color:var(--sub)">насколько пассивка важна агенту</span></div>`;
+  if(tr===null){
+    return attrLine+importance+`<div style="font-size:13px;color:var(--sub)">Условие: <b style="color:var(--text)">нет гейта</b> — пассивка активна всегда. ${pill(false,'Задать условие','_tagTrigEnable(\''+id+'\')')}</div>`;
+  }
+  const spec=tr.spec||[],elem=tr.elem||[];
+  return attrLine+importance+`
+    <div style="font-size:12px;color:var(--sub);margin-bottom:6px">Условие активации — пассивка работает, если в отряде есть тиммейт, удовлетворяющий ЛЮБОМУ из выбранного:</div>
+    <div style="margin-bottom:8px">${chk(!!tr.faction,'та же фракция',`_tagTrigBool('${id}','faction',this.checked)`)}${chk(!!tr.attribute,'тот же элемент, что у агента',`_tagTrigBool('${id}','attribute',this.checked)`)}</div>
+    <div style="font-size:12px;color:var(--sub);margin-bottom:2px">Спец тиммейта:</div>
+    <div style="margin-bottom:8px">${_SPEC_VOCAB.map(([k,l])=>pill(spec.includes(k),l,`_tagTrigList('${id}','spec','${k}')`)).join('')}</div>
+    <div style="font-size:12px;color:var(--sub);margin-bottom:2px">Элемент тиммейта:</div>
+    <div style="margin-bottom:8px">${_ELEM_VOCAB.map(([k,l])=>pill(elem.includes(k),l,`_tagTrigList('${id}','elem','${k}')`)).join('')}</div>
+    <div>${pill(false,'✕ убрать гейт (всегда активна)',`_tagTrigClear('${id}')`)}</div>`;
+}
+function _tagPassive(id,v){const t=_W.tags[id];v=v===''?null:Math.max(0,Math.min(4,+v||0));if(v==null)delete t.passive_use;else t.passive_use=v;_tagQueueSave(id);}
+function _tagTrigEnable(id){_W.tags[id].trigger={spec:[],elem:[],faction:false,attribute:false};_tagQueueSave(id);_renderTagsEditor();}
+function _tagTrigClear(id){_W.tags[id].trigger=null;_tagQueueSave(id);_renderTagsEditor();}
+function _tagTrigBool(id,field,on){const tr=_W.tags[id].trigger;if(!tr)return;tr[field]=!!on;_tagQueueSave(id);}
+function _tagTrigList(id,which,val){const tr=_W.tags[id].trigger;if(!tr)return;tr[which]=tr[which]||[];const i=tr[which].indexOf(val);if(i>=0)tr[which].splice(i,1);else tr[which].push(val);_tagQueueSave(id);_renderTagsEditor();}
 function _tagRole(id,role,v){const t=_W.tags[id];v=Math.max(0,Math.min(4,+v||0));if(v)t.roles[role]=v;else delete t.roles[role];_tagQueueSave(id);}
 function _tagBase(id,kind,tag,v){const t=_W.tags[id];t[kind]=t[kind]||{};v=Math.max(0,Math.min(4,+v||0));if(v)t[kind][tag]=v;else delete t[kind][tag];_tagQueueSave(id);}
 function _tagMs(id){const t=_W.tags[id];return t.ms||(t.ms={gives_self:[],gives:[],dmg:{},note:'',a_rank:false});}

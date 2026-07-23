@@ -83,10 +83,25 @@ function charStrength(entry,ctx){
 function charValue(entry,ctx){
   const cid=entry.cid, el=elemOf(cid,ctx.charMap);
   let v=charStrength(entry,ctx);
+  const role=(ctx.charMap[cid]||{}).role;
+  // элемент мобов КРИТИЧЕН для аномалистов (накопление аномалии) и дамагеров (урон); станеру не так
+  // важно (скорость стана вторична), баферам/защите почти без разницы.
+  const roleElW={atk:1,ano:1,rupt:1,stun:0.4,sup:0.2,def:0.2}[role]||0.5;
+  // СИТУАТИВНАЯ калибровка (баф/мобы) СОПОСТАВИМА с сухой силой (±0.11..0.15), а не вдвое слабее —
+  // иначе бот берёт «сильных вообще», игнорируя шиюй. Элемент мобов — ±20% урона, вес весомый.
   if(el){
-    if(ctx.buffE.includes(el))v+=BUFF_W*0.06;                 // баф Шиюй
-    v+=MOB_W*0.08*((ctx.bias.weak[el]||0)-(ctx.bias.res[el]||0)); // слабости/резисты мобов
+    if(ctx.buffE.includes(el))v+=BUFF_W*0.12;                 // баф Шиюй по ЭЛЕМЕНТУ
+    // мобы: индивидуально берём ЛУЧШУЮ комнату (чар встанет в подходящую половину), а не агрегат —
+    // fire-резист в одной половине не топит fire-чар, если во второй он в уязвимость.
+    const rb=ctx.roomBias;
+    const mobEff=(rb&&rb.length)?Math.max(...rb.map(b=>(b.weak[el]||0)-(b.res[el]||0)))
+      :((ctx.bias.weak[el]||0)-(ctx.bias.res[el]||0));
+    v+=MOB_W*0.15*roleElW*mobEff;                              // слабости/резисты мобов (±20%)
   }
+  // баф Шиюй по МЕХАНИКЕ (Glacial Gale бафает аномалию ВСЕМ аномалистам независимо от элемента —
+  // Алиса physical-аномалист тоже получает). Роль→механика.
+  const rm={ano:'anomaly',stun:'stun',rupt:'sheer',atk:'crit'}[role];
+  if(rm&&ctx.buffMechs&&ctx.buffMechs.includes(rm))v+=BUFF_W*0.14;
   const u=ctx.usage;                                          // частота использования
   if(u&&u.max>0)v+=USAGE_W*((u.count[cid]||0)/u.max-u.meanFrac);
   return v;
@@ -125,7 +140,7 @@ let SHARED_PEN=0.5;
 
 // контекст оценки. gen = общая статистика (cid→{games,wEq,bwr}), tour = статистика турнира.
 // weights = {charW:{cid:0..100}, charConstW:{cid:{ms:0..100}}} — РУЧНАЯ калибровка силы из админки.
-function makeCtx(gen,tour,charMap,buffTag,rooms,msStats,banModel,weights){
+function makeCtx(gen,tour,charMap,buffTag,rooms,msStats,banModel,weights,comboModel){
   gen=gen||{};tour=tour||{};
   const PRIOR=6;
   const genBwr=cid=>{const s=gen[cid];return(s&&s.bwr)||0.5;};
@@ -145,13 +160,18 @@ function makeCtx(gen,tour,charMap,buffTag,rooms,msStats,banModel,weights){
     if(c){if(c[ms]!=null)return c[ms];let bk=-1;for(const k in c){const kk=+k;if(kk<=(ms||0)&&kk>bk)bk=kk;}if(bk>=0)return c[bk];}
     return cw[cid]!=null?cw[cid]:50;};
   const powOf=(cid,ms)=>(powRaw(cid,ms)-50)/50;   // [-1..1], 50=средний → 0
-  return{gen,tour,charMap,msStats:msStats||{},buffTag,rooms,buffE:buffElems(buffTag),bias:mobElemBias(rooms),baseOf,usage,banThreat,powOf,hasPow:Object.keys(cw).length>0};
+  const buffMechs=(buffTag&&(buffTag.mechs||(buffTag.mech?[buffTag.mech]:[])))||[];
+  // матчап по КОМНАТАМ отдельно (тройка идёт в свою половину). Индивидуально берём лучшую комнату.
+  const roomBias=(rooms||[]).map(r=>mobElemBias([r]));
+  return{gen,tour,charMap,msStats:msStats||{},buffTag,rooms,buffE:buffElems(buffTag),buffMechs,bias:mobElemBias(rooms),roomBias,baseOf,usage,banThreat,powOf,hasPow:Object.keys(cw).length>0,combo:comboModel||null};
 }
 
 // ---- оценка команды из 3 (в очках винрейта поверх 0.5) ----
 // SYN_MULT — вес синергии состава: базовый Synergy.score.total мал (cap ±0.15) относительно
 // разброса WR, из-за чего бот собирал несвязные тройки. Усиливаем, чтобы состав был когерентным.
 let SYN_MULT=4;
+// вес эмпирических комбо (реальная совместная игра в турнирных тройках). teamCombo ~[0..0.8].
+let EMP_W=0.35;
 // entries = [{cid,ms}]
 // Synergy резолвит по ИМЕНАМ/тег-id, а не по DB-uuid — маппим cid→name (ctx.charMap)
 const namesOf=(cids,ctx)=>cids.map(c=>ctx.charMap[c]&&ctx.charMap[c].name).filter(Boolean);
@@ -165,8 +185,10 @@ function compPenalty(entries,ctx){
   const sup=roles.filter(r=>SUP_ROLES.has(r)).length;
   const stunE=entries.filter(x=>roleOfCid(ctx,x.cid)==='stun');
   let p=0;
+  if(dd===0)p-=0.22;                           // нет дд — некому наносить урон (станеры/сапы без кэрри)
   if(sup===0)p-=0.20;                          // нет поддержки (sup/def) — АА-пассивки/сустейн не закрыть
   if(dd>=3)p-=0.15;                            // три дд — конфликт поля, друг другу мешают
+  if(roles.filter(r=>r==='rupt').length>=2)p-=0.18;  // два разрушения — мёртвая пачка (не комбятся)
   // 2 станера играют в ~7% троек (WR~0.49), НО почти всегда с констой станера / разрушением / Владом —
   // штрафуем только «голый» дубль без такого энейблера (по статистике).
   if(stunE.length>=2){
@@ -177,7 +199,9 @@ function compPenalty(entries,ctx){
   }
   return p;
 }
-function teamScore(entries,ctx){
+// room (опц.) — КОНКРЕТНАЯ комната Шиюй, куда идёт тройка; матчап считаем против неё, а не агрегата
+// (fire-резист в 1-й половине не топит fire-тройку, если она пойдёт во 2-ю). null → агрегат по всем.
+function teamScore(entries,ctx,room){
   const e=entries.filter(Boolean);if(!e.length)return 0;
   const names=namesOf(e.map(x=>x.cid),ctx);
   const str=e.reduce((s,x)=>s+charStrength(x,ctx),0)/e.length;   // сила = калибровка+WR
@@ -185,20 +209,34 @@ function teamScore(entries,ctx){
   if(g.Synergy&&Synergy.ready&&names.length){
     const sc=Synergy.score(names);if(sc)syn=sc.total;
     buff=Synergy.buffMatchup(names,ctx.buffTag)||0;
-    if(ctx.rooms&&ctx.rooms.length){const agg={monsters:ctx.rooms.flatMap(r=>r.monsters||[])};
+    if(ctx.rooms&&ctx.rooms.length){
+      const agg=room?{monsters:room.monsters||[]}:{monsters:ctx.rooms.flatMap(r=>r.monsters||[])};
       const m=Synergy.elementMatchup(names,agg);if(m)mob=m.pts;}
   }
-  return str+SYN_MULT*syn+buff+mob+compPenalty(e,ctx);
+  // эмпирический бонус: тройка из реально-игравших вместе персонажей (турнирная мета)
+  const emp=ctx.combo?EMP_W*ctx.combo.teamCombo(e.map(x=>x.cid)):0;
+  return str+SYN_MULT*syn+buff+mob+compPenalty(e,ctx)+emp;
 }
+// вес баланса троек: без него бот копит силу в одной тройке, вторая — «слабое место».
+// Штрафуем разрыв |t1−t2|, чтобы обе тройки были играбельны (нужно закрыть ОБЕ комнаты Шиюй).
+let BAL_W=0.6;
 // пул до 6 entries → лучшее разбиение на две тройки (перс гибко встаёт в любую тройку)
 function poolSplit(entries,ctx){
   const e=entries.filter(Boolean);
   if(e.length<=3)return{teams:[e,[]],score:teamScore(e,ctx)};
   const n=e.length;let best=null;
+  // 2 комнаты (половины) → назначаем тройки комнатам оптимально (тройка идёт в свою половину)
+  const rms=(ctx.rooms&&ctx.rooms.length>=2)?ctx.rooms:null;
   for(let i=0;i<n;i++)for(let j=i+1;j<n;j++)for(let k=j+1;k<n;k++){
     const t1=[e[i],e[j],e[k]],t2=e.filter((_,x)=>x!==i&&x!==j&&x!==k);
-    const sc=teamScore(t1,ctx)+teamScore(t2,ctx);
-    if(!best||sc>best.score)best={teams:[t1,t2],score:sc};
+    let s1,s2,rooms=null;
+    if(rms){ // лучшее из двух назначений комнат
+      const t1a=teamScore(t1,ctx,rms[0]),t1b=teamScore(t1,ctx,rms[1]);
+      const t2a=teamScore(t2,ctx,rms[0]),t2b=teamScore(t2,ctx,rms[1]);
+      if(t1a+t2b>=t1b+t2a){s1=t1a;s2=t2b;rooms=[0,1];}else{s1=t1b;s2=t2a;rooms=[1,0];}
+    }else{s1=teamScore(t1,ctx);s2=teamScore(t2,ctx);}
+    const sc=s1+s2-(t2.length===3?BAL_W*Math.abs(s1-s2):0);   // баланс только для полных 3+3
+    if(!best||sc>best.score)best={teams:[t1,t2],score:sc,rooms};
   }
   return best;
 }
@@ -304,18 +342,43 @@ function buildArchetypeRoster(cs,ctx,ddRoles,opt){
     const need=Math.max(0,minChars-(chosen.length+3));
     return cost+tr.cost+reserve(need,new Set(tr.t))<=limit;
   };
-  // 1) лучшие по синергии непересекающиеся тройки под бюджет (до 6 = 18 персонажей)
-  for(const tr of triples){if(chosen.length>=18)break;if(fits(tr))addTriple(tr);}
-  // 2) не добрали 17 — добить самыми дешёвыми когерентными тройками
+  // 1) лучшие по синергии непересекающиеся тройки. Сверх минимума (17) добираем 6-ю тройку ТОЛЬКО
+  // если она реально играбельна (sc>=MIN_EXTRA) — иначе не пихаем слабую тройку из дешёвого мусора.
+  const MIN_EXTRA=0.15;
+  for(const tr of triples){if(chosen.length>=18)break;
+    if(chosen.length>=minChars&&tr.sc<MIN_EXTRA)continue;
+    if(fits(tr))addTriple(tr);}
+  // 2) не добрали 17 — добить одиночками по ЦЕННОСТИ (charValue), а не по дешевизне: берём самых
+  // сильных из влезающих в бюджет (сильный дешёвый лучше мусорного дешёвого).
   if(chosen.length<minChars){
-    for(const tr of triples.slice().sort((a,b)=>a.cost-b.cost)){
-      if(chosen.length>=minChars)break;if(fits(tr))addTriple(tr);}
+    const singles=all.filter(c=>!used.has(c)).map(c=>{const e=ent(c);e.val=charValue({cid:c,ms:e.ms},ctx);return e;})
+      .sort((a,b)=>b.val-a.val);
+    for(const e of singles){if(chosen.length>=minChars)break;if(cost+e.cost>limit)continue;
+      chosen.push({cid:e.cid,ms:e.ms,cost:e.cost});used.add(e.cid);cost+=e.cost;}
   }
-  // 3) всё ещё мало — добить дешёвыми одиночками (филлер)
+  // 3) всё ещё мало (бюджет впритык) — добить самыми дешёвыми, чтобы соблюсти минимум 17
   if(chosen.length<minChars){
     for(const e of all.filter(c=>!used.has(c)).map(ent).sort((a,b)=>a.cost-b.cost)){
       if(chosen.length>=minChars)break;if(cost+e.cost>limit)continue;
       chosen.push({cid:e.cid,ms:e.ms,cost:e.cost});used.add(e.cid);cost+=e.cost;}
+  }
+  // swap-улучшение: жадно меняем самого слабого в ростере на более ценного свободного, что влезает
+  // в бюджет. Убирает мусорных наполнителей троек (Seth/Anby/Nekomata) в пользу сильных. Монотонно.
+  const freeList=()=>all.filter(c=>!used.has(c));
+  const MIN_SUP=5;  // среднее по реальным ростерам sup+def ≈6.6 → не опускаемся ниже 5
+  const supCnt=()=>chosen.filter(e=>SUP_ROLES.has(roleOfCid(ctx,e.cid))).length;
+  for(let guard=0;guard<40;guard++){
+    // худший, НО не трогаем саппортов/защиту, если их ровно на минимуме (swap мог бы выбить их в дамагеры)
+    let wi=-1,wv=1e9;chosen.forEach((e,i)=>{
+      if(SUP_ROLES.has(roleOfCid(ctx,e.cid))&&supCnt()<=MIN_SUP)return;
+      const v=charValue(e,ctx);if(v<wv){wv=v;wi=i;}});
+    if(wi<0)break;const worst=chosen[wi];
+    let best=null,bv=wv;
+    for(const c of freeList()){const e=ent(c);const v=charValue({cid:c,ms:e.ms},ctx);
+      if(v>bv&&cost-worst.cost+e.cost<=limit){bv=v;best=e;}}
+    if(!best)break;
+    used.delete(worst.cid);cost-=worst.cost;
+    chosen[wi]={cid:best.cid,ms:best.ms,cost:best.cost};used.add(best.cid);cost+=best.cost;
   }
   cost=upgradeConst(chosen,cs,ctx,cost,limit,!!opt.jitter);
   return{roster:chosen.map(e=>({cid:e.cid,ms:e.ms})),cost,ok:chosen.length>=minChars&&cost<=limit};
@@ -323,6 +386,24 @@ function buildArchetypeRoster(cs,ctx,ddRoles,opt){
 
 // стоимость ростера ([{cid,ms}])
 function rosterCost(roster,cs){return roster.reduce((s,e)=>s+(cs.costOf(e.cid,e.ms)||0),0);}
+
+// ---- эмпирические комбо: РЕАЛЬНАЯ связь пар в турнирных тройках (team_slot) ----
+// triples: [[cid,cid,cid]...]. НЕ сырая частота (два популярных саппорта вроде Lighter+Nicole часто
+// вместе просто по популярности, БЕЗ синергии), а LIFT = наблюдаемое/ожидаемое: lift≈1 → 0 (совпало по
+// популярности), lift высокий → реальная связка. teamCombo = средняя по парам. Умеренный сигнал, не догма.
+function buildComboModel(triples,opt){
+  opt=opt||{};const minObs=opt.minObs||3, L=opt.L||1.5;
+  const pair={},solo={};let N=0;
+  (triples||[]).forEach(t=>{if(!t||t.length<3)return;N++;
+    t.forEach(c=>solo[c]=(solo[c]||0)+1);
+    for(let i=0;i<3;i++)for(let j=i+1;j<3;j++){const k=t[i]<t[j]?t[i]+'|'+t[j]:t[j]+'|'+t[i];pair[k]=(pair[k]||0)+1;}});
+  const pairScore=(a,b)=>{const k=a<b?a+'|'+b:b+'|'+a;const obs=pair[k]||0;if(obs<minObs)return 0;
+    const exp=(solo[a]||0)*(solo[b]||0)/(N||1);if(exp<=0)return 0;
+    return Math.max(0,Math.min(1,(obs/exp-1)/L));};   // lift-1, нормировано
+  const teamCombo=cids=>{const c=(cids||[]).filter(Boolean);if(c.length<2)return 0;
+    let s=0,n=0;for(let i=0;i<c.length;i++)for(let j=i+1;j<c.length;j++){s+=pairScore(c[i],c[j]);n++;}return n?s/n:0;};
+  return{pairScore,teamCombo};
+}
 
 // ---- модель таймера: гребневая регрессия T_прогона = base + Σ вклад_персонажа ----
 // samples: [{cids:[6 cid], t:сек}] — ТОЛЬКО чистые прогоны (0 рестартов). Возвращает
@@ -369,7 +450,10 @@ function botBan(targetAvail,ctx,botAvail,playerPool,canSteal){
   // план бота: лучшие 9 (6 в поле + 3 запасных под баны игрока) — их бот НЕ банит в себя.
   const planSet=new Set(botBestN(botAvail,ctx,PROTECT_N).map(e=>e.cid));
   const base=playerPool.length?poolScore(playerPool,ctx):0;
-  const playerGain=e=>charValue(e,ctx)+(baseWr(e.cid,ctx)-0.5)
+  // ценность для игрока = сила (charValue уже включает калибровку+WR+баф) + маржинальная синергия.
+  // РАНЬШЕ добавлялся ещё (baseWr−0.5) — двойной счёт сырого винрейта, из-за него Пайпер (высокий
+  // турнирный WR) банилась выше Алисы (реально сильнее). Убрано.
+  const playerGain=e=>charValue(e,ctx)
     +(playerPool.length?(poolScore(playerPool.concat(e),ctx)-base):0);
   // критичность для игрока (гейт по качеству, чтобы филлеры вроде Корин не считались важными)
   const roleCnt={},pickedRole={};
@@ -382,7 +466,9 @@ function botBan(targetAvail,ctx,botAvail,playerPool,canSteal){
   const halfCrit=cid=>effRoom.some(s=>s.size===1&&s.has(cid));
   const roleCrit=e=>{const r=roleOfCid(ctx,e.cid);return(r==='sup'||DMG_ROLES.has(r))&&roleCnt[r]===1&&(pickedRole[r]||0)<2;};
   const constGap=e=>Math.max(0,(e.ms||0)-(botMs[e.cid]!=null?botMs[e.cid]:0));
-  const quality=cid=>Math.max(0,Math.min(1,(baseWr(cid,ctx)-0.45)/0.12));
+  // качество = ЛИЧНАЯ СИЛА (ручная калибровка), НЕ сырой турнирный винрейт (он завышал середняков
+  // с высоким WR вроде Пайпер над реально сильными Алисой/Велиной). powOf [-1..1] → [0..1].
+  const quality=cid=>ctx.hasPow?Math.max(0,Math.min(1,ctx.powOf(cid,0)/0.4)):Math.max(0,Math.min(1,(baseWr(cid,ctx)-0.45)/0.12));
   const playerCrit=e=>quality(e.cid)*((halfCrit(e.cid)?0.4:0)+(roleCrit(e)?0.35:0)+0.06*constGap(e));
   // ущерб себе. Эксклюзив игрока (нет у бота) — 0, банить свободно (денит без цены). Общий герой:
   // в ЯДРЕ (best-9) — запрет 9; вне ядра — мягкий штраф SHARED_PEN, чтобы бот предпочёл бан
@@ -394,8 +480,13 @@ function botBan(targetAvail,ctx,botAvail,playerPool,canSteal){
   };
   // история банов: эмпирический порог бана перса, когда он есть в ростере соперника
   const banHist=e=>ctx.banThreat?BAN_HIST_W*ctx.banThreat(e.cid):0;
+  // насыщение роли: если игрок уже набрал роли достаточно (2 тройки), бан лишнего почти бесполезен —
+  // незачем банить 5-го аномалиста/саппорта. Роняет «полезность игроку».
+  const ROLE_CAP={atk:4,ano:4,rupt:4,sup:3,def:2,stun:3};
+  const roleSat=e=>{const r=roleOfCid(ctx,e.cid);if(!r)return 1;const cap=ROLE_CAP[r]||3,have=pickedRole[r]||0;
+    return have>=cap?0.2:(have>=cap-1?0.6:1);};
   let best=null,bv=-1e9;
-  targetAvail.forEach(e=>{const v=playerGain(e)+playerCrit(e)+banHist(e)-selfHarm(e);if(v>bv){bv=v;best=e.cid;}});
+  targetAvail.forEach(e=>{const v=(playerGain(e)+playerCrit(e))*roleSat(e)+banHist(e)-selfHarm(e);if(v>bv){bv=v;best=e.cid;}});
   return best;
 }
 // вес срочности: насколько бот торопится забрать общего героя, пока игрок его не украл пиком
@@ -405,7 +496,22 @@ let STEAL_W=0.05;
 // (в playerCids) под угрозой кражи — добавляем срочность, чтобы бот забрал ценного сейчас.
 // Бонус масштабируется ценностью (charValue>0), чтобы срочность не поднимала филлеров.
 function botPickPool(avail,pool,ctx,steal){
-  const cur=pool.filter(Boolean);let best=null,bg=-1e9;
+  const cur=pool.filter(Boolean);
+  // гарантия поддержки: нужно ≥2 sup/def на 6 пиков (по 1 на тройку). Пока тройки неполные, compPenalty
+  // не штрафует за отсутствие сапа → бот жадно берёт дд, а саппортов к концу разбирают. Форсим саппорта,
+  // если их не хватает И (пиков осталось впритык ИЛИ саппорты в пуле кончаются).
+  if(steal&&steal.picksLeft!=null){
+    const have=cur.filter(e=>SUP_ROLES.has(roleOfCid(ctx,e.cid))).length;
+    const need=2-have;
+    if(need>0){
+      const availSup=avail.filter(e=>SUP_ROLES.has(roleOfCid(ctx,e.cid)));
+      if(availSup.length&&(steal.picksLeft<=need||availSup.length<=need)){
+        let bs=null,bsg=-1e9;availSup.forEach(e=>{const sc=poolScore(cur.concat(e),ctx);if(sc>bsg){bsg=sc;bs=e;}});
+        if(bs)return bs;
+      }
+    }
+  }
+  let best=null,bg=-1e9;
   const urg=steal&&steal.atRisk&&steal.playerCids;
   avail.forEach(e=>{let sc=poolScore(cur.concat(e),ctx);
     if(urg&&steal.playerCids.has(e.cid)){const v=charValue(e,ctx);if(v>0)sc+=STEAL_W*v;}
@@ -413,11 +519,13 @@ function botPickPool(avail,pool,ctx,steal){
   return best;
 }
 
-g.DraftSim={buildCostSystem,makeCtx,buildBanModel,charValue,teamScore,sideScore,poolSplit,poolScore,buildRoster,buildArchetypeRoster,rosterCost,botBan,botPickPool,defaultMs,mobElemBias,buffElems,fitTimeModel,
+g.DraftSim={buildCostSystem,makeCtx,buildBanModel,charValue,teamScore,sideScore,poolSplit,poolScore,buildRoster,buildArchetypeRoster,rosterCost,botBan,botPickPool,defaultMs,mobElemBias,buffElems,fitTimeModel,buildComboModel,compPenalty,
+  get empW(){return EMP_W;},set empW(v){EMP_W=v;},
   get synMult(){return SYN_MULT;},set synMult(v){SYN_MULT=v;},
   get banHistW(){return BAN_HIST_W;},set banHistW(v){BAN_HIST_W=v;},
   get stealW(){return STEAL_W;},set stealW(v){STEAL_W=v;},
   get sharedPen(){return SHARED_PEN;},set sharedPen(v){SHARED_PEN=v;},
   get powW(){return POW_W;},set powW(v){POW_W=v;},
-  get wrW(){return WR_W;},set wrW(v){WR_W=v;}};
+  get wrW(){return WR_W;},set wrW(v){WR_W=v;},
+  get balW(){return BAL_W;},set balW(v){BAL_W=v;}};
 })(typeof window!=='undefined'?window:globalThis);
