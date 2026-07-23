@@ -1109,8 +1109,9 @@ function _scPair(mems){
   return{pred,emp,cal:pred+residShr+_scCompPen(cids),resid,residShr,g,unc:_scUnc(g,resid,_SC.nPair),bad:_scBad(cids)};
 }
 // структурно/модельно плохой состав: нет кэрри ИЛИ ролевой штраф ИЛИ отрицательная синергия (конфликт).
-// крит+аномалик тут НЕ плохой — движок считает это main+sub (см. Synergy.score), это осознанно.
+// Для троек — жёсткий фильтр: разные типы дамагеров (atk/ano/rupt) в одном отряде = невалидно.
 function _scBad(cids){
+  if(cids.length===3&&_tmMixedDD(cids.map(c=>_W.tmCharMap[c])))return true;
   return !_tmHasCarry(cids) || _scCompPen(cids)<=-0.15 || _scSyn(cids)<=-0.02;
 }
 // трио: база + синергия трио + сумма усаженных парных остатков; сверху — свой остаток + ролевой штраф
@@ -1448,12 +1449,18 @@ async function _tmDelKeys(keys){
   }
   return flush();
 }
-// разовая чистка: удалить составы, не проходящие ролевой фильтр
+// жёсткий фильтр троек: разные типы дамагеров (атакер/аномалия/разрушение) в одном отряде — невалидно
+const _DD_ROLES=new Set(['atk','ano','rupt']);
+function _tmMixedDD(cs){
+  const r=new Set(cs.map(c=>c&&c.role).filter(x=>_DD_ROLES.has(x)));
+  return r.size>=2;
+}
+// разовая чистка: удалить составы, не проходящие ролевой фильтр (для троек — и смешанных дамагеров)
 async function _tmPurgeBad(size){
   if(!_W.spLoaded){_tmSt('загружаю роли…');await _spLoad();}
   const bad=Object.values(_W.tmRows).filter(r=>r.size===size)
     .filter(r=>{const cs=(r.members||[]).map(m=>_W.tmCharMap[m.cid]);
-      return cs.every(Boolean)&&(_blHas(cs.map(c=>c.id))||!_tmRoleOk(cs));});
+      return cs.every(Boolean)&&(_blHas(cs.map(c=>c.id))||!_tmRoleOk(cs)||(size===3&&_tmMixedDD(cs)));});
   if(!bad.length)return _tmSt('невалидных нет','var(--sub)');
   if(!confirm(`Удалить ${bad.length} невалидных ${size===2?'пар':'троек'}?`))return;
   const error=await _tmDelKeys(bad.map(r=>r.key));
