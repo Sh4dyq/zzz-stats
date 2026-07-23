@@ -174,7 +174,7 @@ function _analyticsTabs(){
     const cb=(v,l)=>`<button class="tbtn" style="${_W.calib===v?'border-color:var(--accent);color:#fff':''}" onclick="_anaCalib('${v}')">${l}</button>`;
     sub=`<div style="display:flex;gap:7px;flex-wrap:wrap;margin:0 0 14px">
       <span style="font-size:12px;color:var(--sub);align-self:center;margin-right:4px">Состав:</span>
-      ${cb('solo','Соло')}${cb('duo','Дуо')}${cb('trio','Трио')}</div>`;
+      ${cb('solo','Соло')}${cb('duo','Дуо')}${cb('trio','Трио')}${cb('valid','Валидные комбинации')}</div>`;
   }
   if(_W.section==='spar'){
     const sv=_W.sparView||'spar';
@@ -200,6 +200,7 @@ function _renderWeights(){
   // section='power'
   if(_W.calib==='duo')return _renderTeams(2);
   if(_W.calib==='trio')return _renderTeams(3);
+  if(_W.calib==='valid')return _renderValid();
   const w=_W.wman;
   const rf=_W.roleFilter;
   let rows=_W.rows.map(r=>({r,power:_powerOf(r,w)}));
@@ -1032,6 +1033,7 @@ async function _tmLoad(){
   _W.tmChars=chars.slice().sort((a,b)=>(a.name||'').localeCompare(b.name||'','ru'));
   _W.tmCharMap={};chars.forEach(c=>_W.tmCharMap[c.id]=c);
   if(picks)_W.tmStats=_tmStatsCalc(picks,matches);
+  if(!_W.tmplLoaded)await _tmplLoad();                    // шаблоны для пометки «вне шаблонов»
   _W.tmLoaded=true;
 }
 const _KB_TM=8; // прайор байес-винрейта пар/троек (выборки крошечные)
@@ -1090,7 +1092,12 @@ function _scPair(cids){
   const w=_tmWr(cids);const g=w?w.g:0;const emp=w?w.wr:pred;
   const resid=emp-pred;const shr=g/(g+_SC.nPair);
   const residShr=shr*resid;
-  return{pred,emp,cal:pred+residShr+_scCompPen(cids),resid,residShr,g,unc:_scUnc(g,resid,_SC.nPair)};
+  return{pred,emp,cal:pred+residShr+_scCompPen(cids),resid,residShr,g,unc:_scUnc(g,resid,_SC.nPair),bad:_scBad(cids)};
+}
+// структурно/модельно плохой состав: нет кэрри ИЛИ ролевой штраф ИЛИ отрицательная синергия (конфликт).
+// крит+аномалик тут НЕ плохой — движок считает это main+sub (см. Synergy.score), это осознанно.
+function _scBad(cids){
+  return !_tmHasCarry(cids) || _scCompPen(cids)<=-0.15 || _scSyn(cids)<=-0.02;
 }
 // трио: база + синергия трио + сумма усаженных парных остатков; сверху — свой остаток + ролевой штраф
 // парный остаток входит ТОЛЬКО для взаимодействующих пар (tagSyn>0), иначе ложное
@@ -1105,14 +1112,13 @@ function _scTrio(cids){
   const pred=pred0+pairAdj;
   const w=_tmWr(cids);const g=w?w.g:0;const emp=w?w.wr:pred;
   const resid=emp-pred;const shr=g/(g+_SC.nTrio);
-  return{pred,emp,cal:pred+shr*resid+_scCompPen(cids),resid,residShr:shr*resid,g,unc:_scUnc(g,resid,_SC.nTrio)};
+  return{pred,emp,cal:pred+shr*resid+_scCompPen(cids),resid,residShr:shr*resid,g,unc:_scUnc(g,resid,_SC.nTrio),bad:_scBad(cids)};
 }
 function _scScore(cids){return cids.length===3?_scTrio(cids):_scPair(cids);}
-// неуверенность 0..1: голод данных (держится на приоре) + спор (модель vs факт)
+// спорность 0..1 = расхождение модели с ФАКТОМ (не голод данных — редкие пары не «жёлтые» просто так).
+// нет факта → resid≈0 → 0 (зелёный). есть факт и расходится → высокий (жёлтый).
 function _scUnc(g,resid,n){
-  const starve=n/(g+n);
-  const disagree=Math.min(1,Math.abs(resid)/0.25);
-  return Math.min(1,0.55*starve+0.65*disagree);
+  return g>0?Math.min(1,Math.abs(resid)/0.2):0;
 }
 // звёзды 0-5: клик по активной гасит в 0
 function _stars(cur,call){
@@ -1181,13 +1187,14 @@ function _renderTeams(size){
   if(_W.tmOrderFor!==size+'|'+sortKey+'|'+sortDir){
     const wrOf=r=>{const w=_tmWr((r.members||[]).map(m=>m.cid));return w?w.wr:-1;};
     const gOf=r=>{const w=_tmWr((r.members||[]).map(m=>m.cid));return w?w.g:-1;};
-    const uncOf=r=>r.reviewed?-1:_scScore((r.members||[]).map(m=>m.cid)).unc; // проверенные — вне очереди
+    // приоритет проверки: проблемные (нет кэрри/конфликт) сверху, затем расхождение с фактом
+    const prioOf=r=>{if(r.reviewed)return -1;const s=_scScore((r.members||[]).map(m=>m.cid));return(s.bad?1:0)+s.unc*0.5;};
     const cmp={
       games:(a,b)=>gOf(b)-gOf(a),
       wr:(a,b)=>wrOf(b)-wrOf(a),
       power:(a,b)=>b.stars_power-a.stars_power,
       synergy:(a,b)=>b.stars_synergy-a.stars_synergy,
-      calc:(a,b)=>uncOf(b)-uncOf(a), // спорные сверху = очередь ручной проверки
+      calc:(a,b)=>prioOf(b)-prioOf(a), // проблемные + спорные сверху = очередь ручной проверки
     }[sortKey];
     rows.sort((a,b)=>cmp(a,b)*(sortDir<0?1:-1)||a.key.localeCompare(b.key));
     _W.tmOrder=rows.map(r=>r.key);_W.tmOrderFor=size+'|'+sortKey+'|'+sortDir;
@@ -1206,10 +1213,12 @@ function _renderTeams(size){
     const cids=mem.map(m=>m.cid);
     const sc=_scScore(cids);
     const rv=!!r.reviewed;
-    const uc=rv?'#4a5568':(sc.unc>=0.66?'#ff6b6b':sc.unc>=0.4?'#f5c842':'#3ddc84');
-    const dot=`<span onclick="_tmReview('${r.key}')" title="${rv?'проверено вручную — клик снимает отметку':'клик — отметить проверенным (сбросить спорность)'}" style="cursor:pointer;width:12px;height:12px;border-radius:50%;background:${uc};display:inline-flex;align-items:center;justify-content:center;font-size:8px;font-weight:700;color:#fff">${rv?'✓':''}</span>`;
+    const uc=rv?'#4a5568':(sc.bad?'#ff6b6b':sc.unc>=0.4?'#f5c842':'#3ddc84');
+    const badTip=sc.bad?'ПРОБЛЕМНАЯ: нет кэрри / ролевой штраф / конфликт синергии. ':'';
+    const dot=`<span onclick="_tmReview('${r.key}')" title="${badTip}${rv?'проверено вручную — клик снимает отметку':'клик — отметить проверенным (сбросить спорность)'}" style="cursor:pointer;width:12px;height:12px;border-radius:50%;background:${uc};display:inline-flex;align-items:center;justify-content:center;font-size:8px;font-weight:700;color:#fff">${rv?'✓':''}</span>`;
+    const offTmpl=(_W.tmpl&&_W.tmpl.length&&!_tmplFit(cids))?`<span title="вне заданных шаблонов валидных комбинаций (мягкая подсказка)" style="color:#f5a623;font-size:11px;margin-left:4px">⚑</span>`:'';
     const scTxt=`<span title="расчёт (соло+синергия+остаток). Спорность ${Math.round(sc.unc*100)}% · факт ${sc.g} игр&#10;пред ${Math.round(sc.pred*100)}% → итог ${Math.round(sc.cal*100)}%" style="display:inline-flex;align-items:center;gap:6px;font-family:'JetBrains Mono',monospace;font-size:12px">
-      ${dot}${Math.round(sc.cal*100)}%</span>`;
+      ${dot}${Math.round(sc.cal*100)}%${offTmpl}</span>`;
     // модельные ориентиры звёзд: синергия из тегов, сила из расчётного винрейта
     const mSyn=Math.min(5,Math.round(_scTagSyn(cids)*5));
     const mPow=_tmStarsFromWr(sc.cal);
@@ -1434,6 +1443,95 @@ async function _tmPurgeInert(size){
   if(dbErr(error,'чистка невзаимодействующих'))return _tmSt('ошибка','var(--red)');
   inert.forEach(r=>delete _W.tmRows[r.key]);_W.tmOrderFor=null;_renderWeights();toast('Удалено: '+inert.length);
 }
+// ===== Валидные комбинации: опора-справочник шаблонов составов =====
+// team_templates: {size 2|3, slots:[[tok,...],...], note}. tok = "arch:<role>" | "char:<cid>".
+// слот = ИЛИ-набор опций; шаблон матчится, если членов состава можно разложить по слотам 1:1.
+// МЯГКИЙ сигнал: подсказка «по шаблону / вне шаблонов», не жёсткий фильтр (не доминирует).
+const _ARCH=[['main_anomaly','Мейн-аномалист'],['sub_anomaly','Саб-аномалист'],['crit_dps','Крит-ДД'],
+  ['sheer_dps','Разрушение'],['sub_dps','Саб-ДД'],['stunner','Стан'],['support','Саппорт']];
+const _archLbl=k=>{const a=_ARCH.find(x=>x[0]===k);return a?a[1]:k;};
+// архетипы персонажа из тег-ролей (порог 2)
+function _archOf(cid){const c=_W.tmCharMap[cid];const t=c&&_spTagOf(c);const r=(t&&t.roles)||{};
+  return new Set(_ARCH.map(a=>a[0]).filter(k=>(r[k]||0)>=2));}
+function _tokFit(tok,cid){
+  if(tok.indexOf('char:')===0)return tok.slice(5)===String(cid);
+  if(tok.indexOf('arch:')===0)return _archOf(cid).has(tok.slice(5));
+  return false;}
+// разложение членов по слотам 1:1 (бэктрекинг, как _tmRoleOk)
+function _tmplFitOne(cids,slots){
+  if(cids.length!==slots.length)return false;
+  const used=new Array(cids.length).fill(false);
+  const fit=k=>{if(k===slots.length)return true;
+    for(let i=0;i<cids.length;i++)if(!used[i]&&slots[k].some(t=>_tokFit(t,cids[i]))){used[i]=true;if(fit(k+1))return true;used[i]=false;}
+    return false;};
+  return fit(0);}
+function _tmplFit(cids){const c=cids.map(String);return(_W.tmpl||[]).some(t=>_tmplFitOne(c,t.slots||[]));}
+async function _tmplLoad(){
+  const rows=await _fetchAllW('team_templates');
+  _W.tmpl=rows.sort((a,b)=>(a.sort_order-b.sort_order)||String(a.id).localeCompare(String(b.id)));
+  _W.tmplLoaded=true;}
+function _renderValid(){
+  if(!_W.tmLoaded){
+    html(`${_analyticsTabs()}<div class="card" style="padding:22px"><span class="spinner"></span> Загружаю персонажей и теги…</div>`);
+    _tmLoad().then(()=>_renderWeights()).catch(e=>html(`${_analyticsTabs()}<div class="card" style="padding:22px;color:var(--red)">Ошибка: ${e.message}</div>`));return;}
+  if(!_W.tmplLoaded){
+    html(`${_analyticsTabs()}<div class="card" style="padding:22px"><span class="spinner"></span> Загружаю шаблоны…</div>`);
+    _tmplLoad().then(()=>_renderWeights()).catch(e=>html(`${_analyticsTabs()}<div class="card" style="padding:22px;color:var(--red)">Ошибка: ${e.message}</div>`));return;}
+  const inSt='background:var(--field);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:4px 7px;font-size:13px';
+  const n=_W.valNew||(_W.valNew={size:3,slots:[[],[],[]],note:''});
+  const tokChip=(tok,onDel)=>{let ic='',lbl;
+    if(tok.indexOf('char:')===0){const c=_W.tmCharMap[tok.slice(5)];lbl=c?escapeHtml(c.name):'?';if(c)ic=iconChar(c,18);}
+    else lbl=_archLbl(tok.slice(5));
+    return `<span style="display:inline-flex;align-items:center;gap:4px;background:var(--field);border:1px solid var(--border);border-radius:12px;padding:2px 6px;font-size:12px;margin:2px">${ic}${lbl}${onDel?`<span onclick="${onDel}" style="cursor:pointer;color:var(--sub);font-weight:700">×</span>`:''}</span>`;};
+  // редактор одного слота: чипы + два добавлятора (архетип / персонаж)
+  const slotEd=i=>{
+    const opts=_ARCH.map(a=>`<option value="arch:${a[0]}">${a[1]}</option>`).join('');
+    const chars=_W.tmChars.map(c=>`<option value="char:${c.id}">${escapeHtml(c.name)}</option>`).join('');
+    return `<div style="border:1px solid var(--border);border-radius:8px;padding:8px;min-width:190px">
+      <div style="font-size:11px;color:var(--sub);margin-bottom:4px">Слот ${i+1}</div>
+      <div style="min-height:24px">${n.slots[i].map(t=>tokChip(t,`_valSlotDel(${i},'${t}')`)).join('')||'<span style="font-size:11px;color:var(--sub)">любой из…</span>'}</div>
+      <div style="display:flex;gap:4px;margin-top:6px;flex-wrap:wrap">
+        <select onchange="_valSlotAdd(${i},this.value);this.value=''" style="${inSt};font-size:12px"><option value="">+ архетип</option>${opts}</select>
+        <select onchange="_valSlotAdd(${i},this.value);this.value=''" style="${inSt};font-size:12px;max-width:150px"><option value="">+ персонаж</option>${chars}</select>
+      </div></div>`;};
+  const sizeBtn=s=>`<button class="tbtn" style="${n.size===s?'border-color:var(--accent);color:#fff':''}" onclick="_valSize(${s})">${s} слота</button>`;
+  const form=`<div class="card" style="padding:14px 16px;margin-bottom:16px">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+      <span style="font-size:13px;font-weight:600">Новый шаблон</span>${sizeBtn(2)}${sizeBtn(3)}</div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-start">${n.slots.map((_,i)=>slotEd(i)).join('')}</div>
+    <div style="display:flex;gap:10px;align-items:center;margin-top:12px;flex-wrap:wrap">
+      <input value="${escapeHtml(n.note||'')}" placeholder="заметка (напр. «Панда-разрушение»)" oninput="_W.valNew.note=this.value" style="${inSt};min-width:240px">
+      <button class="btn btn-y" onclick="_valAdd()">Добавить шаблон</button>
+      <span id="val-status" style="font-size:12px;color:var(--sub)"></span></div>
+    <div style="font-size:11px;color:var(--sub);margin-top:8px">Слот = «любой из» перечисленного (архетипы и/или конкретные персонажи). Шаблон засчитывается, если членов состава можно разложить по слотам один-в-один.</div>
+  </div>`;
+  const list=(_W.tmpl.length)?_W.tmpl.map(t=>`<div class="card" style="padding:12px 14px;margin-bottom:10px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+    <span class="count-chip">${t.size}</span>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;flex:1">${(t.slots||[]).map((sl,i)=>`${i?'<span style="color:var(--sub)">+</span>':''}<span style="display:inline-flex;flex-wrap:wrap;align-items:center">${sl.map(tok=>tokChip(tok,null)).join('')||'<span style="font-size:11px;color:var(--sub)">пусто</span>'}</span>`).join('')}</div>
+    ${t.note?`<span style="font-size:12px;color:var(--sub)">${escapeHtml(t.note)}</span>`:''}
+    <button class="btn" style="padding:2px 9px" onclick="_valDel('${t.id}')">✕</button></div>`).join('')
+    :`<div class="card" style="padding:18px;color:var(--sub);font-size:13px">Пока нет шаблонов. Собери первый выше — это опора валидности для Дуо/Трио.</div>`;
+  html(`${_analyticsTabs()}${form}
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px"><span class="count-chip">${_W.tmpl.length} шаблонов</span>
+      <span style="font-size:12px;color:var(--sub)">Опора для валидности составов. В Дуо/Трио строки вне шаблонов помечаются — это мягкая подсказка, не жёсткий фильтр.</span></div>
+    ${list}`);}
+function _valSt(s,c){const el=document.getElementById('val-status');if(el){el.textContent=s;el.style.color=c||'var(--sub)';}}
+function _valSize(s){const n=_W.valNew;n.size=s;n.slots=Array.from({length:s},(_,i)=>n.slots[i]||[]);_renderWeights();}
+function _valSlotAdd(i,tok){if(!tok)return;const s=_W.valNew.slots[i];if(!s.includes(tok))s.push(tok);_renderWeights();}
+function _valSlotDel(i,tok){const s=_W.valNew.slots[i];_W.valNew.slots[i]=s.filter(t=>t!==tok);_renderWeights();}
+async function _valAdd(){
+  const n=_W.valNew;
+  if(n.slots.some(s=>!s.length))return _valSt('в каждом слоте нужна хотя бы одна опция','var(--red)');
+  const row={size:n.size,slots:n.slots,note:n.note||'',sort_order:_W.tmpl.length,created_at:new Date().toISOString()};
+  _valSt('сохранение…');
+  const{data,error}=await sb.from('team_templates').insert(row).select().single();
+  if(dbErr(error,'создание шаблона'))return _valSt('ошибка','var(--red)');
+  _W.tmpl.push(data);_W.valNew={size:n.size,slots:Array.from({length:n.size},()=>[]),note:''};_renderWeights();toast('Шаблон добавлен');}
+async function _valDel(id){
+  if(!confirm('Удалить шаблон?'))return;
+  const{error}=await sb.from('team_templates').delete().eq('id',id);
+  if(dbErr(error,'удаление шаблона'))return;
+  _W.tmpl=_W.tmpl.filter(t=>String(t.id)!==String(id));_renderWeights();}
 async function _tmSave(key){
   const r=_W.tmRows[key];if(!r)return;
   r.updated_at=new Date().toISOString();
