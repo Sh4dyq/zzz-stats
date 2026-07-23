@@ -1436,11 +1436,17 @@ async function _tmAutofill(size){
 }
 // удаление пачками: .in('key',[...]) с тысячами ключей рвёт URL (Failed to fetch)
 async function _tmDelKeys(keys){
-  for(let i=0;i<keys.length;i+=200){
-    const{error}=await sb.from('team_ratings').delete().in('key',keys.slice(i,i+200));
-    if(error)return error;
+  // .in() кладёт ключи в query string → батчи по бюджету длины URL (ключ тройки ~116 символов,
+  // фикс. счётчик в 200 штук рвал лимит → 400 Bad Request)
+  let batch=[],len=0;
+  const flush=async()=>{if(!batch.length)return null;
+    const{error}=await sb.from('team_ratings').delete().in('key',batch);
+    batch=[];len=0;return error;};
+  for(const k of keys){
+    if(len+k.length+5>4000){const e=await flush();if(e)return e;}
+    batch.push(k);len+=k.length+5;
   }
-  return null;
+  return flush();
 }
 // разовая чистка: удалить составы, не проходящие ролевой фильтр
 async function _tmPurgeBad(size){
