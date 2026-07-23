@@ -1008,17 +1008,19 @@ function _tmStatsCalc(picks,matches){ // винрейты пар и троек �
   const teams={};
   picks.forEach(p=>{const k=p.match_id+'|'+p.player_id+'|'+(p.team_slot??0);
     (teams[k]=teams[k]||{cids:[],m:p.match_id,pl:p.player_id}).cids.push(String(p.character_id));});
-  const pair={},trio={};
+  const solo={},pair={},trio={};
   Object.values(teams).forEach(t=>{
     const m=mBy[t.m];if(!m||!m.winner_id)return;
     const win=m.winner_id===t.pl?1:0;const c=[...new Set(t.cids)].sort();
+    c.forEach(id=>{(solo[id]=solo[id]||{g:0,w:0});solo[id].g++;solo[id].w+=win;});
     for(let i=0;i<c.length;i++)for(let j=i+1;j<c.length;j++){
       const k=c[i]+'|'+c[j];(pair[k]=pair[k]||{g:0,w:0});pair[k].g++;pair[k].w+=win;}
     if(c.length===3){const k=c.join('|');(trio[k]=trio[k]||{g:0,w:0});trio[k].g++;trio[k].w+=win;}
   });
-  return{pair,trio};
+  return{solo,pair,trio};
 }
 async function _tmLoad(){
+  if(!_W.tagsLoaded)await _loadTags();                    // теги нужны скореру (tagSyn)
   const jobs=[_fetchAllW('team_ratings')];
   jobs.push((D.chars&&D.chars.length)?Promise.resolve(D.chars):_fetchAllW('characters'));
   jobs.push(_W.tmStats?Promise.resolve(null):_fetchAllW('match_picks'));
@@ -1037,6 +1039,56 @@ function _tmWr(cids){
   const rec=c.length===2?s.pair[c.join('|')]:s.trio[c.join('|')];
   if(!rec)return null;
   return{g:rec.g,wr:(rec.w+_KB_TM*0.5)/(rec.g+_KB_TM)};
+}
+// ===== Скорер составов: ортогональные источники в шкале винрейта (см. модель) =====
+// Валюта — доля 0..1 (0.5 = средний). Соло/пара/трио — из одного источника (пики),
+// tagSyn — из тегов, эмпирика входит ТОЛЬКО как остаток → нет двойного счёта.
+const _SC={synK:0.10,nSol:8,nPair:6,nTrio:5}; // synK: макс. вклад синергии (pp); n*: сила усадки остатка
+function _scSolo(id){ // байес-винрейт персонажа по пикам
+  const r=(_W.tmStats&&_W.tmStats.solo||{})[String(id)];
+  if(!r)return{g:0,wr:0.5};
+  return{g:r.g,wr:(r.w+_SC.nSol*0.5)/(r.g+_SC.nSol)};
+}
+function _scTagSyn(cids){ // синергия тегов 0..1
+  const chars=cids.map(id=>_W.tmCharMap[id]).filter(Boolean);
+  if(chars.length<2||typeof _tmTagSyn!=='function')return 0;
+  try{return _tmTagSyn(chars)||0;}catch(e){return 0;}
+}
+// база = средний соло-винрейт участников + синергия тегов
+function _scPredBase(cids){
+  const sol=cids.map(id=>_scSolo(id));
+  const base=sol.reduce((s,x)=>s+x.wr,0)/sol.length;
+  return base+_SC.synK*_scTagSyn(cids);
+}
+// пара: {pred,emp,cal,resid,residShr,g,unc}. residShr — усаженный остаток (для протаскивания в трио)
+function _scPair(cids){
+  const pred=_scPredBase(cids);
+  const w=_tmWr(cids);const g=w?w.g:0;const emp=w?w.wr:pred;
+  const resid=emp-pred;const shr=g/(g+_SC.nPair);
+  const residShr=shr*resid;
+  return{pred,emp,cal:pred+residShr,resid,residShr,g,unc:_scUnc(g,resid,_SC.nPair)};
+}
+// трио: база + синергия трио + сумма усаженных парных остатков; сверху — свой остаток
+// парный остаток входит ТОЛЬКО для взаимодействующих пар (tagSyn>0), иначе ложное
+// приписывание синергии невзаимодействующим (Люси+Ликаон и т.п.) — как в synergy.js
+function _scTrio(cids){
+  const pred0=_scPredBase(cids);
+  let pairAdj=0;
+  for(let i=0;i<cids.length;i++)for(let j=i+1;j<cids.length;j++){
+    const p=[cids[i],cids[j]];
+    if(_scTagSyn(p)>0)pairAdj+=_scPair(p).residShr;
+  }
+  const pred=pred0+pairAdj;
+  const w=_tmWr(cids);const g=w?w.g:0;const emp=w?w.wr:pred;
+  const resid=emp-pred;const shr=g/(g+_SC.nTrio);
+  return{pred,emp,cal:pred+shr*resid,resid,residShr:shr*resid,g,unc:_scUnc(g,resid,_SC.nTrio)};
+}
+function _scScore(cids){return cids.length===3?_scTrio(cids):_scPair(cids);}
+// неуверенность 0..1: голод данных (держится на приоре) + спор (модель vs факт)
+function _scUnc(g,resid,n){
+  const starve=n/(g+n);
+  const disagree=Math.min(1,Math.abs(resid)/0.25);
+  return Math.min(1,0.55*starve+0.65*disagree);
 }
 // звёзды 0-5: клик по активной гасит в 0
 function _stars(cur,call){
@@ -1105,11 +1157,13 @@ function _renderTeams(size){
   if(_W.tmOrderFor!==size+'|'+sortKey+'|'+sortDir){
     const wrOf=r=>{const w=_tmWr((r.members||[]).map(m=>m.cid));return w?w.wr:-1;};
     const gOf=r=>{const w=_tmWr((r.members||[]).map(m=>m.cid));return w?w.g:-1;};
+    const uncOf=r=>_scScore((r.members||[]).map(m=>m.cid)).unc;
     const cmp={
       games:(a,b)=>gOf(b)-gOf(a),
       wr:(a,b)=>wrOf(b)-wrOf(a),
       power:(a,b)=>b.stars_power-a.stars_power,
       synergy:(a,b)=>b.stars_synergy-a.stars_synergy,
+      calc:(a,b)=>uncOf(b)-uncOf(a), // спорные сверху = очередь ручной проверки
     }[sortKey];
     rows.sort((a,b)=>manual(a)-manual(b)||cmp(a,b)*(sortDir<0?1:-1)||a.key.localeCompare(b.key));
     _W.tmOrder=rows.map(r=>r.key);_W.tmOrderFor=size+'|'+sortKey+'|'+sortDir;
@@ -1125,11 +1179,16 @@ function _renderTeams(size){
     const wr=_tmWr(mem.map(m=>m.cid));
     const wrTxt=wr?`<span title="байес-винрейт по реальным пикам (прайор ${_KB_TM})" style="font-family:'JetBrains Mono',monospace;font-size:12px;color:${wr.wr>=0.5?'#3ddc84':'#ff8a8a'}">${Math.round(wr.wr*100)}% · ${wr.g} игр</span>`
       :'<span style="font-size:11px;color:var(--sub)">нет пиков</span>';
+    const sc=_scScore(mem.map(m=>m.cid));
+    const uc=sc.unc>=0.66?'#ff6b6b':sc.unc>=0.4?'#f5c842':'#3ddc84';
+    const scTxt=`<span title="расчёт (соло+синергия+остаток). Спорность ${Math.round(sc.unc*100)}% · факт ${sc.g} игр&#10;пред ${Math.round(sc.pred*100)}% → итог ${Math.round(sc.cal*100)}%" style="display:inline-flex;align-items:center;gap:6px;font-family:'JetBrains Mono',monospace;font-size:12px">
+      <span style="width:7px;height:7px;border-radius:50%;background:${uc}" ></span>${Math.round(sc.cal*100)}%</span>`;
     return `<tr style="border-top:1px solid var(--line)">
       <td style="padding:9px 14px">${chips}</td>
       <td style="padding:9px 8px;text-align:center;white-space:nowrap">${_stars(r.stars_synergy,`_tmStar('${r.key}','stars_synergy',{v})`)}</td>
       <td style="padding:9px 8px;text-align:center;white-space:nowrap">${_stars(r.stars_power,`_tmStar('${r.key}','stars_power',{v})`)}</td>
       <td style="padding:9px 8px;text-align:center">${wrTxt}</td>
+      <td style="padding:9px 8px;text-align:center">${scTxt}</td>
       <td style="padding:9px 8px;min-width:160px"><input value="${escapeHtml(r.note||'')}" placeholder="заметка" onchange="_tmNote('${r.key}',this.value)" style="${inSt};width:100%;font-size:12px"></td>
       <td style="padding:9px 10px;text-align:center"><button class="btn" style="padding:2px 9px" onclick="_tmDel('${r.key}')">✕</button></td></tr>`;
   };
@@ -1138,6 +1197,7 @@ function _renderTeams(size){
       <th style="padding:10px 14px">Состав</th>
       ${_tmTh('Синергия','synergy',sortKey)}${_tmTh('Сила','power',sortKey)}
       ${_tmTh(sortKey==='wr'?'Факт · винрейт':'Факт · игры','__fact',sortKey,['games','wr'].includes(sortKey))}
+      ${_tmTh('Расчёт','calc',sortKey)}
       <th style="padding:10px 8px">Заметка</th><th></th></tr></thead>
     <tbody>${rows.map(rowHTML).join('')}</tbody></table></div>`
     :`<div class="card" style="padding:18px;color:var(--sub);font-size:13px">Пока нет сохранённых ${label}. Собери первую выше.</div>`;
