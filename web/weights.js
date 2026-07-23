@@ -1033,6 +1033,11 @@ async function _tmLoad(){
   _W.tmChars=chars.slice().sort((a,b)=>(a.name||'').localeCompare(b.name||'','ru'));
   _W.tmCharMap={};chars.forEach(c=>_W.tmCharMap[c.id]=c);
   if(picks)_W.tmStats=_tmStatsCalc(picks,matches);
+  if(!_W.cweights){ // ручная калибровка (база+консты) нужна скореру; прямой заход мимо pgWeights
+    const[saved,csaved]=await Promise.all([_fetchAllW('char_weights'),_fetchAllW('char_const_weights')]);
+    _W.saved={};saved.forEach(r=>_W.saved[r.character_id]=r);
+    _W.cweights={};csaved.forEach(r=>{(_W.cweights[r.character_id]=_W.cweights[r.character_id]||{})[r.mindscape]=r.manual_weight;});
+  }
   if(!_W.tmplLoaded)await _tmplLoad();                    // шаблоны для пометки «вне шаблонов»
   _W.tmLoaded=true;
 }
@@ -1047,11 +1052,16 @@ function _tmWr(cids){
 // ===== Скорер составов: ортогональные источники в шкале винрейта (см. модель) =====
 // Валюта — доля 0..1 (0.5 = средний). Соло/пара/трио — из одного источника (пики),
 // tagSyn — из тегов, эмпирика входит ТОЛЬКО как остаток → нет двойного счёта.
-const _SC={synK:0.10,nSol:8,nPair:6,nTrio:5}; // synK: фолбэк-вклад синергии; n*: сила усадки остатка
-function _scSolo(id){ // байес-винрейт персонажа по пикам
+const _SC={synK:0.10,nSol:8,nPair:6,nTrio:5,manW:0.12,pickW:0.5,gateW:0.35}; // synK: фолбэк-вклад синергии; n*: сила усадки остатка; manW/pickW: ручная калибровка vs пики; gateW: гейт по слабейшему
+const _scMem=m=>(m&&typeof m==='object')?{cid:m.cid,ms:+m.ms||0}:{cid:m,ms:0};
+// соло-сила члена состава: ручная калибровка (конст-версия при ms>0, иначе база) — главный сигнал,
+// байес-винрейт пиков — вторичный. В валюте винрейта. Astra M1 > M0 при разных cweights.
+function _scSolo(id,ms){
   const r=(_W.tmStats&&_W.tmStats.solo||{})[String(id)];
-  if(!r)return{g:0,wr:0.5};
-  return{g:r.g,wr:(r.w+_SC.nSol*0.5)/(r.g+_SC.nSol)};
+  const bwr=r?(r.w+_SC.nSol*0.5)/(r.g+_SC.nSol):0.5;
+  const cwv=ms>0?((_W.cweights&&_W.cweights[id])||{})[ms]:null; // конст-вес только если задан явно
+  const man=cwv??(((_W.saved&&_W.saved[id])||{}).manual_weight??50);
+  return{g:r?r.g:0,wr:0.5+_SC.manW*(man-50)/50+_SC.pickW*(bwr-0.5)};
 }
 const _scNames=cids=>cids.map(id=>(_W.tmCharMap[id]||{}).name).filter(Boolean);
 // боевая синергия (Synergy.score.total, в очках винрейта, cap ±.15, С КОНФЛИКТАМИ). Фолбэк — теги.
@@ -1080,15 +1090,19 @@ function _scCompPen(cids){
   }
   return 0;
 }
-// база = средний соло-винрейт участников + боевая синергия
-function _scPredBase(cids){
-  const sol=cids.map(id=>_scSolo(id));
-  const base=sol.reduce((s,x)=>s+x.wr,0)/sol.length;
-  return base+_scSyn(cids);
+// база = средний соло-винрейт участников (с конст-калибровкой) + гейт по слабейшему + боевая синергия.
+// Гейт: сила состава упирается в нижний тир (слабейшего члена не компенсировать средним).
+function _scPredBase(mems){
+  const sol=mems.map(m=>_scSolo(m.cid,m.ms));
+  let base=sol.reduce((s,x)=>s+x.wr,0)/sol.length;
+  const mn=Math.min(...sol.map(x=>x.wr));
+  base-=_SC.gateW*(base-mn);
+  return base+_scSyn(mems.map(m=>m.cid));
 }
 // пара: {pred,emp,cal,resid,residShr,g,unc}. residShr — усаженный остаток (для протаскивания в трио)
-function _scPair(cids){
-  const pred=_scPredBase(cids);
+function _scPair(mems){
+  mems=mems.map(_scMem);const cids=mems.map(m=>m.cid);
+  const pred=_scPredBase(mems);
   const w=_tmWr(cids);const g=w?w.g:0;const emp=w?w.wr:pred;
   const resid=emp-pred;const shr=g/(g+_SC.nPair);
   const residShr=shr*resid;
@@ -1102,19 +1116,28 @@ function _scBad(cids){
 // трио: база + синергия трио + сумма усаженных парных остатков; сверху — свой остаток + ролевой штраф
 // парный остаток входит ТОЛЬКО для взаимодействующих пар (tagSyn>0), иначе ложное
 // приписывание синергии невзаимодействующим (Люси+Ликаон и т.п.) — как в synergy.js
-function _scTrio(cids){
-  const pred0=_scPredBase(cids);
+function _scTrio(mems){
+  mems=mems.map(_scMem);const cids=mems.map(m=>m.cid);
+  const pred0=_scPredBase(mems);
   let pairAdj=0;
-  for(let i=0;i<cids.length;i++)for(let j=i+1;j<cids.length;j++){
-    const p=[cids[i],cids[j]];
-    if(_scInteract(p))pairAdj+=_scPair(p).residShr;
+  for(let i=0;i<mems.length;i++)for(let j=i+1;j<mems.length;j++){
+    const p=[mems[i],mems[j]];
+    if(_scInteract(p.map(m=>m.cid)))pairAdj+=_scPair(p).residShr;
   }
   const pred=pred0+pairAdj;
   const w=_tmWr(cids);const g=w?w.g:0;const emp=w?w.wr:pred;
   const resid=emp-pred;const shr=g/(g+_SC.nTrio);
   return{pred,emp,cal:pred+shr*resid+_scCompPen(cids),resid,residShr:shr*resid,g,unc:_scUnc(g,resid,_SC.nTrio),bad:_scBad(cids)};
 }
-function _scScore(cids){return cids.length===3?_scTrio(cids):_scPair(cids);}
+function _scScore(mems){return mems.length===3?_scTrio(mems):_scPair(mems);} // mems: [{cid,ms}] или [cid]
+// конст-гейтнутый член: у персонажа есть явная конст-калибровка, отличная от базы →
+// состав стоит пересчитать/проверить в констовых версиях (ключ team_ratings уже cid:ms)
+function _scConstGated(mems){
+  return mems.some(m=>{const cw=(_W.cweights||{})[_scMem(m).cid];
+    if(!cw)return false;
+    const base=(((_W.saved||{})[_scMem(m).cid])||{}).manual_weight??50;
+    return Object.values(cw).some(v=>Math.abs(v-base)>=10);});
+}
 // спорность 0..1 = расхождение модели с ФАКТОМ (не голод данных — редкие пары не «жёлтые» просто так).
 // нет факта → resid≈0 → 0 (зелёный). есть факт и расходится → высокий (жёлтый).
 function _scUnc(g,resid,n){
@@ -1188,7 +1211,8 @@ function _renderTeams(size){
     const wrOf=r=>{const w=_tmWr((r.members||[]).map(m=>m.cid));return w?w.wr:-1;};
     const gOf=r=>{const w=_tmWr((r.members||[]).map(m=>m.cid));return w?w.g:-1;};
     // приоритет проверки: проблемные (нет кэрри/конфликт) сверху, затем расхождение с фактом
-    const prioOf=r=>{if(r.reviewed)return -1;const s=_scScore((r.members||[]).map(m=>m.cid));return(s.bad?1:0)+s.unc*0.5;};
+    // конст-гейтнутые члены — небольшой буст: пересмотреть в констовых версиях
+    const prioOf=r=>{if(r.reviewed)return -1;const s=_scScore(r.members||[]);return(s.bad?1:0)+s.unc*0.5+(_scConstGated(r.members||[])?0.25:0);};
     const cmp={
       games:(a,b)=>gOf(b)-gOf(a),
       wr:(a,b)=>wrOf(b)-wrOf(a),
@@ -1211,7 +1235,7 @@ function _renderTeams(size){
     const wrTxt=wr?`<span title="байес-винрейт по реальным пикам (прайор ${_KB_TM})" style="font-family:'JetBrains Mono',monospace;font-size:12px;color:${wr.wr>=0.5?'#3ddc84':'#ff8a8a'}">${Math.round(wr.wr*100)}% · ${wr.g} игр</span>`
       :'<span style="font-size:11px;color:var(--sub)">нет пиков</span>';
     const cids=mem.map(m=>m.cid);
-    const sc=_scScore(cids);
+    const sc=_scScore(mem);
     const rv=!!r.reviewed;
     const uc=rv?'#4a5568':(sc.bad?'#ff6b6b':sc.unc>=0.4?'#f5c842':'#3ddc84');
     const badTip=sc.bad?'ПРОБЛЕМНАЯ: нет кэрри / ролевой штраф / конфликт синергии. ':'';
@@ -1458,6 +1482,8 @@ async function _tmPurgeInert(size){
 const _ARCH=[['main_anomaly','Мейн-аномалист'],['sub_anomaly','Саб-аномалист'],['crit_dps','Крит-ДД'],
   ['sheer_dps','Разрушение'],['sub_dps','Саб-ДД'],['stunner','Стан'],['support','Саппорт']];
 const _archLbl=k=>{const a=_ARCH.find(x=>x[0]===k);return a?a[1]:k;};
+// иконка роли для архетипа (визуальный намёк, не маппинг ролей)
+const _ARCH_IC={main_anomaly:'ano',sub_anomaly:'ano',crit_dps:'atk',sheer_dps:'rupt',sub_dps:'atk',stunner:'stun',support:'sup'};
 // архетипы персонажа из тег-ролей (порог 2)
 function _archOf(cid){const c=_W.tmCharMap[cid];const t=c&&_spTagOf(c);const r=(t&&t.roles)||{};
   return new Set(_ARCH.map(a=>a[0]).filter(k=>(r[k]||0)>=2));}
@@ -1489,34 +1515,49 @@ function _renderValid(){
   const n=_W.valNew||(_W.valNew={size:3,slots:[[],[],[]],note:''});
   const tokChip=(tok,onDel)=>{let ic='',lbl;
     if(tok.indexOf('char:')===0){const c=_W.tmCharMap[tok.slice(5)];lbl=c?escapeHtml(c.name):'?';if(c)ic=iconChar(c,18);}
-    else lbl=_archLbl(tok.slice(5));
+    else{const k=tok.slice(5);lbl=_archLbl(k);ic=iconRole(_ARCH_IC[k],16);}
     return `<span style="display:inline-flex;align-items:center;gap:4px;background:var(--field);border:1px solid var(--border);border-radius:12px;padding:2px 6px;font-size:12px;margin:2px">${ic}${lbl}${onDel?`<span onclick="${onDel}" style="cursor:pointer;color:var(--sub);font-weight:700">×</span>`:''}</span>`;};
-  // редактор одного слота: чипы + два добавлятора (архетип / персонаж)
+  // редактор одного слота: чипы + кнопка-пикер. Слоты равнозначны — порядок в отряде не важен.
   const slotEd=i=>{
-    const opts=_ARCH.map(a=>`<option value="arch:${a[0]}">${a[1]}</option>`).join('');
-    const chars=_W.tmChars.map(c=>`<option value="char:${c.id}">${escapeHtml(c.name)}</option>`).join('');
-    return `<div style="border:1px solid var(--border);border-radius:8px;padding:8px;min-width:190px">
-      <div style="font-size:11px;color:var(--sub);margin-bottom:4px">Слот ${i+1}</div>
+    const open=_W.valPickOpen===i;
+    return `<div style="border:1px solid ${open?'var(--accent)':'var(--border)'};border-radius:8px;padding:8px;min-width:170px">
       <div style="min-height:24px">${n.slots[i].map(t=>tokChip(t,`_valSlotDel(${i},'${t}')`)).join('')||'<span style="font-size:11px;color:var(--sub)">любой из…</span>'}</div>
-      <div style="display:flex;gap:4px;margin-top:6px;flex-wrap:wrap">
-        <select onchange="_valSlotAdd(${i},this.value);this.value=''" style="${inSt};font-size:12px"><option value="">+ архетип</option>${opts}</select>
-        <select onchange="_valSlotAdd(${i},this.value);this.value=''" style="${inSt};font-size:12px;max-width:150px"><option value="">+ персонаж</option>${chars}</select>
-      </div></div>`;};
+      <button class="btn" style="padding:3px 10px;margin-top:6px;${open?'border-color:var(--accent)':''}" onclick="_valPickTgl(${i})">${open?'закрыть':'+ добавить'}</button></div>`;};
+  // иконочный пикер: архетипы одной строкой + сетка персонажей (как в Дуо/Трио)
+  const picker=()=>{
+    const i=_W.valPickOpen;if(i==null)return '';
+    const q=(_W.valPickQ||'').toLowerCase();
+    const inSlot=new Set(n.slots[i]);
+    const archChip=a=>`<span onclick="_valSlotAdd(${i},'arch:${a[0]}')" style="display:inline-flex;align-items:center;gap:5px;padding:4px 9px;border-radius:14px;cursor:pointer;font-size:12px;border:1px solid ${inSlot.has('arch:'+a[0])?'var(--accent)':'var(--border)'};${inSlot.has('arch:'+a[0])?'background:rgba(83,74,183,.22)':''}">${iconRole(_ARCH_IC[a[0]],16)}${a[1]}</span>`;
+    const list=_W.tmChars.filter(c=>!q||(c.name||'').toLowerCase().includes(q));
+    const cell=c=>{const on=inSlot.has('char:'+c.id);
+      return `<div onclick="_valSlotAdd(${i},'char:${c.id}')" title="${escapeHtml(c.name)}" style="display:flex;flex-direction:column;align-items:center;gap:3px;width:66px;padding:6px 2px;border-radius:8px;cursor:pointer;${on?'background:rgba(83,74,183,.22);border:1px solid var(--accent)':'border:1px solid transparent'}" onmouseover="this.style.background='var(--field)'" onmouseout="this.style.background='${on?'rgba(83,74,183,.22)':'transparent'}'">
+      ${iconChar(c,44)}<span style="font-size:10.5px;text-align:center;line-height:1.15;max-width:64px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(c.name)}${c.rarity==='A'?' (A)':''}</span></div>`;};
+    return `<div class="card" style="padding:12px 14px;margin:10px 0 6px;border-color:var(--accent)">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap">
+        <span style="font-size:13px;font-weight:600">Добавить в слот (клик — вкл/выкл)</span>
+        <input placeholder="поиск персонажа…" value="${escapeHtml(_W.valPickQ||'')}" oninput="_valPickSearch(this.value)" style="${inSt};min-width:180px">
+        <button class="btn" style="padding:3px 11px;margin-left:auto" onclick="_valPickTgl(${i})">Закрыть</button></div>
+      <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:10px">${_ARCH.map(archChip).join('')}</div>
+      <div style="display:flex;flex-wrap:wrap;gap:4px;max-height:300px;overflow:auto">${list.map(cell).join('')||'<span style="color:var(--sub);font-size:12px">ничего не найдено</span>'}</div></div>`;};
   const sizeBtn=s=>`<button class="tbtn" style="${n.size===s?'border-color:var(--accent);color:#fff':''}" onclick="_valSize(${s})">${s} слота</button>`;
   const form=`<div class="card" style="padding:14px 16px;margin-bottom:16px">
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
-      <span style="font-size:13px;font-weight:600">Новый шаблон</span>${sizeBtn(2)}${sizeBtn(3)}</div>
-    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-start">${n.slots.map((_,i)=>slotEd(i)).join('')}</div>
+      <span style="font-size:13px;font-weight:600">${n.id?'Правка шаблона':'Новый шаблон'}</span>${sizeBtn(2)}${sizeBtn(3)}</div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-start">${n.slots.map((_,i)=>slotEd(i)).join('<span style="color:var(--sub);align-self:center">+</span>')}</div>
+    ${picker()}
     <div style="display:flex;gap:10px;align-items:center;margin-top:12px;flex-wrap:wrap">
       <input value="${escapeHtml(n.note||'')}" placeholder="заметка (напр. «Панда-разрушение»)" oninput="_W.valNew.note=this.value" style="${inSt};min-width:240px">
-      <button class="btn btn-y" onclick="_valAdd()">Добавить шаблон</button>
+      <button class="btn btn-y" onclick="_valAdd()">${n.id?'Сохранить':'Добавить шаблон'}</button>
+      ${n.id?`<button class="btn" onclick="_valCancel()">Отмена</button>`:''}
       <span id="val-status" style="font-size:12px;color:var(--sub)"></span></div>
-    <div style="font-size:11px;color:var(--sub);margin-top:8px">Слот = «любой из» перечисленного (архетипы и/или конкретные персонажи). Шаблон засчитывается, если членов состава можно разложить по слотам один-в-один.</div>
+    <div style="font-size:11px;color:var(--sub);margin-top:8px">Слот = «любой из» перечисленного (архетипы и/или персонажи). Слоты равнозначны: порядок не важен, состав раскладывается по слотам один-в-один в любом порядке.</div>
   </div>`;
-  const list=(_W.tmpl.length)?_W.tmpl.map(t=>`<div class="card" style="padding:12px 14px;margin-bottom:10px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+  const list=(_W.tmpl.length)?_W.tmpl.map(t=>`<div class="card" style="padding:12px 14px;margin-bottom:10px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;${String(t.id)===String(n.id)?'border-color:var(--accent)':''}">
     <span class="count-chip">${t.size}</span>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;flex:1">${(t.slots||[]).map((sl,i)=>`${i?'<span style="color:var(--sub)">+</span>':''}<span style="display:inline-flex;flex-wrap:wrap;align-items:center">${sl.map(tok=>tokChip(tok,null)).join('')||'<span style="font-size:11px;color:var(--sub)">пусто</span>'}</span>`).join('')}</div>
     ${t.note?`<span style="font-size:12px;color:var(--sub)">${escapeHtml(t.note)}</span>`:''}
+    <button class="btn" style="padding:2px 9px" title="Редактировать" onclick="_valEdit('${t.id}')">✎</button>
     <button class="btn" style="padding:2px 9px" onclick="_valDel('${t.id}')">✕</button></div>`).join('')
     :`<div class="card" style="padding:18px;color:var(--sub);font-size:13px">Пока нет шаблонов. Собери первый выше — это опора валидности для Дуо/Трио.</div>`;
   html(`${_analyticsTabs()}${form}
@@ -1524,14 +1565,32 @@ function _renderValid(){
       <span style="font-size:12px;color:var(--sub)">Опора для валидности составов. В Дуо/Трио строки вне шаблонов помечаются — это мягкая подсказка, не жёсткий фильтр.</span></div>
     ${list}`);}
 function _valSt(s,c){const el=document.getElementById('val-status');if(el){el.textContent=s;el.style.color=c||'var(--sub)';}}
-function _valSize(s){const n=_W.valNew;n.size=s;n.slots=Array.from({length:s},(_,i)=>n.slots[i]||[]);_renderWeights();}
-function _valSlotAdd(i,tok){if(!tok)return;const s=_W.valNew.slots[i];if(!s.includes(tok))s.push(tok);_renderWeights();}
+function _valSize(s){const n=_W.valNew;n.size=s;n.slots=Array.from({length:s},(_,i)=>n.slots[i]||[]);if(_W.valPickOpen>=s)_W.valPickOpen=null;_renderWeights();}
+// клик в пикере — вкл/выкл опцию слота
+function _valSlotAdd(i,tok){if(!tok)return;const s=_W.valNew.slots[i];
+  _W.valNew.slots[i]=s.includes(tok)?s.filter(t=>t!==tok):s.concat(tok);_renderWeights();}
 function _valSlotDel(i,tok){const s=_W.valNew.slots[i];_W.valNew.slots[i]=s.filter(t=>t!==tok);_renderWeights();}
+function _valPickTgl(i){_W.valPickOpen=_W.valPickOpen===i?null:i;_W.valPickQ='';_renderWeights();}
+function _valPickSearch(v){_W.valPickQ=v;_renderWeights();
+  const inp=document.querySelector('#page-content input[placeholder="поиск персонажа…"]');
+  if(inp){inp.focus();inp.setSelectionRange(v.length,v.length);}}
+// правка существующего: копия в форму, «Сохранить» обновляет по id
+function _valEdit(id){const t=(_W.tmpl||[]).find(x=>String(x.id)===String(id));if(!t)return;
+  _W.valNew={id:t.id,size:t.size,slots:(t.slots||[]).map(s=>s.slice()),note:t.note||''};
+  _W.valPickOpen=null;_renderWeights();}
+function _valCancel(){_W.valNew=null;_W.valPickOpen=null;_renderWeights();}
 async function _valAdd(){
   const n=_W.valNew;
   if(n.slots.some(s=>!s.length))return _valSt('в каждом слоте нужна хотя бы одна опция','var(--red)');
-  const row={size:n.size,slots:n.slots,note:n.note||'',sort_order:_W.tmpl.length,created_at:new Date().toISOString()};
   _valSt('сохранение…');
+  if(n.id){
+    const{error}=await sb.from('team_templates').update({size:n.size,slots:n.slots,note:n.note||''}).eq('id',n.id);
+    if(dbErr(error,'правка шаблона'))return _valSt('ошибка','var(--red)');
+    const t=_W.tmpl.find(x=>String(x.id)===String(n.id));
+    if(t){t.size=n.size;t.slots=n.slots;t.note=n.note||'';}
+    _W.valNew=null;_renderWeights();toast('Шаблон обновлён');return;
+  }
+  const row={size:n.size,slots:n.slots,note:n.note||'',sort_order:_W.tmpl.length,created_at:new Date().toISOString()};
   const{data,error}=await sb.from('team_templates').insert(row).select().single();
   if(dbErr(error,'создание шаблона'))return _valSt('ошибка','var(--red)');
   _W.tmpl.push(data);_W.valNew={size:n.size,slots:Array.from({length:n.size},()=>[]),note:''};_renderWeights();toast('Шаблон добавлен');}
