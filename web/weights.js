@@ -1410,6 +1410,14 @@ async function _tmAutofill(size){
   if(dbErr(error,'автозаполнение составов'))return _tmSt('ошибка','var(--red)');
   rows.forEach(r=>_W.tmRows[r.key]=r);_renderWeights();toast('Добавлено: '+rows.length);
 }
+// удаление пачками: .in('key',[...]) с тысячами ключей рвёт URL (Failed to fetch)
+async function _tmDelKeys(keys){
+  for(let i=0;i<keys.length;i+=200){
+    const{error}=await sb.from('team_ratings').delete().in('key',keys.slice(i,i+200));
+    if(error)return error;
+  }
+  return null;
+}
 // разовая чистка: удалить составы, не проходящие ролевой фильтр
 async function _tmPurgeBad(size){
   if(!_W.spLoaded){_tmSt('загружаю роли…');await _spLoad();}
@@ -1418,7 +1426,7 @@ async function _tmPurgeBad(size){
       return cs.every(Boolean)&&(_blHas(cs.map(c=>c.id))||!_tmRoleOk(cs));});
   if(!bad.length)return _tmSt('невалидных нет','var(--sub)');
   if(!confirm(`Удалить ${bad.length} невалидных ${size===2?'пар':'троек'}?`))return;
-  const{error}=await sb.from('team_ratings').delete().in('key',bad.map(r=>r.key));
+  const error=await _tmDelKeys(bad.map(r=>r.key));
   if(dbErr(error,'чистка составов'))return _tmSt('ошибка','var(--red)');
   bad.forEach(r=>delete _W.tmRows[r.key]);_W.tmOrderFor=null;_renderWeights();toast('Удалено: '+bad.length);
 }
@@ -1439,7 +1447,7 @@ async function _tmPurgeInert(size){
   });
   if(!inert.length)return _tmSt('невзаимодействующих нет','var(--sub)');
   if(!confirm(`Удалить ${inert.length} невзаимодействующих ${size===2?'пар':'троек'} (tagSyn=0 и нет пиков)?`))return;
-  const{error}=await sb.from('team_ratings').delete().in('key',inert.map(r=>r.key));
+  const error=await _tmDelKeys(inert.map(r=>r.key));
   if(dbErr(error,'чистка невзаимодействующих'))return _tmSt('ошибка','var(--red)');
   inert.forEach(r=>delete _W.tmRows[r.key]);_W.tmOrderFor=null;_renderWeights();toast('Удалено: '+inert.length);
 }
@@ -1760,8 +1768,8 @@ function _spSide(size,gseq,pool,exclude,left,seen){
     if(!cand.length)return null;
     const fresh=cand.filter(c=>!_spRecentHas(c.id));if(fresh.length)cand=fresh;
     const c=left
-      ? _spWeighted(cand,x=>(1+_spSim(left[i],x))*_spRareW(seen,x.id)) // схожесть — мягкий нудж, не замок
-      : _spWeighted(cand,x=>_spRareW(seen,x.id));
+      ? _spWeighted(cand,x=>Math.pow(_spRareW(seen,x.id),2)*(1+0.3*_spSim(left[i],x))) // редкость доминирует, схожесть — лёгкий нудж
+      : _spWeighted(cand,x=>Math.pow(_spRareW(seen,x.id),2));
     used.add(c.id);team.push(_spInst(c,role));
   }
   return team;
