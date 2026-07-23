@@ -1153,11 +1153,10 @@ function _renderTeams(size){
   // сортировка по выбору; порядок пересчитывается только при смене режима — правка звёзд не двигает строки
   const sortKey=_W.tmSort||'games',sortDir=_W.tmSortDir||-1;
   const rows=Object.values(_W.tmRows).filter(r=>r.size===size);
-  const manual=r=>!/^авто/.test(r.note||'')?0:1; // ручные — всегда наверху
   if(_W.tmOrderFor!==size+'|'+sortKey+'|'+sortDir){
     const wrOf=r=>{const w=_tmWr((r.members||[]).map(m=>m.cid));return w?w.wr:-1;};
     const gOf=r=>{const w=_tmWr((r.members||[]).map(m=>m.cid));return w?w.g:-1;};
-    const uncOf=r=>_scScore((r.members||[]).map(m=>m.cid)).unc;
+    const uncOf=r=>r.reviewed?-1:_scScore((r.members||[]).map(m=>m.cid)).unc; // проверенные — вне очереди
     const cmp={
       games:(a,b)=>gOf(b)-gOf(a),
       wr:(a,b)=>wrOf(b)-wrOf(a),
@@ -1165,11 +1164,11 @@ function _renderTeams(size){
       synergy:(a,b)=>b.stars_synergy-a.stars_synergy,
       calc:(a,b)=>uncOf(b)-uncOf(a), // спорные сверху = очередь ручной проверки
     }[sortKey];
-    rows.sort((a,b)=>manual(a)-manual(b)||cmp(a,b)*(sortDir<0?1:-1)||a.key.localeCompare(b.key));
+    rows.sort((a,b)=>cmp(a,b)*(sortDir<0?1:-1)||a.key.localeCompare(b.key));
     _W.tmOrder=rows.map(r=>r.key);_W.tmOrderFor=size+'|'+sortKey+'|'+sortDir;
   }else{
     const pos={};_W.tmOrder.forEach((k,i)=>pos[k]=i);
-    rows.sort((a,b)=>manual(a)-manual(b)||(pos[a.key]??1e9)-(pos[b.key]??1e9));
+    rows.sort((a,b)=>(pos[a.key]??1e9)-(pos[b.key]??1e9));
     _W.tmOrder=rows.map(r=>r.key); // новые составы уходят в конец
   }
   const rowHTML=r=>{
@@ -1179,36 +1178,66 @@ function _renderTeams(size){
     const wr=_tmWr(mem.map(m=>m.cid));
     const wrTxt=wr?`<span title="байес-винрейт по реальным пикам (прайор ${_KB_TM})" style="font-family:'JetBrains Mono',monospace;font-size:12px;color:${wr.wr>=0.5?'#3ddc84':'#ff8a8a'}">${Math.round(wr.wr*100)}% · ${wr.g} игр</span>`
       :'<span style="font-size:11px;color:var(--sub)">нет пиков</span>';
-    const sc=_scScore(mem.map(m=>m.cid));
-    const uc=sc.unc>=0.66?'#ff6b6b':sc.unc>=0.4?'#f5c842':'#3ddc84';
+    const cids=mem.map(m=>m.cid);
+    const sc=_scScore(cids);
+    const rv=!!r.reviewed;
+    const uc=rv?'#4a5568':(sc.unc>=0.66?'#ff6b6b':sc.unc>=0.4?'#f5c842':'#3ddc84');
+    const dot=`<span onclick="_tmReview('${r.key}')" title="${rv?'проверено вручную — клик снимает отметку':'клик — отметить проверенным (сбросить спорность)'}" style="cursor:pointer;width:12px;height:12px;border-radius:50%;background:${uc};display:inline-flex;align-items:center;justify-content:center;font-size:8px;font-weight:700;color:#fff">${rv?'✓':''}</span>`;
     const scTxt=`<span title="расчёт (соло+синергия+остаток). Спорность ${Math.round(sc.unc*100)}% · факт ${sc.g} игр&#10;пред ${Math.round(sc.pred*100)}% → итог ${Math.round(sc.cal*100)}%" style="display:inline-flex;align-items:center;gap:6px;font-family:'JetBrains Mono',monospace;font-size:12px">
-      <span style="width:7px;height:7px;border-radius:50%;background:${uc}" ></span>${Math.round(sc.cal*100)}%</span>`;
+      ${dot}${Math.round(sc.cal*100)}%</span>`;
+    // модельные ориентиры звёзд: синергия из тегов, сила из расчётного винрейта
+    const mSyn=Math.min(5,Math.round(_scTagSyn(cids)*5));
+    const mPow=_tmStarsFromWr(sc.cal);
     return `<tr style="border-top:1px solid var(--line)">
       <td style="padding:9px 14px">${chips}</td>
-      <td style="padding:9px 8px;text-align:center;white-space:nowrap">${_stars(r.stars_synergy,`_tmStar('${r.key}','stars_synergy',{v})`)}</td>
-      <td style="padding:9px 8px;text-align:center;white-space:nowrap">${_stars(r.stars_power,`_tmStar('${r.key}','stars_power',{v})`)}</td>
+      <td style="padding:9px 8px;text-align:center;white-space:nowrap">${_stars(r.stars_synergy,`_tmStar('${r.key}','stars_synergy',{v})`)}<div style="margin-top:2px">${_tmDir(mSyn,r.stars_synergy)}</div></td>
+      <td style="padding:9px 8px;text-align:center;white-space:nowrap">${_stars(r.stars_power,`_tmStar('${r.key}','stars_power',{v})`)}<div style="margin-top:2px">${_tmDir(mPow,r.stars_power)}</div></td>
       <td style="padding:9px 8px;text-align:center">${wrTxt}</td>
       <td style="padding:9px 8px;text-align:center">${scTxt}</td>
       <td style="padding:9px 8px;min-width:160px"><input value="${escapeHtml(r.note||'')}" placeholder="заметка" onchange="_tmNote('${r.key}',this.value)" style="${inSt};width:100%;font-size:12px"></td>
       <td style="padding:9px 10px;text-align:center"><button class="btn" style="padding:2px 9px" onclick="_tmDel('${r.key}')">✕</button></td></tr>`;
   };
-  const list=rows.length?`<div class="card" style="padding:0;overflow:hidden"><table style="width:100%;border-collapse:collapse">
+  const fq=(_W.tmFilter||'').toLowerCase().trim();
+  const shown=fq?rows.filter(r=>(r.members||[]).some(m=>((_W.tmCharMap[m.cid]||{}).name||'').toLowerCase().includes(fq))):rows;
+  const list=shown.length?`<div class="card" style="padding:0;overflow:hidden"><table style="width:100%;border-collapse:collapse">
     <thead><tr style="font-size:11px;color:var(--sub);text-transform:uppercase;text-align:left">
       <th style="padding:10px 14px">Состав</th>
       ${_tmTh('Синергия','synergy',sortKey)}${_tmTh('Сила','power',sortKey)}
       ${_tmTh(sortKey==='wr'?'Факт · винрейт':'Факт · игры','__fact',sortKey,['games','wr'].includes(sortKey))}
       ${_tmTh('Расчёт','calc',sortKey)}
       <th style="padding:10px 8px">Заметка</th><th></th></tr></thead>
-    <tbody>${rows.map(rowHTML).join('')}</tbody></table></div>`
-    :`<div class="card" style="padding:18px;color:var(--sub);font-size:13px">Пока нет сохранённых ${label}. Собери первую выше.</div>`;
+    <tbody>${shown.map(rowHTML).join('')}</tbody></table></div>`
+    :`<div class="card" style="padding:18px;color:var(--sub);font-size:13px">${fq?'Ничего не найдено по фильтру.':`Пока нет сохранённых ${label}. Собери первую выше.`}</div>`;
+  const searchBox=`<input placeholder="фильтр по персонажу…" value="${escapeHtml(_W.tmFilter||'')}" oninput="_tmFilterSet(this.value)" style="${inSt};min-width:220px">`;
   html(`${_analyticsTabs()}${createForm}
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
-      <span class="count-chip">${rows.length} ${label}</span>
-      <span style="font-size:12px;color:var(--sub)">Звёзды сохраняются сразу. «Факт» — винрейт состава по реальным пикам матчей (без учёта конст).</span></div>
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap">
+      <span class="count-chip">${fq?shown.length+' / '+rows.length:rows.length} ${label}</span>
+      ${searchBox}
+      <span style="font-size:12px;color:var(--sub)">Точка «Расчёт» — клик отмечает проверенным (сбрасывает спорность). Стрелки под звёздами — куда модель предлагает сдвинуть.</span></div>
     ${list}`);
 }
 function _tmSlot(i,cid){const n=_W.tmNew;n.slots[i]=cid;
   const c=_W.tmCharMap[cid];n.ms[i]=(c&&c.rarity==='A')?6:0;_W.tmPickOpen=null;_W.tmPickQ='';_renderWeights();}
+// стрелка «куда модель тянет относительно отмеченной звезды»: ▲/▼ + величина, ✓ если совпало
+function _tmDir(model,manual){
+  model=+model||0;manual=+manual||0;
+  if(!manual)return `<span style="font-size:9px;color:var(--sub)" title="модель предлагает ${model}★">·${model}</span>`;
+  const d=model-manual;
+  if(!d)return `<span style="font-size:9px;color:#3ddc84" title="совпадает с моделью">✓</span>`;
+  const up=d>0;
+  return `<span style="font-size:9px;font-family:'JetBrains Mono',monospace;color:${up?'#3ddc84':'#ff8a8a'}" title="модель: ${model}★ (${up?'выше':'ниже'} на ${Math.abs(d)})">${up?'▲':'▼'}${Math.abs(d)}</span>`;
+}
+// отметка «проверено вручную»: сбрасывает спорность и убирает из очереди
+async function _tmReview(key){
+  const r=_W.tmRows[key];if(!r)return;
+  const nv=!r.reviewed;
+  const{error}=await sb.from('team_ratings').update({reviewed:nv,updated_at:new Date().toISOString()}).eq('key',key);
+  if(dbErr(error,'отметка проверки'))return;
+  r.reviewed=nv;_W.tmOrderFor=null;_renderWeights();
+}
+function _tmFilterSet(v){_W.tmFilter=v;_renderWeights();
+  const inp=document.querySelector('#page-content input[placeholder="фильтр по персонажу…"]');
+  if(inp){inp.focus();inp.setSelectionRange(v.length,v.length);}}
 // заголовок-сортировка; для «Факта» next переключает игры↔винрейт
 function _tmTh(label,next,cur,active){
   const on=active!==undefined?active:cur===next;

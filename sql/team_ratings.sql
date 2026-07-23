@@ -8,8 +8,12 @@ create table if not exists public.team_ratings (
   stars_synergy int not null default 0 check (stars_synergy between 0 and 5),
   stars_power int not null default 0 check (stars_power between 0 and 5),
   note text not null default '',
+  reviewed boolean not null default false,   -- проверено вручную: сбрасывает спорность, вне очереди
   updated_at timestamptz not null default now()
 );
+
+-- миграция для уже существующей таблицы
+alter table public.team_ratings add column if not exists reviewed boolean not null default false;
 
 alter table public.team_ratings enable row level security;
 
