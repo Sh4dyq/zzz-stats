@@ -1341,6 +1341,12 @@ function _tmRoleOk(chars){
   });
 }
 function _tmStarsFromWr(wr){return wr>=.62?5:wr>=.56?4:wr>=.5?3:wr>=.43?2:1;}
+// структурная валидность: нужен хотя бы один кэрри (atk/ano/rupt), как «нет дд» в compPenalty.
+// пары двух не-кэрри (Астра+Сет) — это срез тройки, а не команда. cids ИЛИ char-объекты.
+const _TM_CARRY=new Set(['atk','ano','rupt']);
+function _tmHasCarry(items){
+  return items.some(x=>{const c=(x&&x.role!==undefined)?x:_W.tmCharMap[x];return c&&_TM_CARRY.has(c.role);});
+}
 // комплементарность по тегам: сколько нужд одного закрывает другой (двусторонне), 0..1
 function _tmTagSyn(chars){
   const sig=c=>_spTagOf(c);
@@ -1371,8 +1377,8 @@ async function _tmAutofill(size){
   const s=_W.tmStats||{};const src=size===2?s.pair:s.trio;
   const all=Object.entries(src||{})
     .map(([k,v])=>({cids:k.split('|'),g:v.g,wr:(v.w+_KB_TM*0.5)/(v.g+_KB_TM)}))
-    // реально сыгранные составы берём как есть: факт пиков важнее ролевой схемы, фильтруем только мусор
-    .filter(x=>x.cids.every(c=>_W.tmCharMap[c])&&!_blHas(x.cids));
+    // сыгранные составы берём по факту, но нужен ≥1 кэрри — пара двух не-кэрри это срез тройки, не команда
+    .filter(x=>x.cids.every(c=>_W.tmCharMap[c])&&!_blHas(x.cids)&&_tmHasCarry(x.cids));
   all.sort((a,b)=>(b.g-a.g)||(b.wr-a.wr));
   const top=all; // без границы по числу пиков — берём все сыгранные составы
   const rows=[],seen=new Set();
@@ -1418,6 +1424,7 @@ async function _tmPurgeInert(size){
     if(!cids.every(c=>_W.tmCharMap[c]))return false;
     const auto=/^авто/.test(r.note||'');                         // авто-заполнение ставит звёзды всем
     if(r.reviewed||((r.stars_synergy||r.stars_power)&&!auto))return false; // ручное — не трогаем
+    if(!_tmHasCarry(cids))return true;                           // нет кэрри — срез тройки, не команда
     const w=_tmWr(cids);if(w&&w.g>=_INERT_FACT)return false;     // есть факт — оставляем
     return !_scInteract(cids) || _scCompPen(cids)<=_INERT_PEN;
   });
