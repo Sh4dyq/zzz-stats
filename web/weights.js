@@ -1020,7 +1020,9 @@ function _tmStatsCalc(picks,matches){ // винрейты пар и троек �
   return{solo,pair,trio};
 }
 async function _tmLoad(){
-  if(!_W.tagsLoaded)await _loadTags();                    // теги нужны скореру (tagSyn)
+  if(!_W.tagsLoaded)await _loadTags();                    // теги нужны скореру
+  // боевой движок синергии на живых тегах из БД — тот же Synergy.score, что в предиктах/симуляторе
+  if(window.Synergy&&!Synergy.ready){try{await Synergy.load(_W.tags);}catch(e){console.warn('Synergy.load',e);}}
   const jobs=[_fetchAllW('team_ratings')];
   jobs.push((D.chars&&D.chars.length)?Promise.resolve(D.chars):_fetchAllW('characters'));
   jobs.push(_W.tmStats?Promise.resolve(null):_fetchAllW('match_picks'));
@@ -1043,22 +1045,44 @@ function _tmWr(cids){
 // ===== Скорер составов: ортогональные источники в шкале винрейта (см. модель) =====
 // Валюта — доля 0..1 (0.5 = средний). Соло/пара/трио — из одного источника (пики),
 // tagSyn — из тегов, эмпирика входит ТОЛЬКО как остаток → нет двойного счёта.
-const _SC={synK:0.10,nSol:8,nPair:6,nTrio:5}; // synK: макс. вклад синергии (pp); n*: сила усадки остатка
+const _SC={synK:0.10,nSol:8,nPair:6,nTrio:5}; // synK: фолбэк-вклад синергии; n*: сила усадки остатка
 function _scSolo(id){ // байес-винрейт персонажа по пикам
   const r=(_W.tmStats&&_W.tmStats.solo||{})[String(id)];
   if(!r)return{g:0,wr:0.5};
   return{g:r.g,wr:(r.w+_SC.nSol*0.5)/(r.g+_SC.nSol)};
 }
-function _scTagSyn(cids){ // синергия тегов 0..1
+const _scNames=cids=>cids.map(id=>(_W.tmCharMap[id]||{}).name).filter(Boolean);
+// боевая синергия (Synergy.score.total, в очках винрейта, cap ±.15, С КОНФЛИКТАМИ). Фолбэк — теги.
+function _scSyn(cids){
+  if(window.Synergy&&Synergy.ready){
+    try{const sc=Synergy.score(_scNames(cids));return sc?sc.total:0;}catch(e){}
+  }
+  return _SC.synK*_scTagSyn(cids);
+}
+function _scTagSyn(cids){ // фолбэк-синергия тегов 0..1
   const chars=cids.map(id=>_W.tmCharMap[id]).filter(Boolean);
   if(chars.length<2||typeof _tmTagSyn!=='function')return 0;
   try{return _tmTagSyn(chars)||0;}catch(e){return 0;}
 }
-// база = средний соло-винрейт участников + синергия тегов
+// взаимодействуют ли (есть pairFit): гейт для протаскивания парного остатка в трио
+function _scInteract(cids){
+  if(window.Synergy&&Synergy.ready){
+    try{const sc=Synergy.score(_scNames(cids));return!!(sc&&sc.parts&&sc.parts.pair>0);}catch(e){}
+  }
+  return _scTagSyn(cids)>0;
+}
+// ролевой штраф валидности — боевой DraftSim.compPenalty (трио-only; пары не штрафует). Фолбэк — 0.
+function _scCompPen(cids){
+  if(window.DraftSim&&DraftSim.compPenalty){
+    try{return DraftSim.compPenalty(cids.map(c=>({cid:c})),{charMap:_W.tmCharMap});}catch(e){}
+  }
+  return 0;
+}
+// база = средний соло-винрейт участников + боевая синергия
 function _scPredBase(cids){
   const sol=cids.map(id=>_scSolo(id));
   const base=sol.reduce((s,x)=>s+x.wr,0)/sol.length;
-  return base+_SC.synK*_scTagSyn(cids);
+  return base+_scSyn(cids);
 }
 // пара: {pred,emp,cal,resid,residShr,g,unc}. residShr — усаженный остаток (для протаскивания в трио)
 function _scPair(cids){
@@ -1066,9 +1090,9 @@ function _scPair(cids){
   const w=_tmWr(cids);const g=w?w.g:0;const emp=w?w.wr:pred;
   const resid=emp-pred;const shr=g/(g+_SC.nPair);
   const residShr=shr*resid;
-  return{pred,emp,cal:pred+residShr,resid,residShr,g,unc:_scUnc(g,resid,_SC.nPair)};
+  return{pred,emp,cal:pred+residShr+_scCompPen(cids),resid,residShr,g,unc:_scUnc(g,resid,_SC.nPair)};
 }
-// трио: база + синергия трио + сумма усаженных парных остатков; сверху — свой остаток
+// трио: база + синергия трио + сумма усаженных парных остатков; сверху — свой остаток + ролевой штраф
 // парный остаток входит ТОЛЬКО для взаимодействующих пар (tagSyn>0), иначе ложное
 // приписывание синергии невзаимодействующим (Люси+Ликаон и т.п.) — как в synergy.js
 function _scTrio(cids){
@@ -1076,12 +1100,12 @@ function _scTrio(cids){
   let pairAdj=0;
   for(let i=0;i<cids.length;i++)for(let j=i+1;j<cids.length;j++){
     const p=[cids[i],cids[j]];
-    if(_scTagSyn(p)>0)pairAdj+=_scPair(p).residShr;
+    if(_scInteract(p))pairAdj+=_scPair(p).residShr;
   }
   const pred=pred0+pairAdj;
   const w=_tmWr(cids);const g=w?w.g:0;const emp=w?w.wr:pred;
   const resid=emp-pred;const shr=g/(g+_SC.nTrio);
-  return{pred,emp,cal:pred+shr*resid,resid,residShr:shr*resid,g,unc:_scUnc(g,resid,_SC.nTrio)};
+  return{pred,emp,cal:pred+shr*resid+_scCompPen(cids),resid,residShr:shr*resid,g,unc:_scUnc(g,resid,_SC.nTrio)};
 }
 function _scScore(cids){return cids.length===3?_scTrio(cids):_scPair(cids);}
 // неуверенность 0..1: голод данных (держится на приоре) + спор (модель vs факт)
@@ -1145,6 +1169,7 @@ function _renderTeams(size){
       <button class="btn btn-y" onclick="_tmAdd()">Добавить</button>
       <button class="btn" onclick="_tmAutofill(${size})">Заполнить из статистики</button>
       <button class="btn" onclick="_tmPurgeBad(${size})">Убрать невалидные</button>
+      <button class="btn" onclick="_tmPurgeInert(${size})">Убрать невзаимодействующие</button>
       <span id="tm-status" style="font-size:12px;color:var(--sub)"></span>
     </div>
     <div style="font-size:11px;color:var(--sub);margin-top:8px">Клик по бейджу M — смена майндскейпа (A-ранги всегда M6). Дубликаты по составу+констам не создаются.</div>
@@ -1381,6 +1406,25 @@ async function _tmPurgeBad(size){
   const{error}=await sb.from('team_ratings').delete().in('key',bad.map(r=>r.key));
   if(dbErr(error,'чистка составов'))return _tmSt('ошибка','var(--red)');
   bad.forEach(r=>delete _W.tmRows[r.key]);_W.tmOrderFor=null;_renderWeights();toast('Удалено: '+bad.length);
+}
+// чистка невзаимодействующих/невалидных: нулевая тег-синергия ИЛИ сильный ролевой штраф,
+// при отсутствии факта пиков. Не трогаем проверенные (reviewed) и вручную оценённые (звёзды).
+const _INERT_FACT=2;      // «факт есть», если пиков не меньше
+const _INERT_PEN=-0.15;   // порог ролевого штрафа для «невалидно»
+async function _tmPurgeInert(size){
+  if(!_W.spLoaded){_tmSt('загружаю теги…');await _spLoad();}
+  const inert=Object.values(_W.tmRows).filter(r=>r.size===size).filter(r=>{
+    const cids=(r.members||[]).map(m=>m.cid);
+    if(!cids.every(c=>_W.tmCharMap[c]))return false;
+    if(r.reviewed||r.stars_synergy||r.stars_power)return false; // ручное — не трогаем
+    const w=_tmWr(cids);if(w&&w.g>=_INERT_FACT)return false;     // есть факт — оставляем
+    return !_scInteract(cids) || _scCompPen(cids)<=_INERT_PEN;
+  });
+  if(!inert.length)return _tmSt('невзаимодействующих нет','var(--sub)');
+  if(!confirm(`Удалить ${inert.length} невзаимодействующих ${size===2?'пар':'троек'} (tagSyn=0 и нет пиков)?`))return;
+  const{error}=await sb.from('team_ratings').delete().in('key',inert.map(r=>r.key));
+  if(dbErr(error,'чистка невзаимодействующих'))return _tmSt('ошибка','var(--red)');
+  inert.forEach(r=>delete _W.tmRows[r.key]);_W.tmOrderFor=null;_renderWeights();toast('Удалено: '+inert.length);
 }
 async function _tmSave(key){
   const r=_W.tmRows[key];if(!r)return;
