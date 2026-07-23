@@ -1416,7 +1416,8 @@ async function _tmPurgeInert(size){
   const inert=Object.values(_W.tmRows).filter(r=>r.size===size).filter(r=>{
     const cids=(r.members||[]).map(m=>m.cid);
     if(!cids.every(c=>_W.tmCharMap[c]))return false;
-    if(r.reviewed||r.stars_synergy||r.stars_power)return false; // ручное — не трогаем
+    const auto=/^авто/.test(r.note||'');                         // авто-заполнение ставит звёзды всем
+    if(r.reviewed||((r.stars_synergy||r.stars_power)&&!auto))return false; // ручное — не трогаем
     const w=_tmWr(cids);if(w&&w.g>=_INERT_FACT)return false;     // есть факт — оставляем
     return !_scInteract(cids) || _scCompPen(cids)<=_INERT_PEN;
   });
