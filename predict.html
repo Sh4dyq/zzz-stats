@@ -1252,7 +1252,7 @@ function renderTour(){
   const pct=p=>p>=.0005?(p*100).toFixed(1)+'%':'—';
   const cell=p=>`<div><span class="chpct">${pct(p)}</span><div class="chbar"><i style="width:${Math.min(100,p*100)}%"></i></div></div>`;
   const nm=pid=>esc(D.playerMap[pid]?.nickname||'—');
-  const fmtType=(t.bracket_type||'SE').toUpperCase();
+  let fmtType=(t.bracket_type||'SE').toUpperCase();
   const finLbl=fmtType==='DE'?'Гранд-финал':'Финал';
   const encs=D.encs.filter(e=>e.tournament_id===t.id);
   const nodes=D.nodes[t.id]||[];
@@ -1274,6 +1274,12 @@ function renderTour(){
       .sort((a,b)=>b.champ-a.champ||b.fin-a.fin||b.elo-a.elo);
     if(!rows.length){out.innerHTML='<div class="panel"><h3>Сетка ещё не заполнена</h3><p>Шансы появятся, когда участники будут расставлены по сетке.</p></div>';return;}
     out.innerHTML=bTable(rows)+'<div class="chnote">Точная симуляция по структуре сетки.</div>';
+    return;
+  }
+  // 1.5) многоэтапный (GROUPS->SE/DE): групповые поражения — не вылет
+  const stages=fmtType.split(/\s*->\s*/);
+  if(stages.length>1&&['GROUPS','RR'].includes(stages[0])){
+    renderTourStaged(t,encs,stages,R,out,bTable);
     return;
   }
   // 2) группа / round robin
@@ -1318,6 +1324,66 @@ function renderTour(){
   const rows=players.map(pid=>({pid,elo:eloShown(pid),out:(losses[pid]||0)>=(fmtType==='DE'?2:1),champ:sim[pid]?.champ||0,fin:sim[pid]?.final||0}))
     .sort((a,b)=>b.champ-a.champ||b.fin-a.fin||b.elo-a.elo);
   out.innerHTML=bTable(rows)+'<div class="chnote">Структура пар этой сетки не загружена — пары среди оставшихся разыгрываются жребием (приближение).</div>';
+}
+
+// многоэтапный турнир (GROUPS->SE/DE): группы из bracket_cache, вылет — последнее место
+// завершённой группы или лимит поражений в плей-офф (кросс-групповые встречи)
+async function renderTourStaged(t,encs,stages,R,out,bTable){
+  const pct=p=>p>=.0005?(p*100).toFixed(1)+'%':'—';
+  const cell=p=>`<div><span class="chpct">${pct(p)}</span><div class="chbar"><i style="width:${Math.min(100,p*100)}%"></i></div></div>`;
+  const nm=pid=>esc(D.playerMap[pid]?.nickname||'—');
+  D._bc=D._bc||{};
+  if(!(t.id in D._bc)){
+    try{const{data}=await sb.from('bracket_cache').select('json').eq('tournament_id',t.id).maybeSingle();D._bc[t.id]=data?.json||null;}
+    catch(e){D._bc[t.id]=null;}
+  }
+  const byNick={};Object.entries(D.playerMap).forEach(([id,p])=>{if(p.nickname)byNick[p.nickname.trim().toLowerCase()]=id;});
+  const grpOf={},lastOut=new Set();
+  (D._bc[t.id]?.groups||[]).forEach(g=>{
+    const st=g.standings||[];
+    st.forEach(s=>{const pid=byNick[(s.name||'').trim().toLowerCase()];if(pid)grpOf[pid]=g.name;});
+    // группа доиграна (полный круг) — последнее место выбыло
+    const done=st.length>1&&st.reduce((a,s)=>a+(s.w||0)+(s.l||0),0)>=st.length*(st.length-1);
+    if(done){const pid=byNick[(st[st.length-1].name||'').trim().toLowerCase()];if(pid)lastOut.add(pid);}
+  });
+  const allPids=new Set((D.parts[t.id]||[]).map(p=>p.player_id));
+  encs.forEach(e=>{if(e.player1_id)allPids.add(e.player1_id);if(e.player2_id)allPids.add(e.player2_id);});
+  // плей-офф: помеченные стадией не-групповые либо кросс-групповые встречи
+  const isGrpStage=s=>/^групп|^round robin/i.test(s||'');
+  const poEncs=encs.filter(e=>e.player1_id&&e.player2_id&&(
+    (e.stage&&!isGrpStage(e.stage))||
+    (grpOf[e.player1_id]&&grpOf[e.player2_id]&&grpOf[e.player1_id]!==grpOf[e.player2_id])));
+  if(!poEncs.length&&!lastOut.size){
+    // группы ещё идут — round robin по пулу
+    const players=[...allPids].filter(Boolean);
+    if(players.length<2){out.innerHTML='<div class="panel"><h3>Недостаточно участников</h3><p>Шансы появятся, когда будут известны участники группы.</p></div>';return;}
+    const sim=Predict.simulateRoundRobin(players,encs,R,10000);
+    const top=(pid,k)=>sim[pid].placeP.slice(0,k).reduce((a,b)=>a+b,0);
+    const rows=players.map(pid=>({pid,elo:eloShown(pid),exp:sim[pid].expPlace,p1:top(pid,1),p2:top(pid,2),p4:top(pid,4)}))
+      .sort((a,b)=>a.exp-b.exp);
+    const cols='40px 1fr 70px 90px 120px 120px 120px';
+    out.innerHTML=`<div class="chtbl">
+      <div class="chrow hd" style="grid-template-columns:${cols}"><div>#</div><div>Игрок</div><div>Elo</div><div>Ожид. место</div><div>1 место</div><div>Топ-2</div><div>Топ-4</div></div>
+      ${rows.map((r,i)=>`<div class="chrow" style="grid-template-columns:${cols}">
+        <div class="num">${i+1}</div><div class="nm">${nm(r.pid)}</div><div class="mut">${Math.round(r.elo)}</div>
+        <div class="chpct">${r.exp.toFixed(1)}</div>${cell(r.p1)}${cell(r.p2)}${cell(r.p4)}</div>`).join('')}
+    </div><div class="chnote">Групповой этап: несыгранные пары разыгрываются по Elo.</div>`;
+    return;
+  }
+  const poType=stages[stages.length-1];
+  const thr=poType==='DE'?2:1;
+  const losses={};
+  poEncs.forEach(e=>{
+    if(!e.winner_id)return;
+    const l=e.winner_id===e.player1_id?e.player2_id:e.player1_id;
+    if(l)losses[l]=(losses[l]||0)+1;
+  });
+  const alive=[...allPids].filter(p=>p&&!lastOut.has(p));
+  const sim=Predict.simulateElimination(alive,losses,poType,R,10000);
+  const rows=[...allPids].filter(Boolean)
+    .map(pid=>({pid,elo:eloShown(pid),out:lastOut.has(pid)||(losses[pid]||0)>=thr,champ:sim[pid]?.champ||0,fin:sim[pid]?.final||0}))
+    .sort((a,b)=>b.champ-a.champ||b.fin-a.fin||(a.out?1:0)-(b.out?1:0)||b.elo-a.elo);
+  out.innerHTML=bTable(rows)+'<div class="chnote">Плей-офф: пары среди оставшихся разыгрываются жребием (приближение). «Выбыл» = последнее место группы или лимит поражений в плей-офф.</div>';
 }
 
 // ---- справочная таблица мидскейп-слоя тегов ----
