@@ -34,15 +34,17 @@
   .tab-btn:hover{color:var(--text)}
   .tab-btn.active{color:#fff}
   .tab-btn.active::after{content:"";position:absolute;left:14px;right:14px;bottom:-1px;height:3px;border-radius:3px 3px 0 0;background:var(--grad)}
-  .tbl-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:12px;background:var(--card)}
-  table{border-collapse:collapse;font-size:15px;white-space:nowrap;width:100%;font-family:'JetBrains Mono',monospace}
+  .tbl-wrap{overflow:auto;max-height:calc(100vh - 32px);border:1px solid var(--border);border-radius:12px;background:var(--card)}
+  table{border-collapse:separate;border-spacing:0;font-size:15px;white-space:nowrap;width:100%;font-family:'JetBrains Mono',monospace}
+  thead{position:sticky;top:0;z-index:5;background:#101013}
   #players-area table{table-layout:fixed;width:100%}
   #players-area table thead th{height:40px;min-height:40px;max-height:40px;padding:7px 14px;line-height:1;vertical-align:middle}
   #players-area table tbody td,#players-area table tbody th{height:40px;min-height:40px;max-height:40px;padding:7px 14px;line-height:1;vertical-align:middle;overflow:hidden}
   #players-area table td.nc{padding:7px 14px;height:40px;min-height:40px;max-height:40px}
   #players-area table td.nc>div{height:100%;line-height:1}
   #players-area table td.ic>span{display:flex;align-items:center;justify-content:center;height:100%;line-height:1}
-  th,td{padding:9px 14px;border:1px solid var(--border);text-align:center;vertical-align:middle;overflow:hidden}
+  th,td{padding:9px 14px;border-right:1px solid var(--border);border-bottom:1px solid var(--border);text-align:center;vertical-align:middle;overflow:hidden}
+  tr>th:last-child,tr>td:last-child{border-right:0}
   /* Таблица «Персонажи»: ~30 колонок — ужимаем гориз. паддинг и узкие колонки, чтобы влезть по ширине (шрифты не трогаем) */
   #tab-chars th,#tab-chars td{padding-left:6px;padding-right:6px}
   #tab-chars td.nc,#tab-chars th.nc{min-width:124px;padding-left:10px;padding-right:10px}
