@@ -434,7 +434,23 @@ async function bulkImportDrafts(){
             continue;
           }
           const enc=slots.length?await createEncounter(t,p1,p2):await findOrCreateEncounter(t,p1,p2);
-          slot={enc,used:new Set()};slots.push(slot);
+          slot={enc,used:new Set()};
+          // Слоты, уже занятые матчами в БД, считаем использованными — иначе импорт
+          // тайбрейка отдельным прогоном молча перезаписывал сыгранную игру пары
+          // (апсерт по match_number). Повторная игра поверх занятого слота = рематч.
+          if(!slots.length){
+            const{data:exMs}=await sb.from('matches').select('fp_player_id').eq('encounter_id',enc.id);
+            (exMs||[]).forEach(x=>{if(x.fp_player_id)slot.used.add(x.fp_player_id);});
+            if(slot.used.has(fpId)){
+              if(!allowRematch){
+                skipped++;
+                errs.push(`пара ${grp[0].fp}/${grp[0].dbl}: игра с фп ${m.fp} уже есть в БД — рематч пропущен, включи «Разрешить рематчи» (перезапись существующего матча — через точечный импорт во встрече)`);
+                continue;
+              }
+              slot={enc:await createEncounter(t,p1,p2),used:new Set()};
+            }
+          }
+          slots.push(slot);
         }
         const num=fpId===slot.enc.player1_id?1:2;
         await importMatchFromLink(slot.enc.id,num,slot.enc.player1_id,slot.enc.player2_id,m.url,pen);
