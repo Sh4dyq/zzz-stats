@@ -994,9 +994,8 @@ async function importChallongeParticipants(tourId,tourName){
   // опции существующих игроков (по нику)
   const optsFor=selId=>D.players.slice().sort((a,b)=>a.nickname.localeCompare(b.nickname))
     .map(p=>`<option value="${p.id}" ${p.id===selId?'selected':''}>${escapeHtml(p.nickname)}</option>`).join('');
-  const byNick={};D.players.forEach(p=>byNick[p.nickname.toLowerCase()]=p);
   const rows=ppl.map((p,i)=>{
-    const m=byNick[(p.name||'').toLowerCase()];
+    const m=findPlayerByNick(p.name);
     const def=m?m.id:'NEW';
     const badge=m?`<span style="font-size:10px;padding:1px 7px;border-radius:99px;background:linear-gradient(90deg,#3ddc84,#1fb15e);color:#04210f;font-weight:700">сматчен</span>`
       :`<span style="font-size:10px;padding:1px 7px;border-radius:99px;background:#1a1d27;border:1px solid var(--border);color:var(--sub)">новый ник</span>`;

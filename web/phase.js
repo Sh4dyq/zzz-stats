@@ -14,14 +14,30 @@
     return parts.map((fmt,i)=>({key:'s'+(i+1),fmt,label:SHORT[fmt]||FMT[fmt]||fmt,full:FMT[fmt]||fmt}));
   }
 
+  // Нормализация ника для сопоставления Challonge ↔ БД: lowercase, только буквы/цифры
+  // (эмодзи, точки и пр. отбрасываем — «Sambrero🎩» и «.DmiVob.» должны матчиться).
+  const normNick=s=>String(s||'').toLowerCase().replace(/[^a-zа-яё0-9]/gi,'');
+
   // Группы этапа: [{name, ids:Set(player_id), standings|null}].
   // cache = bracket_cache.json; nickToId = ник(lowercase) → player_id; encs — фолбэк по stage.
   function groupsOf(t,cache,nickToId,encs){
     const cg=cache&&cache.groups;
     if(cg&&cg.length){
+      // индекс нормализованных ников (Challonge-имена часто отличаются от БД:
+      // регистр, эмодзи, усечение «Tetsuya» vs «tetsuyabtw»). Значение — массив id:
+      // в БД бывают дубли («Dmivob» и «.DmiVob.») — в группу включаем все.
+      const norm={};Object.keys(nickToId||{}).forEach(n=>{const k=normNick(n);if(k)(norm[k]=norm[k]||[]).push(nickToId[n]);});
+      const resolve=nm=>{
+        const k=normNick(nm);if(!k)return[];
+        if(norm[k])return norm[k];
+        // префикс/вхождение — единственный кандидат, иначе не гадаем
+        const hits=Object.keys(norm).filter(x=>x.startsWith(k)||k.startsWith(x));
+        return hits.length===1?norm[hits[0]]:[];
+      };
       return cg.map(gr=>{
-        const st=(gr.standings||[]).map(s=>({nm:s.name,w:s.w||0,l:s.l||0,id:nickToId[String(s.name||'').toLowerCase()]||null}));
-        return{name:gr.name,ids:new Set(st.map(s=>s.id).filter(Boolean)),standings:st};
+        const st=(gr.standings||[]).map(s=>{const ids=resolve(s.name);return{nm:s.name,w:s.w||0,l:s.l||0,id:ids[0]||null,_ids:ids};});
+        const ids=new Set();st.forEach(s=>s._ids.forEach(i=>ids.add(i)));
+        return{name:gr.name,ids,standings:st};
       });
     }
     // фолбэк: ручные турниры — группа = стадия встречи вида «Группа X»

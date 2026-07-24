@@ -226,11 +226,11 @@ async function updateEncMeta(id,patch){
   toast('Сохранено');
 }
 
-// Ник → id игрока: ищет существующего (без учёта регистра) или создаёт нового.
+// Ник → id игрока: ищет существующего (по нормализованному нику) или создаёт нового.
 async function resolvePlayerNick(nick){
   nick=(nick||'').trim();
   if(!nick)return null;
-  const ex=D.players.find(p=>p.nickname.toLowerCase()===nick.toLowerCase());
+  const ex=findPlayerByNick(nick);
   if(ex)return ex.id;
   const{data,error}=await sb.from('players').insert({nickname:nick}).select().single();
   if(error){dbErr(error,'создание игрока «'+nick+'»');return null;}
@@ -249,7 +249,7 @@ async function renamePlayer(pid){
   const n=nick.trim();
   if(!n)return toast('Ник не может быть пустым','err');
   if(n===cur.nickname)return;
-  const clash=D.players.find(p=>p.id!==pid&&p.nickname.toLowerCase()===n.toLowerCase());
+  const clash=D.players.find(p=>p.id!==pid&&normNick(p.nickname)===normNick(n));
   if(clash){
     // Дубль на настоящий ник существующего игрока (смурф сменил ник на сайте драфтов):
     // предлагаем СЛИТЬ — переприсвоить все игры/пики этому игроку и удалить дубль.
@@ -265,17 +265,24 @@ async function renamePlayer(pid){
 
 // Слияние игрока src → dst: переприсваивает все ссылки (встречи/матчи/пики/баны/
 // сетка) на dst и удаляет src. Турнир-скоупные таблицы с unique(tournament_id,
-// player_id) (ростеры/участники/результаты) у дубля просто удаляются — ростер dst
-// при необходимости пересоберётся из пиков. Несуществующие таблицы (миграции не
+// player_id) (ростеры/участники/результаты) переносятся на dst; строки, конфликтующие
+// с уже существующими у dst, удаляются. Несуществующие таблицы (миграции не
 // применены) игнорируются молча.
 async function mergePlayerInto(src,dst,opts={}){
+  const softErr=e=>/does not exist|relation|schema cache/i.test(e?.message||'');
   const reassign=async(table,col)=>{
     const{error}=await sb.from(table).update({[col]:dst}).eq(col,src);
-    if(error&&!/does not exist|relation|schema cache/i.test(error.message||''))throw error;
+    if(error&&!softErr(error))throw error;
   };
-  const dropSrc=async(table)=>{
-    const{error}=await sb.from(table).delete().eq('player_id',src);
-    if(error&&!/does not exist|relation|schema cache/i.test(error.message||''))return; // таблицы может не быть
+  // перенос турнир-скоупных строк: keyF(row) → ключ уникальности внутри турнира
+  const transfer=async(table,keyF)=>{
+    const{data:rows,error}=await sb.from(table).select('*').in('player_id',[src,dst]);
+    if(error){if(softErr(error))return;throw error;}
+    const have=new Set((rows||[]).filter(r=>r.player_id===dst).map(r=>r.tournament_id+'|'+keyF(r)));
+    const movable=(rows||[]).filter(r=>r.player_id===src&&!have.has(r.tournament_id+'|'+keyF(r))).map(r=>r.id);
+    if(movable.length){const{error:e}=await sb.from(table).update({player_id:dst}).in('id',movable);if(e&&!softErr(e))throw e;}
+    const{error:d}=await sb.from(table).delete().eq('player_id',src);
+    if(d&&!softErr(d))throw d;
   };
   try{
     for(const col of['player1_id','player2_id','winner_id'])await reassign('encounters',col);
@@ -283,9 +290,9 @@ async function mergePlayerInto(src,dst,opts={}){
     await reassign('match_picks','player_id');
     await reassign('match_bans','player_id');
     for(const col of['player1_id','player2_id','winner_id'])await reassign('bracket_nodes',col);
-    await dropSrc('player_rosters');
-    await dropSrc('tournament_participants');
-    await dropSrc('tournament_results');
+    await transfer('player_rosters',r=>r.character_id);
+    await transfer('tournament_participants',()=>'');
+    await transfer('tournament_results',()=>'');
     // Перенос профильных полей на выжившего (если переданы) перед удалением дубля.
     if(opts.patch&&Object.keys(opts.patch).length){
       const{error:pErr}=await sb.from('players').update(opts.patch).eq('id',dst);

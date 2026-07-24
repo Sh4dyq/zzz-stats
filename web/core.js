@@ -91,6 +91,14 @@ function enableReorder(listEl,table,onSaved){
 }
 
 // --- UTILS ---
+// Нормализация ника для сопоставления (lowercase, только буквы/цифры):
+// «Sambrero🎩» ≡ «Sambrero», «.DmiVob.» ≡ «Dmivob». Единая точка для всех
+// мест, где ник матчится с существующими игроками.
+const normNick=s=>String(s||'').toLowerCase().replace(/[^a-zа-яё0-9]/gi,'');
+const findPlayerByNick=nick=>{
+  const k=normNick(nick);if(!k)return null;
+  return D.players.find(p=>normNick(p.nickname)===k)||null;
+};
 const v=id=>document.getElementById(id)?.value?.trim()||'';
 const vn=id=>+document.getElementById(id)?.value||null;
 const html=s=>document.getElementById('page-content').innerHTML=s;

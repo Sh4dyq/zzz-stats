@@ -47,7 +47,9 @@ async function pgPlayers(){
   <div class="pgrid" id="player-list">${list||''}<p data-empty style="color:var(--sub);font-size:14px;${D.players.length?'display:none':''}">Игроков ещё нет</p></div>`);
   if(typeof enableReorder==='function')enableReorder(document.getElementById('player-list'),'players',pgPlayers);
 }
-async function addPlayer(){const n=v('p-nick');if(!n)return;const{error}=await sb.from('players').insert({nickname:n,age:vn('p-age'),highest_place:vn('p-place'),highest_place_count:vn('p-place-cnt'),prize:vn('p-prize')});if(dbErr(error,'добавление игрока'))return;toast('Игрок добавлен');await refreshData();pgPlayers();}
+async function addPlayer(){const n=v('p-nick');if(!n)return;
+const dup=findPlayerByNick(n);if(dup)return toast(`Такой игрок уже есть: «${dup.nickname}»`,'err');
+const{error}=await sb.from('players').insert({nickname:n,age:vn('p-age'),highest_place:vn('p-place'),highest_place_count:vn('p-place-cnt'),prize:vn('p-prize')});if(dbErr(error,'добавление игрока'))return;toast('Игрок добавлен');await refreshData();pgPlayers();}
 async function delPlayer(id){if(!confirm('Удалить?'))return;const{error}=await sb.from('players').delete().eq('id',id);if(dbErr(error,'удаление игрока'))return;pgPlayers();}
 
 async function openRoster(pid,pnick){
@@ -155,7 +157,7 @@ async function saveProfile(pid){
   // Ник совпал с другим существующим игроком → не падаем на unique-ключе, а сливаем:
   // переприсваиваем все игры/пики/результаты pid → существующему и удаляем дубль.
   if(patch.nickname){
-    const clash=D.players.find(p=>p.id!==pid&&p.nickname.toLowerCase()===patch.nickname.toLowerCase());
+    const clash=D.players.find(p=>p.id!==pid&&normNick(p.nickname)===normNick(patch.nickname));
     if(clash){
       if(!confirm(`Игрок «${clash.nickname}» уже есть.\n\nСлить «${cur?.nickname}» с ним: переприсвоить все игры и удалить дубль? Профильные поля применятся к «${clash.nickname}».`))return;
       delete patch.nickname; // ник выжившего не трогаем, остальные поля переносим
