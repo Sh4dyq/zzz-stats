@@ -1739,6 +1739,7 @@ async function _spLoad(){
     Object.keys(t.needs||{}).forEach(k=>t.needs[k]&&s.add('n:'+k));
     _W.spSig[id]=s;}
   if(!_W.blLoaded)await _blLoad();                         // мусорные составы — не предлагать в спарринге
+  if(!_W.tmplLoaded)await _tmplLoad();                     // шаблоны валидных комбинаций — опора подбора дуо/трио
   _W.spRecent=_W.spRecent||[];
   _W.spLoaded=true;
 }
@@ -1888,16 +1889,38 @@ function _spGenSolo(pool){
   }
   return fallback;
 }
+// сторона по шаблону валидной комбинации: слот = ИЛИ-набор токенов (arch/char), обе стороны — один шаблон
+function _spSideTmpl(tmpl,pool,exclude,left,seen){
+  const used=new Set(exclude||[]);const team=[];
+  for(let i=0;i<tmpl.slots.length;i++){
+    let cand=pool.filter(c=>!used.has(c.id)&&tmpl.slots[i].some(t=>_tokFit(t,c.id)));
+    if(!cand.length)return null;
+    const fresh=cand.filter(c=>!_spRecentHas(c.id));if(fresh.length)cand=fresh;
+    const c=left
+      ? _spWeighted(cand,x=>Math.pow(_spRareW(seen,x.id),2)*(1+0.3*_spSim(left[i],x)))
+      : _spWeighted(cand,x=>Math.pow(_spRareW(seen,x.id),2));
+    used.add(c.id);team.push(_spInst(c,null));
+  }
+  return team;
+}
 function _spGen(){
   const size=_W.sparSize||1;
   const pool=_spPool(size);if(pool.length<size+1)return null;
   if(size<2)return _spGenSolo(pool);
   const seen=_spSeen(size);                                // приоритет редко сравниваемым
+  const tms=(_W.tmpl||[]).filter(t=>t.size===size&&(t.slots||[]).length===size);
   let fallback=null;
   for(let tries=0;tries<160;tries++){
-    const gseq=_spComp(size);                              // одна ролевая раскладка на обе стороны
-    const left=_spSide(size,gseq,pool,[],null,seen);if(!left)continue;
-    const right=_spSide(size,gseq,pool,left.map(c=>c.id),left,seen);if(!right)continue;
+    let left,right;
+    if(tms.length&&tries<120){                             // есть шаблоны → собираем по ним; хвост попыток — ролевой фолбэк
+      const tm=_spPick(tms);
+      left=_spSideTmpl(tm,pool,[],null,seen);if(!left)continue;
+      right=_spSideTmpl(tm,pool,left.map(c=>c.id),left,seen);if(!right)continue;
+    }else{
+      const gseq=_spComp(size);                            // одна ролевая раскладка на обе стороны
+      left=_spSide(size,gseq,pool,[],null,seen);if(!left)continue;
+      right=_spSide(size,gseq,pool,left.map(c=>c.id),left,seen);if(!right)continue;
+    }
     const lk=left.map(c=>c.id).sort().join('|'),rk=right.map(c=>c.id).sort().join('|');
     if(lk===rk)continue;                                   // полностью одинаковые составы
     if(_blHas(left.map(c=>c.id))||_blHas(right.map(c=>c.id)))continue; // помечен мусором (в т.ч. мусорная пара внутри трио)
