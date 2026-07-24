@@ -13,7 +13,8 @@ const NEX2DB={
   'Grace Howard':'Grace','Hoshimi Miyabi':'Miyabi','Alice Thymefield':'Alice','Tsukishiro Yanagi':'Yanagi',
   'Astra Yao':'Astra','Lucia Elowen':'Lucia','Alexandrina Sebastiane':'Rina','Ukinami Yuzuha':'Yuzuha',
   'Luciana de Montefio':'Lucy','Nicole Demara':'Nicole','Caesar King':'Caesar','Seth Lowell':'Seth',
-  'Starlight - Billy':'S Billy','Yidhari Murphy':'Yidhari','Komano Manato':'Manato'};
+  'Starlight - Billy':'S Billy','Yidhari Murphy':'Yidhari','Komano Manato':'Manato',
+  'Norma Hollowell':'Norma','Velina Airgid':'Velina'};
 
 const _nrm=s=>(s||'').trim().toLowerCase();
 function dbCharByNameEn(nameEn){
