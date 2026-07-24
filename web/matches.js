@@ -121,13 +121,15 @@ async function auditTournamentMatches(tourId){
   return{errors:[...new Set(errors)],warnings:[...new Set(warnings)]};
 }
 
+// Фильтр списка встреч по турниру (''=все); живёт между перерисовками вкладки.
+let _encTourFilter='';
 async function pgMatches(){
   const{data:encsRaw}=await sb.from('encounters').select('*').order('created_at',{ascending:false});
   // Порядок встреч: сначала по позиции турнира в админке (D.tours уже отсортирован
   // по sort_order — новые/верхние турниры выше), затем ручной sort_order встречи,
   // затем дата создания (новые выше). sort_order применяется клиентски.
   const tourPos={};D.tours.forEach((t,i)=>tourPos[t.id]=i);
-  const encs=(encsRaw||[]).slice().sort((a,b)=>
+  const encs=(encsRaw||[]).filter(e=>!_encTourFilter||e.tournament_id===_encTourFilter).sort((a,b)=>
     (tourPos[a.tournament_id]??1e9)-(tourPos[b.tournament_id]??1e9)
     ||(a.sort_order??1e9)-(b.sort_order??1e9)
     ||new Date(b.created_at)-new Date(a.created_at));
@@ -201,7 +203,13 @@ async function pgMatches(){
     <button class="btn btn-g" onclick="bulkImportDrafts()">Импортировать всё</button>
     </div>
   </details>
-  <div class="listbar"><span style="font-size:12px;color:var(--sub)">Перетаскивай встречи для сортировки (отражается и на главной)</span><span class="count-chip">${(encs||[]).length} встреч</span></div>
+  <div class="listbar" style="gap:8px;flex-wrap:wrap">
+    <select id="enc-tour-filter" onchange="_encTourFilter=this.value;pgMatches()" style="font-size:12px;padding:5px 8px;max-width:260px">
+      <option value="">Все турниры</option>
+      ${D.tours.map(t=>`<option value="${t.id}"${t.id===_encTourFilter?' selected':''}>${escapeHtml(t.name)}</option>`).join('')}
+    </select>
+    ${_encTourFilter?`<button class="btn-r" style="font-size:12px" onclick="bulkDeleteEncounters()">🗑 Удалить все встречи турнира (${(encs||[]).length})</button>`:''}
+    <span style="font-size:12px;color:var(--sub)">Перетаскивай встречи для сортировки (отражается и на главной)</span><span class="count-chip">${(encs||[]).length} встреч</span></div>
   <div class="mgrid" id="enc-list">${list||'<p style="color:var(--sub);font-size:14px">Встреч ещё нет</p>'}</div>`);
   // авто-подстановка актуального (live) турнира в селект новой встречи
   const liveT=D.tours.find(t=>t.status==='live');
@@ -303,6 +311,18 @@ async function addEnc(){
   if(dbErr(error,'создание встречи'))return;
   toast('Встреча создана');pgMatches();
 }
+// Массовое удаление: все встречи выбранного в фильтре турнира (матчи/пики/баны каскадом).
+async function bulkDeleteEncounters(){
+  const t=_encTourFilter;
+  if(!t)return toast('Выбери турнир в фильтре','err');
+  const tName=D.tours.find(x=>x.id===t)?.name||'?';
+  const{count}=await sb.from('encounters').select('id',{count:'exact',head:true}).eq('tournament_id',t);
+  if(!count)return toast('У турнира нет встреч','err');
+  if(!confirm(`Удалить ВСЕ ${count} встреч(и) турнира «${tName}» со всеми матчами? Это необратимо.`))return;
+  const{error}=await sb.from('encounters').delete().eq('tournament_id',t);
+  if(dbErr(error,'массовое удаление встреч'))return;
+  toast(`Удалено встреч: ${count}`);pgMatches();
+}
 async function delEnc(id){if(!confirm('Удалить встречу и все матчи?'))return;const{error}=await sb.from('encounters').delete().eq('id',id);if(dbErr(error,'удаление встречи'))return;pgMatches();}
 
 // «Создать с результатами» в один клик: создаёт встречу и сразу импортирует матч 1/2
@@ -394,22 +414,24 @@ async function bulkImportDrafts(){
       // Распаковка игр пары по Bo2-встречам: каждая встреча держит максимум один
       // матч №1 (фп=player1) и один №2 (фп=player2). Если в этом прогоне на тот же
       // слот приходит вторая игра — это рематч (отдельный Bo2), а не правка.
-      const slots=[];// [{enc, used:Set<num>}]; первый enc переиспользуем, остальные новые
+      // used ключуется по id фп-игрока (не по num): существующая встреча может
+      // хранить пару в ОБРАТНОМ порядке, и num валиден только относительно её player1_id.
+      const slots=[];// [{enc, used:Set<fpId>}]; первый enc переиспользуем, остальные новые
       for(const m of grp){
         const fpId=await resolvePlayerNick(m.fp);
-        const num=fpId===p1?1:2;
-        let slot=slots.find(s=>!s.used.has(num));
+        let slot=slots.find(s=>!s.used.has(fpId));
         if(!slot){
           if(slots.length&&!allowRematch){
             skipped++;
-            errs.push(`пара ${grp[0].fp}/${grp[0].dbl}: повторная игра (матч №${num}) — рематч пропущен, включи «Разрешить рематчи»`);
+            errs.push(`пара ${grp[0].fp}/${grp[0].dbl}: повторная игра (фп ${m.fp}) — рематч пропущен, включи «Разрешить рематчи»`);
             continue;
           }
           const enc=slots.length?await createEncounter(t,p1,p2):await findOrCreateEncounter(t,p1,p2);
           slot={enc,used:new Set()};slots.push(slot);
         }
+        const num=fpId===slot.enc.player1_id?1:2;
         await importMatchFromLink(slot.enc.id,num,slot.enc.player1_id,slot.enc.player2_id,m.url,pen);
-        slot.used.add(num);ok++;
+        slot.used.add(fpId);ok++;
       }
     }catch(e){errs.push(`пара ${grp[0].fp}/${grp[0].dbl}: ${e.message}`);}
   }
