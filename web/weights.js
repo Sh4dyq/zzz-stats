@@ -1631,17 +1631,17 @@ async function _valAdd(){
     if(dbErr(error,'правка шаблона'))return _valSt('ошибка','var(--red)');
     const t=_W.tmpl.find(x=>String(x.id)===String(n.id));
     if(t){t.size=n.size;t.slots=n.slots;t.note=n.note||'';}
-    _scCaches.fit={};_W.tmOrderFor=null;_W.valNew=null;_renderWeights();toast('Шаблон обновлён');return;
+    _scCaches.fit={};_W.spValid=null;_W.tmOrderFor=null;_W.valNew=null;_renderWeights();toast('Шаблон обновлён');return;
   }
   const row={size:n.size,slots:n.slots,note:n.note||'',sort_order:_W.tmpl.length,created_at:new Date().toISOString()};
   const{data,error}=await sb.from('team_templates').insert(row).select().single();
   if(dbErr(error,'создание шаблона'))return _valSt('ошибка','var(--red)');
-  _W.tmpl.push(data);_scCaches.fit={};_W.tmOrderFor=null;_W.valNew={size:n.size,slots:Array.from({length:n.size},()=>[]),note:''};_renderWeights();toast('Шаблон добавлен');}
+  _W.tmpl.push(data);_scCaches.fit={};_W.spValid=null;_W.tmOrderFor=null;_W.valNew={size:n.size,slots:Array.from({length:n.size},()=>[]),note:''};_renderWeights();toast('Шаблон добавлен');}
 async function _valDel(id){
   if(!confirm('Удалить шаблон?'))return;
   const{error}=await sb.from('team_templates').delete().eq('id',id);
   if(dbErr(error,'удаление шаблона'))return;
-  _W.tmpl=_W.tmpl.filter(t=>String(t.id)!==String(id));_scCaches.fit={};_W.tmOrderFor=null;_renderWeights();}
+  _W.tmpl=_W.tmpl.filter(t=>String(t.id)!==String(id));_scCaches.fit={};_W.spValid=null;_W.tmOrderFor=null;_renderWeights();}
 async function _tmSave(key){
   const r=_W.tmRows[key];if(!r)return;
   r.updated_at=new Date().toISOString();
@@ -1919,19 +1919,32 @@ function _spGenSolo(pool){
   }
   return fallback;
 }
-// сторона по шаблону валидной комбинации: слот = ИЛИ-набор токенов (arch/char), обе стороны — один шаблон
-function _spSideTmpl(tmpl,pool,exclude,left,seen){
-  const used=new Set(exclude||[]);const team=[];
-  for(let i=0;i<tmpl.slots.length;i++){
-    let cand=pool.filter(c=>!used.has(c.id)&&tmpl.slots[i].some(t=>_tokFit(t,c.id)));
-    if(!cand.length)return null;
-    const fresh=cand.filter(c=>!_spRecentHas(c.id));if(fresh.length)cand=fresh;
-    const c=left
-      ? _spWeighted(cand,x=>Math.pow(_spRareW(seen,x.id),2)*(1+0.3*_spSim(left[i],x)))
-      : _spWeighted(cand,x=>Math.pow(_spRareW(seen,x.id),2));
-    used.add(c.id);team.push(_spInst(c,null));
-  }
-  return team;
+// шаблоны — границы допустимого: разворачиваем их в полный пул валидных составов.
+// семплируем из пула составов, а не из шаблонов — иначе персы из узких/многих шаблонов роллятся чаще.
+function _spValidTeams(size,pool){
+  const key=size+'|'+pool.map(c=>c.id).join(',');
+  if(_W.spValid&&_W.spValid.key===key)return _W.spValid.teams;
+  const teams=[];
+  const walk=(start,acc)=>{
+    if(acc.length===size){if(_tmplFit(acc.map(c=>c.id)))teams.push(acc.slice());return;}
+    for(let i=start;i<pool.length;i++){acc.push(pool[i]);walk(i+1,acc);acc.pop();}
+  };
+  walk(0,[]);
+  _W.spValid={key,teams};
+  return teams;
+}
+// взвешенный выбор состава: недосэмплированность членов доминирует, схожесть с оппонентом — лёгкий нудж
+function _spPickTeam(vt,other,seen){
+  const ex=other?new Set(other.map(c=>c.id)):null;
+  let cand=ex?vt.filter(t=>t.every(c=>!ex.has(c.id))):vt;
+  if(!cand.length)return null;
+  const fresh=cand.filter(t=>t.every(c=>!_spRecentHas(c.id)));if(fresh.length)cand=fresh;
+  const t=_spWeighted(cand,tm=>{
+    let w=0;tm.forEach(c=>w+=Math.pow(_spRareW(seen,c.id),2));w/=tm.length;
+    if(other){let s=0;tm.forEach(c=>s+=Math.max(...other.map(o=>_spSim(o,c))));w*=1+0.3*s/tm.length;}
+    return w;
+  });
+  return t.map(c=>_spInst(c,null));
 }
 function _spGen(){
   const size=_W.sparSize||1;
@@ -1942,10 +1955,10 @@ function _spGen(){
   let fallback=null;
   for(let tries=0;tries<160;tries++){
     let left,right;
-    if(tms.length&&tries<120){                             // есть шаблоны → собираем по ним; хвост попыток — ролевой фолбэк
-      const tm=_spPick(tms);
-      left=_spSideTmpl(tm,pool,[],null,seen);if(!left)continue;
-      right=_spSideTmpl(tm,pool,left.map(c=>c.id),left,seen);if(!right)continue;
+    const vt=tms.length?_spValidTeams(size,pool):[];
+    if(vt.length>=2&&tries<120){                           // шаблоны задают пул валидных составов; хвост попыток — ролевой фолбэк
+      left=_spPickTeam(vt,null,seen);if(!left)continue;
+      right=_spPickTeam(vt,left,seen);if(!right)continue;
     }else{
       const gseq=_spComp(size);                            // одна ролевая раскладка на обе стороны
       left=_spSide(size,gseq,pool,[],null,seen);if(!left)continue;
