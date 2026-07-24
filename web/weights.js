@@ -307,6 +307,7 @@ async function saveWeights(){
     const{error:e2}=await sb.from('char_const_weights').upsert(cpayload,{onConflict:'character_id,mindscape'});
     if(dbErr(e2,'сохранение весов констелляций'))return;
   }
+  if(typeof _scCacheClear==='function'){_scCacheClear();_W.tmOrderFor=null;} // соло-веса входят в расчёт пар/троек
   toast('Веса сохранены');
 }
 
@@ -1039,7 +1040,7 @@ async function _tmLoad(){
     _W.cweights={};csaved.forEach(r=>{(_W.cweights[r.character_id]=_W.cweights[r.character_id]||{})[r.mindscape]=r.manual_weight;});
   }
   if(!_W.tmplLoaded)await _tmplLoad();                    // шаблоны для пометки «вне шаблонов»
-  _W.tmLoaded=true;
+  _scCacheClear();_W.tmLoaded=true;
 }
 const _KB_TM=8; // прайор байес-винрейта пар/троек (выборки крошечные)
 function _tmWr(cids){
@@ -1054,6 +1055,11 @@ function _tmWr(cids){
 // tagSyn — из тегов, эмпирика входит ТОЛЬКО как остаток → нет двойного счёта.
 const _SC={synK:0.10,nSol:8,nPair:6,nTrio:5,manW:0.12,pickW:0.5,gateW:0.35}; // synK: фолбэк-вклад синергии; n*: сила усадки остатка; manW/pickW: ручная калибровка vs пики; gateW: гейт по слабейшему
 const _scMem=m=>(m&&typeof m==='object')?{cid:m.cid,ms:+m.ms||0}:{cid:m,ms:0};
+// мемо-кэши скоринга: тысячи троек × Synergy.score на каждый ререндер = пролаги.
+// Инвалидация — при перезагрузке статов/шаблонов и правке шаблонов.
+const _scCaches={score:{},syn:{},inter:{},pen:{},fit:{}};
+function _scCacheClear(){for(const k in _scCaches)_scCaches[k]={};}
+const _scKey=cids=>cids.map(String).slice().sort().join('|');
 // соло-сила члена состава: ручная калибровка (конст-версия при ms>0, иначе база) — главный сигнал,
 // байес-винрейт пиков — вторичный. В валюте винрейта. Astra M1 > M0 при разных cweights.
 function _scSolo(id,ms){
@@ -1066,10 +1072,13 @@ function _scSolo(id,ms){
 const _scNames=cids=>cids.map(id=>(_W.tmCharMap[id]||{}).name).filter(Boolean);
 // боевая синергия (Synergy.score.total, в очках винрейта, cap ±.15, С КОНФЛИКТАМИ). Фолбэк — теги.
 function _scSyn(cids){
+  const k=_scKey(cids);if(k in _scCaches.syn)return _scCaches.syn[k];
+  let v;
   if(window.Synergy&&Synergy.ready){
-    try{const sc=Synergy.score(_scNames(cids));return sc?sc.total:0;}catch(e){}
+    try{const sc=Synergy.score(_scNames(cids));v=sc?sc.total:0;}catch(e){}
   }
-  return _SC.synK*_scTagSyn(cids);
+  if(v===undefined)v=_SC.synK*_scTagSyn(cids);
+  return _scCaches.syn[k]=v;
 }
 function _scTagSyn(cids){ // фолбэк-синергия тегов 0..1
   const chars=cids.map(id=>_W.tmCharMap[id]).filter(Boolean);
@@ -1078,17 +1087,22 @@ function _scTagSyn(cids){ // фолбэк-синергия тегов 0..1
 }
 // взаимодействуют ли (есть pairFit): гейт для протаскивания парного остатка в трио
 function _scInteract(cids){
+  const k=_scKey(cids);if(k in _scCaches.inter)return _scCaches.inter[k];
+  let v;
   if(window.Synergy&&Synergy.ready){
-    try{const sc=Synergy.score(_scNames(cids));return!!(sc&&sc.parts&&sc.parts.pair>0);}catch(e){}
+    try{const sc=Synergy.score(_scNames(cids));v=!!(sc&&sc.parts&&sc.parts.pair>0);}catch(e){}
   }
-  return _scTagSyn(cids)>0;
+  if(v===undefined)v=_scTagSyn(cids)>0;
+  return _scCaches.inter[k]=v;
 }
 // ролевой штраф валидности — боевой DraftSim.compPenalty (трио-only; пары не штрафует). Фолбэк — 0.
 function _scCompPen(cids){
+  const k=_scKey(cids);if(k in _scCaches.pen)return _scCaches.pen[k];
+  let v=0;
   if(window.DraftSim&&DraftSim.compPenalty){
-    try{return DraftSim.compPenalty(cids.map(c=>({cid:c})),{charMap:_W.tmCharMap});}catch(e){}
+    try{v=DraftSim.compPenalty(cids.map(c=>({cid:c})),{charMap:_W.tmCharMap});}catch(e){}
   }
-  return 0;
+  return _scCaches.pen[k]=v;
 }
 // база = средний соло-винрейт участников (с конст-калибровкой) + гейт по слабейшему + боевая синергия.
 // Гейт: сила состава упирается в нижний тир (слабейшего члена не компенсировать средним).
@@ -1123,14 +1137,18 @@ function _scTrio(mems){
   let pairAdj=0;
   for(let i=0;i<mems.length;i++)for(let j=i+1;j<mems.length;j++){
     const p=[mems[i],mems[j]];
-    if(_scInteract(p.map(m=>m.cid)))pairAdj+=_scPair(p).residShr;
+    if(_scInteract(p.map(m=>m.cid)))pairAdj+=_scScore(p).residShr;
   }
   const pred=pred0+pairAdj;
   const w=_tmWr(cids);const g=w?w.g:0;const emp=w?w.wr:pred;
   const resid=emp-pred;const shr=g/(g+_SC.nTrio);
   return{pred,emp,cal:pred+shr*resid+_scCompPen(cids),resid,residShr:shr*resid,g,unc:_scUnc(g,resid,_SC.nTrio),bad:_scBad(cids)};
 }
-function _scScore(mems){return mems.length===3?_scTrio(mems):_scPair(mems);} // mems: [{cid,ms}] или [cid]
+function _scScore(mems){ // mems: [{cid,ms}] или [cid]
+  const k=mems.map(m=>{const x=_scMem(m);return x.cid+':'+x.ms;}).sort().join('|');
+  if(k in _scCaches.score)return _scCaches.score[k];
+  return _scCaches.score[k]=mems.length===3?_scTrio(mems):_scPair(mems);
+}
 // конст-гейтнутый член: у персонажа есть явная конст-калибровка, отличная от базы →
 // состав стоит пересчитать/проверить в констовых версиях (ключ team_ratings уже cid:ms)
 function _scConstGated(mems){
@@ -1213,7 +1231,9 @@ function _renderTeams(size){
     const gOf=r=>{const w=_tmWr((r.members||[]).map(m=>m.cid));return w?w.g:-1;};
     // приоритет проверки: проблемные (нет кэрри/конфликт) сверху, затем расхождение с фактом
     // конст-гейтнутые члены — небольшой буст: пересмотреть в констовых версиях
-    const prioOf=r=>{if(r.reviewed)return -1;const s=_scScore(r.members||[]);return(s.bad?1:0)+s.unc*0.5+(_scConstGated(r.members||[])?0.25:0);};
+    // вне шаблонов (⚑) — поднимаем: кандидат на проверку/чистку
+    const offOf=r=>(_W.tmpl&&_W.tmpl.length&&!_tmplFit((r.members||[]).map(m=>m.cid)))?0.45:0;
+    const prioOf=r=>{if(r.reviewed)return -1;const s=_scScore(r.members||[]);return(s.bad?1:0)+s.unc*0.5+(_scConstGated(r.members||[])?0.25:0)+offOf(r);};
     const cmp={
       games:(a,b)=>gOf(b)-gOf(a),
       wr:(a,b)=>wrOf(b)-wrOf(a),
@@ -1258,6 +1278,12 @@ function _renderTeams(size){
   };
   const fq=(_W.tmFilter||'').toLowerCase().trim();
   const shown=fq?rows.filter(r=>(r.members||[]).some(m=>((_W.tmCharMap[m.cid]||{}).name||'').toLowerCase().includes(fq))):rows;
+  // пагинация: тысячи строк одним куском = пролаги на каждый ререндер
+  const lim=_W.tmLimit||200;
+  const vis=shown.slice(0,lim);
+  const moreBtn=shown.length>lim?`<div style="padding:12px;text-align:center;border-top:1px solid var(--line)">
+      <button class="btn" onclick="_tmMore(500)">Показать ещё 500 (${shown.length-lim} скрыто)</button>
+      <button class="btn" style="margin-left:8px" onclick="_tmMore(1e9)">Все</button></div>`:'';
   const list=shown.length?`<div class="card" style="padding:0;overflow:hidden"><table style="width:100%;border-collapse:collapse">
     <thead><tr style="font-size:11px;color:var(--sub);text-transform:uppercase;text-align:left">
       <th style="padding:10px 14px">Состав</th>
@@ -1265,7 +1291,7 @@ function _renderTeams(size){
       ${_tmTh(sortKey==='wr'?'Факт · винрейт':'Факт · игры','__fact',sortKey,['games','wr'].includes(sortKey))}
       ${_tmTh('Расчёт','calc',sortKey)}
       <th style="padding:10px 8px">Заметка</th><th></th></tr></thead>
-    <tbody>${shown.map(rowHTML).join('')}</tbody></table></div>`
+    <tbody>${vis.map(rowHTML).join('')}</tbody></table>${moreBtn}</div>`
     :`<div class="card" style="padding:18px;color:var(--sub);font-size:13px">${fq?'Ничего не найдено по фильтру.':`Пока нет сохранённых ${label}. Собери первую выше.`}</div>`;
   const searchBox=`<input placeholder="фильтр по персонажу…" value="${escapeHtml(_W.tmFilter||'')}" oninput="_tmFilterSet(this.value)" style="${inSt};min-width:220px">`;
   html(`${_analyticsTabs()}${createForm}
@@ -1294,6 +1320,7 @@ async function _tmReview(key){
   if(dbErr(error,'отметка проверки'))return;
   r.reviewed=nv;_W.tmOrderFor=null;_renderWeights();
 }
+function _tmMore(n){_W.tmLimit=(_W.tmLimit||200)+n;_renderWeights();}
 function _tmFilterSet(v){_W.tmFilter=v;_renderWeights();
   const inp=document.querySelector('#page-content input[placeholder="фильтр по персонажу…"]');
   if(inp){inp.focus();inp.setSelectionRange(v.length,v.length);}}
@@ -1512,11 +1539,14 @@ function _tmplFitOne(cids,slots){
     for(let i=0;i<cids.length;i++)if(!used[i]&&slots[k].some(t=>_tokFit(t,cids[i]))){used[i]=true;if(fit(k+1))return true;used[i]=false;}
     return false;};
   return fit(0);}
-function _tmplFit(cids){const c=cids.map(String);return(_W.tmpl||[]).some(t=>_tmplFitOne(c,t.slots||[]));}
+function _tmplFit(cids){
+  const c=cids.map(String);const k=_scKey(c);
+  if(k in _scCaches.fit)return _scCaches.fit[k];
+  return _scCaches.fit[k]=(_W.tmpl||[]).some(t=>_tmplFitOne(c,t.slots||[]));}
 async function _tmplLoad(){
   const rows=await _fetchAllW('team_templates');
   _W.tmpl=rows.sort((a,b)=>(a.sort_order-b.sort_order)||String(a.id).localeCompare(String(b.id)));
-  _W.tmplLoaded=true;}
+  _scCaches.fit={};_W.tmplLoaded=true;}
 function _renderValid(){
   if(!_W.tmLoaded){
     html(`${_analyticsTabs()}<div class="card" style="padding:22px"><span class="spinner"></span> Загружаю персонажей и теги…</div>`);
@@ -1601,17 +1631,17 @@ async function _valAdd(){
     if(dbErr(error,'правка шаблона'))return _valSt('ошибка','var(--red)');
     const t=_W.tmpl.find(x=>String(x.id)===String(n.id));
     if(t){t.size=n.size;t.slots=n.slots;t.note=n.note||'';}
-    _W.valNew=null;_renderWeights();toast('Шаблон обновлён');return;
+    _scCaches.fit={};_W.tmOrderFor=null;_W.valNew=null;_renderWeights();toast('Шаблон обновлён');return;
   }
   const row={size:n.size,slots:n.slots,note:n.note||'',sort_order:_W.tmpl.length,created_at:new Date().toISOString()};
   const{data,error}=await sb.from('team_templates').insert(row).select().single();
   if(dbErr(error,'создание шаблона'))return _valSt('ошибка','var(--red)');
-  _W.tmpl.push(data);_W.valNew={size:n.size,slots:Array.from({length:n.size},()=>[]),note:''};_renderWeights();toast('Шаблон добавлен');}
+  _W.tmpl.push(data);_scCaches.fit={};_W.tmOrderFor=null;_W.valNew={size:n.size,slots:Array.from({length:n.size},()=>[]),note:''};_renderWeights();toast('Шаблон добавлен');}
 async function _valDel(id){
   if(!confirm('Удалить шаблон?'))return;
   const{error}=await sb.from('team_templates').delete().eq('id',id);
   if(dbErr(error,'удаление шаблона'))return;
-  _W.tmpl=_W.tmpl.filter(t=>String(t.id)!==String(id));_renderWeights();}
+  _W.tmpl=_W.tmpl.filter(t=>String(t.id)!==String(id));_scCaches.fit={};_W.tmOrderFor=null;_renderWeights();}
 async function _tmSave(key){
   const r=_W.tmRows[key];if(!r)return;
   r.updated_at=new Date().toISOString();
