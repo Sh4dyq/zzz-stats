@@ -151,9 +151,21 @@ function normalize(doc: any) {
           [m.p1, m.p2].forEach((id: string | null) => { if (id) { seatG(id).d++; seatG(id).pts += 0.5; push(id, "D"); } });
         }
       }
-      const standings = [...st.values()]
+      // Тайбрейки как у Challonge: очки → личные встречи среди равных → геймы → имя
+      const h2hWins = (id: string, rivals: Set<string>) =>
+        gm.filter((m: any) => m.win === id && rivals.has(m.win === m.p1 ? m.p2 : m.p1)).length;
+      const base = [...st.values()]
         .map((r) => ({ ...r, history: r.history.sort((a, b) => a.ord - b.ord).map((h) => h.r) }))
-        .sort((a, b) => b.pts - a.pts || (b.w - b.l) - (a.w - a.l) || b.gw - a.gw || a.name.localeCompare(b.name));
+        .sort((a, b) => b.pts - a.pts);
+      const standings: typeof base = [];
+      for (let i = 0; i < base.length;) {
+        let j = i; while (j < base.length && base[j].pts === base[i].pts) j++;
+        const tied = base.slice(i, j);
+        const ids = new Set(tied.map((r) => r.pid));
+        tied.sort((a, b) => h2hWins(b.pid, ids) - h2hWins(a.pid, ids) || (b.w - b.l) - (a.w - a.l) || b.gw - a.gw || a.name.localeCompare(b.name));
+        standings.push(...tied);
+        i = j;
+      }
       // матчи группы, разложенные по раундам (round-robin)
       const rkeys = [...new Set(gm.map((m: any) => m.round ?? 0))].sort((a, b) => a - b);
       const grounds = rkeys.map((rk) => ({

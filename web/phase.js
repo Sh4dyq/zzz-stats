@@ -80,7 +80,7 @@
   // Стендинги группы: из кэша Challonge, иначе считаем W:L по встречам.
   function standingsFor(gr,encs,nickOf){
     if(gr.standings&&gr.standings.length)
-      return gr.standings.slice().sort((a,b)=>b.w-a.w||a.l-b.l||String(a.nm).localeCompare(String(b.nm)));
+      return gr.standings.slice(); // порядок кэша авторитетен (тайбрейки Challonge уже применены)
     const st={};
     const seat=pid=>st[pid]||(st[pid]={pid,w:0,l:0});
     encs.forEach(e=>{
