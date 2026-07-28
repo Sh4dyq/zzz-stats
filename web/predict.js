@@ -95,7 +95,7 @@
         let a=p1[n.id],b=p2[n.id],w=win[n.id];
         if(!w){
           if(a&&b){const f=forced&&forced[pairKey(a,b)];w=f!=null?f:(Math.random()<pElo(get(a),get(b))?a:b);}
-          else if(n.is_bye)w=a||b;
+          else w=a||b;   // walkover: вторая сторона пуста (bye в верхней → дыра в нижней) — проход
           if(!w)return;
           win[n.id]=w;
         }

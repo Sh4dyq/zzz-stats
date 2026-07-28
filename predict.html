@@ -393,6 +393,8 @@
         <option value="RR">Группы · Round Robin</option>
       </select>
       <button class="ct-btn" id="ct-addg" onclick="ctAddGroup()" style="display:none">+ Группа</button>
+      <select id="ct-tour" title="Взять состав/сетку из турнира"></select>
+      <button class="ct-btn" onclick="ctLoadTour()">Загрузить турнир</button>
       <button class="ct-btn primary" onclick="ctSimulate()">Симулировать</button>
       <button class="ct-btn" onclick="ctReset()">Сброс</button>
     </div>
@@ -640,7 +642,7 @@ async function boot(){
   D.encs=encs;
   D.mbe={};const mmap={};ms.forEach(m=>{(D.mbe[m.encounter_id]=D.mbe[m.encounter_id]||[]).push(m);mmap[m.id]=m;});
   D.parts={};pa.forEach(p=>{(D.parts[p.tournament_id]=D.parts[p.tournament_id]||[]).push(p);});
-  D.nodes={};const brTour={};br.forEach(b=>brTour[b.id]=b.tournament_id);
+  D.nodes={};D.brTypes={};const brTour={};br.forEach(b=>{brTour[b.id]=b.tournament_id;D.brTypes[b.tournament_id]=b.type;});
   bn.forEach(n=>{const tid=brTour[n.bracket_id];if(tid)(D.nodes[tid]=D.nodes[tid]||[]).push(n);});
   D.results={};rs.forEach(r=>{(D.results[r.tournament_id]=D.results[r.tournament_id]||[]).push(r);});
   D.cache={};bc.forEach(c=>{D.cache[c.tournament_id]=c.json;});
@@ -1080,15 +1082,40 @@ function setTourView(v){
 }
 function ctFmt(){
   CT.fmt=$('ct-fmt').value;
-  CT.zones=CT.fmt==='RR'?[[],[]]:[CT.zones.flat()];
+  CT.zones=CT.fmt==='RR'?[[],[]]:[CT.zones.flat()];CT.sim=null;
   $('ct-addg').style.display=CT.fmt==='RR'?'inline-block':'none';
   $('ct-zh').textContent=CT.fmt==='RR'?'Группы — тяни игроков внутрь':'Участники (порядок = сеяние)';
   $('ct-out').innerHTML='';
   ctRender();
 }
+// взять турнир: своя сетка (со сыгранными результатами) либо состав по сеянию
+function ctLoadTour(){
+  const tid=$('ct-tour').value,t=D.tours.find(x=>String(x.id)===String(tid));
+  const out=$('ct-out');if(!t)return;
+  const nodes=D.nodes[tid]||[];
+  if(nodes.length){
+    CT.fmt=(D.brTypes[tid]||t.bracket_type||'SE').toUpperCase().indexOf('DE')>=0?'DE':'SE';
+    $('ct-fmt').value=CT.fmt;$('ct-addg').style.display='none';
+    CT.zones=[[]];CT.forced={};
+    CT.sim={fmt:CT.fmt,parts:[],nodes:nodes.map(n=>Object.assign({},n,{_played:!!n.winner_id})),tour:t.name};
+    ctRender();ctRenderSim();return;
+  }
+  // сетки нет — берём участников (сеяние из tournament_participants, добор из встреч)
+  const seeded=(D.parts[tid]||[]).slice().sort((a,b)=>(a.seed??1e9)-(b.seed??1e9)).map(p=>p.player_id);
+  const seen=new Set(seeded);
+  D.encs.filter(e=>e.tournament_id===tid).forEach(e=>[e.player1_id,e.player2_id].forEach(p=>{if(p&&!seen.has(p)){seen.add(p);seeded.push(p);}}));
+  const parts=seeded.filter(p=>D.playerMap[p]);
+  if(parts.length<2){out.innerHTML='<div class="panel"><h3>Нет данных</h3><p>У турнира нет ни сетки, ни известных участников.</p></div>';return;}
+  const type=(t.bracket_type||'SE').toUpperCase();
+  CT.fmt=type.indexOf('DE')>=0?'DE':(type.indexOf('SE')>=0?'SE':CT.fmt);
+  $('ct-fmt').value=CT.fmt;$('ct-addg').style.display='none';
+  CT.zones=[parts];CT.forced={};
+  CT.sim={fmt:CT.fmt,parts:parts.slice(),tour:t.name};
+  ctRender();ctRenderSim();
+}
 function ctAddGroup(){CT.zones.push([]);ctRender();}
 function ctDelGroup(i){CT.zones.splice(i,1);if(!CT.zones.length)CT.zones=[[]];ctRender();}
-function ctReset(){CT.zones=CT.fmt==='RR'?[[],[]]:[[]];$('ct-out').innerHTML='';ctRender();}
+function ctReset(){CT.zones=CT.fmt==='RR'?[[],[]]:[[]];CT.sim=null;CT.forced={};$('ct-out').innerHTML='';ctRender();}
 function ctChip(pid,draggable=true){
   const p=D.playerMap[pid];if(!p)return'';
   return`<div class="chip" draggable="${draggable}" data-pid="${pid}" ondragstart="ctDragStart(event)" ondragend="ctDragEnd(event)">${esc(p.nickname)}<span class="celo">${Math.round(eloShown(pid))}</span></div>`;
@@ -1139,6 +1166,7 @@ function ctSimulate(){
 }
 // свежая сетка из текущего состава (сеяние = порядок), byes авто-разрешены seed()
 function ctBuildNodes(){
+  if(CT.sim.nodes)return CT.sim.nodes.map(n=>Object.assign({},n)); // сетка турнира: сыгранное зафиксировано
   const parts=CT.sim.parts,size=BracketEngine.nextPow2(parts.length);
   const nodes=BracketEngine.generate(CT.sim.fmt,size);
   BracketEngine.seed(nodes,parts.map((pid,i)=>({player_id:pid,seed:i+1})),size);
@@ -1149,8 +1177,9 @@ function ctPredict(nodes){
   const R=D.elo.ratings,by={};nodes.forEach(n=>by[n.id]=n);
   const ordP={W:0,L:1,GF:2};
   nodes.slice().sort((a,b)=>(ordP[a.part]??3)-(ordP[b.part]??3)||a.round-b.round||a.slot-b.slot).forEach(n=>{
-    if(n.winner_id)return;                        // bye уже разрешён
-    const a=n.player1_id,b=n.player2_id;if(!a||!b)return;
+    if(n.winner_id)return;                        // сыграно / bye уже разрешён
+    const a=n.player1_id,b=n.player2_id;
+    if(!a||!b){if(a||b)BracketEngine.applyWinner(by,n,a||b);return;} // walkover
     const f=CT.forced[Predict.pairKey(a,b)];
     const w=(f===a||f===b)?f:(Predict.pElo(R[a]??1000,R[b]??1000)>=0.5?a:b);
     BracketEngine.applyWinner(by,n,w);
@@ -1159,7 +1188,7 @@ function ctPredict(nodes){
 }
 // клик по игроку в матче — зафиксировать/снять его как победителя пары, пересимулировать
 function ctPick(nodeId,slot){
-  const n=CT.byId&&CT.byId[nodeId];if(!n)return;
+  const n=CT.byId&&CT.byId[nodeId];if(!n||n._played)return;
   const a=n.player1_id,b=n.player2_id;if(!a||!b)return;
   const pid=slot===1?a:b,fk=Predict.pairKey(a,b);
   if(CT.forced[fk]===pid)delete CT.forced[fk];else CT.forced[fk]=pid;
@@ -1177,8 +1206,9 @@ function ctRenderSim(){
     if(!pid)return`<div class="br-s"><span class="bn ct-tbd">—</span><span class="bp"></span></div>`;
     let pp='';if(a&&b){const p=Predict.pElo(R[a]??1000,R[b]??1000);pp=Math.round((slot===1?p:1-p)*100)+'%';}
     const win=n.winner_id===pid,forced=a&&b&&CT.forced[Predict.pairKey(a,b)]===pid;
-    const clk=a&&b?`onclick="ctPick('${n.id}',${slot})"`:'';
-    return`<div class="br-s${win?' win':''}${forced?' pinned':''}" ${clk} title="${a&&b?'Клик — назначить победителем':''}"><span class="bn">${_ctNm(pid)}</span><span class="bp">${forced?'📌':''}${pp}</span></div>`;
+    const can=a&&b&&!n._played;                   // сыгранный матч не переигрываем
+    const clk=can?`onclick="ctPick('${n.id}',${slot})"`:'';
+    return`<div class="br-s${win?' win':''}${forced?' pinned':''}" ${clk} title="${can?'Клик — назначить победителем':(n._played?'Сыграно':'')}"><span class="bn">${_ctNm(pid)}</span><span class="bp">${forced?'📌':''}${pp}</span></div>`;
   };
   const matchHtml=n=>`<div class="br-m">${seat(n,1)}${seat(n,2)}</div>`;
   const section=(keys,title)=>{
@@ -1201,8 +1231,8 @@ function ctRenderSim(){
     ${rows.map((r,i)=>`<div class="chrow" style="grid-template-columns:${cols}"><div class="num">${i+1}</div><div class="nm">${_ctNm(r.pid)}</div><div class="mut">${Math.round(r.elo)}</div>${_ctCell(r.fin)}${_ctCell(r.champ)}</div>`).join('')}
   </div>`;
   const forcedN=Object.keys(CT.forced).length;
-  out.innerHTML=`<details class="sect" open><summary>Схема сетки${forcedN?` · зафиксировано пар: ${forcedN}`:''}</summary>
-      <div class="sect-b"><div class="chnote" style="margin:0 0 10px;text-align:left">Показан наиболее вероятный путь (в каждой паре ведёт фаворит по Elo). Кликни по игроку — назначь его победителем 📌, сетка пересчитается до конца.</div>${upper}${lower}</div>
+  out.innerHTML=`<details class="sect" open><summary>Схема сетки${CT.sim.tour?` · ${esc(CT.sim.tour)}`:''}${forcedN?` · зафиксировано пар: ${forcedN}`:''}</summary>
+      <div class="sect-b"><div class="chnote" style="margin:0 0 10px;text-align:left">${CT.sim.nodes?'Сетка турнира: сыгранные матчи зафиксированы, остальное — прогноз. ':''}Показан наиболее вероятный путь (в каждой паре ведёт фаворит по Elo). Кликни по игроку — назначь его победителем 📌, сетка пересчитается до конца.</div>${upper}${lower}</div>
     </details>
     <details class="sect" open><summary>Шансы на титул</summary>
       <div class="sect-b">${oddsTbl}<div class="chnote">Монте-Карло 10 000 симуляций на Elo; зафиксированные пары учтены (эти двое всегда играют по назначенному исходу).</div></div>
@@ -1239,9 +1269,10 @@ function initTour(){
     return`<option value="${t.id}">${esc(t.name)}${st}</option>`;
   }).join('');
   $('tour-sel').innerHTML=opts;
+  $('ct-tour').innerHTML=opts;
   // дефолт — live, иначе первый не-upcoming
   const cur=D.tours.find(t=>t.status==='live')||D.tours.find(t=>t.status!=='upcoming')||D.tours[0];
-  if(cur)$('tour-sel').value=cur.id;
+  if(cur){$('tour-sel').value=cur.id;$('ct-tour').value=cur.id;}
   renderTour();
 }
 function renderTour(){
