@@ -116,6 +116,15 @@
       n.player1_id=pa?pa.player_id:null;
       n.player2_id=pb?pb.player_id:null;
     });
+    // Уплотнение нижней сетки под BYE: реальные матчи R1 дают проигравших парами
+    // в LB R1 подряд, а не «через один». Иначе (12 из 16: 4 bye) каждый проигравший
+    // R1 попадал бы в свой LB-матч один и проходил дальше без игры.
+    const lb1=nodes.filter(n=>n.part==='L'&&n.round===1).sort((a,b)=>a.slot-b.slot);
+    if(lb1.length){
+      const real=r1.filter(n=>n.player1_id&&n.player2_id);
+      r1.forEach(n=>{n.next_lose_node=null;n.next_lose_slot=null;});   // bye — проигравшего нет
+      real.forEach((n,i)=>{n.next_lose_node=lb1[Math.floor(i/2)].id;n.next_lose_slot=(i%2)+1;});
+    }
     // резолв BYE: где одна сторона пуста (seed>N) — другая авто-проходит
     const N=participants.length;
     r1.forEach(n=>{

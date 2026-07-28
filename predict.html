@@ -1088,28 +1088,72 @@ function ctFmt(){
   $('ct-out').innerHTML='';
   ctRender();
 }
-// взять турнир: своя сетка (со сыгранными результатами) либо состав по сеянию
+// посев и сыгранные матчи из кэша Challonge (bracket_cache.rounds)
+const _ctNorm=s=>String(s||'').toLowerCase().replace(/[^a-zа-яё0-9]/gi,'');
+function ctFromCache(tid){
+  const c=D.cache[tid];if(!c||!c.rounds||!c.rounds.length)return null;
+  // резолв участника: точный — по challonge_pid из tournament_participants, иначе по нику
+  const byCh={},idByNick={};
+  D.players.forEach(p=>{const k=_ctNorm(p.nickname);if(k)idByNick[k]=p.id;});
+  (D.parts[tid]||[]).forEach(p=>{
+    if(p.challonge_pid)byCh[String(p.challonge_pid)]=p.player_id;
+    const k=_ctNorm(p.challonge_name);if(k)idByNick[k]=p.player_id;
+  });
+  const names={};
+  // участник без записи в БД остаётся в сетке под ником Challonge (id вида ch:<pid>),
+  // иначе его место превращалось бы в BYE и структура расходилась с реальной
+  const pidOf=s=>{
+    if(!s||(!s.pid&&!s.name))return null;
+    const id=byCh[String(s.pid)]||(s.name?idByNick[_ctNorm(s.name)]:null)||('ch:'+(s.pid||_ctNorm(s.name)));
+    if(!D.playerMap[id])names[id]=s.name||'—';
+    return id;
+  };
+  // посев берём только из кэша: шкала Challonge включает и незарегистрированных
+  // участников, смешивать её с seed из tournament_participants нельзя (коллизии)
+  const seedOf={},played=[];
+  // порядок раундов кэша: верхняя → гранд-финал → нижняя; для реплея нужен ход игры
+  const flat=[];c.rounds.forEach(r=>r.matches.forEach(m=>flat.push(m)));
+  flat.sort((a,b)=>(a.play_order??1e9)-(b.play_order??1e9));
+  flat.forEach(m=>{
+    const a=pidOf(m.a),b=pidOf(m.b);
+    [[m.a,a],[m.b,b]].forEach(([s,pid])=>{if(pid&&s.seed&&seedOf[pid]==null)seedOf[pid]=s.seed;});
+    if(!a||!b||!m.played)return;
+    const w=m.a&&m.a.win?a:(m.b&&m.b.win?b:null);
+    if(w)played.push({a,b,w});
+  });
+  const pids=Object.keys(seedOf);if(pids.length<2)return null;
+  const size=Math.max(...pids.map(p=>seedOf[p]));                 // размер по максимальному посеву
+  const parts=pids.slice().sort((x,y)=>seedOf[x]-seedOf[y]);
+  return {parts,seeds:seedOf,size,played,names};
+}
+// взять турнир: своя сетка → кэш Challonge (посев + сыгранное) → просто состав
 function ctLoadTour(){
   const tid=$('ct-tour').value,t=D.tours.find(x=>String(x.id)===String(tid));
   const out=$('ct-out');if(!t)return;
+  const setFmt=type=>{CT.fmt=String(type||'SE').toUpperCase().indexOf('DE')>=0?'DE':'SE';
+    $('ct-fmt').value=CT.fmt;$('ct-addg').style.display='none';CT.forced={};};
   const nodes=D.nodes[tid]||[];
   if(nodes.length){
-    CT.fmt=(D.brTypes[tid]||t.bracket_type||'SE').toUpperCase().indexOf('DE')>=0?'DE':'SE';
-    $('ct-fmt').value=CT.fmt;$('ct-addg').style.display='none';
-    CT.zones=[[]];CT.forced={};
+    setFmt(D.brTypes[tid]||t.bracket_type);
+    CT.zones=[[]];
     CT.sim={fmt:CT.fmt,parts:[],nodes:nodes.map(n=>Object.assign({},n,{_played:!!n.winner_id})),tour:t.name};
     ctRender();ctRenderSim();return;
   }
-  // сетки нет — берём участников (сеяние из tournament_participants, добор из встреч)
+  const cache=ctFromCache(tid);
+  if(cache){
+    setFmt(t.bracket_type);
+    CT.zones=[cache.parts.filter(p=>D.playerMap[p])];   // в пул — только известные игроки
+    CT.sim={fmt:CT.fmt,parts:cache.parts,seeds:cache.seeds,size:cache.size,played:cache.played,names:cache.names,tour:t.name,src:'challonge'};
+    ctRender();ctRenderSim();return;
+  }
+  // ни сетки, ни кэша — участники (сеяние из tournament_participants, добор из встреч)
   const seeded=(D.parts[tid]||[]).slice().sort((a,b)=>(a.seed??1e9)-(b.seed??1e9)).map(p=>p.player_id);
   const seen=new Set(seeded);
   D.encs.filter(e=>e.tournament_id===tid).forEach(e=>[e.player1_id,e.player2_id].forEach(p=>{if(p&&!seen.has(p)){seen.add(p);seeded.push(p);}}));
   const parts=seeded.filter(p=>D.playerMap[p]);
   if(parts.length<2){out.innerHTML='<div class="panel"><h3>Нет данных</h3><p>У турнира нет ни сетки, ни известных участников.</p></div>';return;}
-  const type=(t.bracket_type||'SE').toUpperCase();
-  CT.fmt=type.indexOf('DE')>=0?'DE':(type.indexOf('SE')>=0?'SE':CT.fmt);
-  $('ct-fmt').value=CT.fmt;$('ct-addg').style.display='none';
-  CT.zones=[parts];CT.forced={};
+  setFmt(t.bracket_type);
+  CT.zones=[parts];
   CT.sim={fmt:CT.fmt,parts:parts.slice(),tour:t.name};
   ctRender();ctRenderSim();
 }
@@ -1154,7 +1198,7 @@ function ctDrop(e,zone){
 }
 const _ctPct=p=>p>=.0005?(p*100).toFixed(1)+'%':'—';
 const _ctCell=p=>`<div><span class="chpct">${_ctPct(p)}</span><div class="chbar"><i style="width:${Math.min(100,p*100)}%"></i></div></div>`;
-const _ctNm=pid=>esc(D.playerMap[pid]?.nickname||'—');
+const _ctNm=pid=>esc(D.playerMap[pid]?.nickname||(CT.sim&&CT.sim.names&&CT.sim.names[pid])||'—');
 function ctSimulate(){
   const out=$('ct-out');
   if(CT.fmt==='RR'){CT.sim=null;ctRenderRR(out);return;}
@@ -1167,20 +1211,44 @@ function ctSimulate(){
 // свежая сетка из текущего состава (сеяние = порядок), byes авто-разрешены seed()
 function ctBuildNodes(){
   if(CT.sim.nodes)return CT.sim.nodes.map(n=>Object.assign({},n)); // сетка турнира: сыгранное зафиксировано
-  const parts=CT.sim.parts,size=BracketEngine.nextPow2(parts.length);
+  const parts=CT.sim.parts,sd=CT.sim.seeds;
+  const size=BracketEngine.nextPow2(CT.sim.size||parts.length);
   const nodes=BracketEngine.generate(CT.sim.fmt,size);
-  BracketEngine.seed(nodes,parts.map((pid,i)=>({player_id:pid,seed:i+1})),size);
+  BracketEngine.seed(nodes,parts.map((pid,i)=>({player_id:pid,seed:(sd&&sd[pid])||i+1})),size);
+  return ctReplay(nodes,CT.sim.played);
+}
+// проигрывает известные результаты по сетке: пара найдена в истории → исход зафиксирован
+// (_played), выбывшие сами перестают набирать шансы. Ненайденные пары досимулируются.
+function ctReplay(nodes,played){
+  CT.replayed=0;CT.replayTotal=(played||[]).length;CT.autoForced={};
+  if(!CT.replayTotal)return nodes;
+  const by={};nodes.forEach(n=>by[n.id]=n);
+  const pool=played.map(x=>Object.assign({},x));
+  const ordP={W:0,L:1,GF:2};
+  nodes.slice().sort((a,b)=>(ordP[a.part]??3)-(ordP[b.part]??3)||a.round-b.round||a.slot-b.slot).forEach(n=>{
+    if(n.winner_id)return;
+    const a=n.player1_id,b=n.player2_id;
+    if(!a||!b){if(a||b)BracketEngine.applyWinner(by,n,a||b);return;}   // walkover
+    const m=pool.find(x=>!x.used&&((x.a===a&&x.b===b)||(x.a===b&&x.b===a)));
+    if(!m)return;
+    m.used=true;n._played=true;CT.replayed++;
+    BracketEngine.applyWinner(by,n,m.w);
+  });
+  // не легло на структуру (нижняя сетка Challonge раскидывает дропдауны по-своему) —
+  // фиксируем как исход пары: встретятся у нас — сыграют по реальному результату
+  pool.forEach(x=>{if(!x.used)CT.autoForced[Predict.pairKey(x.a,x.b)]=x.w;});
   return nodes;
 }
+const ctForced=()=>Object.assign({},CT.autoForced||{},CT.forced||{});
 // детерминированный прогноз: победитель = forced либо фаворит по Elo
 function ctPredict(nodes){
   const R=D.elo.ratings,by={};nodes.forEach(n=>by[n.id]=n);
-  const ordP={W:0,L:1,GF:2};
+  const FF=ctForced(),ordP={W:0,L:1,GF:2};
   nodes.slice().sort((a,b)=>(ordP[a.part]??3)-(ordP[b.part]??3)||a.round-b.round||a.slot-b.slot).forEach(n=>{
     if(n.winner_id)return;                        // сыграно / bye уже разрешён
     const a=n.player1_id,b=n.player2_id;
     if(!a||!b){if(a||b)BracketEngine.applyWinner(by,n,a||b);return;} // walkover
-    const f=CT.forced[Predict.pairKey(a,b)];
+    const f=FF[Predict.pairKey(a,b)];
     const w=(f===a||f===b)?f:(Predict.pElo(R[a]??1000,R[b]??1000)>=0.5?a:b);
     BracketEngine.applyWinner(by,n,w);
   });
@@ -1198,7 +1266,7 @@ function ctRenderSim(){
   const R=D.elo.ratings,out=$('ct-out');
   const pred=ctPredict(ctBuildNodes());
   CT.byId={};pred.forEach(n=>CT.byId[n.id]=n);
-  const sim=Predict.simulateBracket(ctBuildNodes(),R,10000,CT.forced);
+  const sim=Predict.simulateBracket(ctBuildNodes(),R,10000,ctForced());
   const rname=k=>{const[p,r]=k.split('|');return p==='GF'?'Гранд-финал':(p==='L'?'Нижняя · Раунд '+r:(CT.sim.fmt==='DE'?'Верхняя · ':'')+'Раунд '+r);};
   const groups={};pred.forEach(n=>{const k=n.part+'|'+n.round;(groups[k]=groups[k]||[]).push(n);});
   const seat=(n,slot)=>{
@@ -1208,7 +1276,8 @@ function ctRenderSim(){
     const win=n.winner_id===pid,forced=a&&b&&CT.forced[Predict.pairKey(a,b)]===pid;
     const can=a&&b&&!n._played;                   // сыгранный матч не переигрываем
     const clk=can?`onclick="ctPick('${n.id}',${slot})"`:'';
-    return`<div class="br-s${win?' win':''}${forced?' pinned':''}" ${clk} title="${can?'Клик — назначить победителем':(n._played?'Сыграно':'')}"><span class="bn">${_ctNm(pid)}</span><span class="bp">${forced?'📌':''}${pp}</span></div>`;
+    if(n._played)pp='';                           // факт, а не прогноз
+    return`<div class="br-s${win?' win':''}${forced?' pinned':''}" ${clk} title="${can?'Клик — назначить победителем':(n._played?'Сыграно':'')}"><span class="bn">${_ctNm(pid)}</span><span class="bp">${forced?'📌':''}${n._played?(win?'✓':''):pp}</span></div>`;
   };
   const matchHtml=n=>`<div class="br-m">${seat(n,1)}${seat(n,2)}</div>`;
   const section=(keys,title)=>{
@@ -1224,15 +1293,20 @@ function ctRenderSim(){
   const lower=section(lKeys,'Нижняя сетка');
   // ---- таблица шансов ----
   const pids=new Set();pred.forEach(n=>{if(n.player1_id)pids.add(n.player1_id);if(n.player2_id)pids.add(n.player2_id);});
-  const rows=[...pids].map(pid=>({pid,elo:eloShown(pid),champ:sim[pid]?.champ||0,fin:sim[pid]?.final||0})).sort((a,b)=>b.champ-a.champ||b.fin-a.fin);
+  // живой = стоит в слоте ещё не сыгранного матча
+  const alive=new Set();pred.forEach(n=>{if(n._played)return;
+    if(n.player1_id)alive.add(n.player1_id);if(n.player2_id)alive.add(n.player2_id);});
+  pred.forEach(n=>{if(n._played&&!n.next_win_node&&n.winner_id)alive.add(n.winner_id);}); // чемпион
+  const rows=[...pids].map(pid=>({pid,elo:eloShown(pid),champ:sim[pid]?.champ||0,fin:sim[pid]?.final||0,out:!alive.has(pid)}))
+    .sort((a,b)=>b.champ-a.champ||b.fin-a.fin||(a.out?1:0)-(b.out?1:0));
   const cols='40px 1fr 70px 140px 140px';
   const oddsTbl=`<div class="chtbl">
     <div class="chrow hd" style="grid-template-columns:${cols}"><div>#</div><div>Игрок</div><div>Elo</div><div>${CT.sim.fmt==='DE'?'Гранд-финал':'Финал'}</div><div>Победа</div></div>
-    ${rows.map((r,i)=>`<div class="chrow" style="grid-template-columns:${cols}"><div class="num">${i+1}</div><div class="nm">${_ctNm(r.pid)}</div><div class="mut">${Math.round(r.elo)}</div>${_ctCell(r.fin)}${_ctCell(r.champ)}</div>`).join('')}
+    ${rows.map((r,i)=>`<div class="chrow" style="grid-template-columns:${cols};${r.out?'opacity:.45':''}"><div class="num">${i+1}</div><div class="nm">${_ctNm(r.pid)}${r.out?' <span class="mut" style="font-size:12px">— выбыл</span>':''}</div><div class="mut">${Math.round(r.elo)}</div>${_ctCell(r.fin)}${_ctCell(r.champ)}</div>`).join('')}
   </div>`;
   const forcedN=Object.keys(CT.forced).length;
   out.innerHTML=`<details class="sect" open><summary>Схема сетки${CT.sim.tour?` · ${esc(CT.sim.tour)}`:''}${forcedN?` · зафиксировано пар: ${forcedN}`:''}</summary>
-      <div class="sect-b"><div class="chnote" style="margin:0 0 10px;text-align:left">${CT.sim.nodes?'Сетка турнира: сыгранные матчи зафиксированы, остальное — прогноз. ':''}Показан наиболее вероятный путь (в каждой паре ведёт фаворит по Elo). Кликни по игроку — назначь его победителем 📌, сетка пересчитается до конца.</div>${upper}${lower}</div>
+      <div class="sect-b"><div class="chnote" style="margin:0 0 10px;text-align:left">${CT.sim.nodes?'Сетка турнира: сыгранные матчи зафиксированы, остальное — прогноз. ':''}${CT.replayTotal?`Посев и результаты с Challonge: учтено сыгранных ${CT.replayed} из ${CT.replayTotal}. `:''}Показан наиболее вероятный путь (в каждой паре ведёт фаворит по Elo). Кликни по игроку — назначь его победителем 📌, сетка пересчитается до конца.</div>${upper}${lower}</div>
     </details>
     <details class="sect" open><summary>Шансы на титул</summary>
       <div class="sect-b">${oddsTbl}<div class="chnote">Монте-Карло 10 000 симуляций на Elo; зафиксированные пары учтены (эти двое всегда играют по назначенному исходу).</div></div>
