@@ -190,6 +190,7 @@
   .br-crh{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;font-size:12px;letter-spacing:.04em;color:var(--sub);margin-bottom:8px;text-align:center;flex:none}
   .br-colb{flex:1;display:flex;flex-direction:column;justify-content:space-around;gap:8px}
   .br-m{border:1px solid var(--border);border-radius:8px;background:var(--card);overflow:hidden;flex:none}
+  .br-m.wait{border-style:dashed;opacity:.75}
   .br-s{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 10px;font-size:13.5px;cursor:pointer;transition:background .12s}
   .br-s+.br-s{border-top:1px solid var(--line)}
   .br-s:hover{background:var(--panel-2)}
@@ -1280,9 +1281,19 @@ function ctRenderSim(){
     return`<div class="br-s${win?' win':''}${forced?' pinned':''}" ${clk} title="${can?'Клик — назначить победителем':(n._played?'Сыграно':'')}"><span class="bn">${_ctNm(pid)}</span><span class="bp">${forced?'📌':''}${n._played?(win?'✓':''):pp}</span></div>`;
   };
   const matchHtml=n=>`<div class="br-m">${seat(n,1)}${seat(n,2)}</div>`;
+  // одиночный слот нижней сетки — не матч, а ожидание проигравшего сверху (при BYE
+  // в верхней сетке в LB-матч приходит один игрок). Пустые ноды и BYE верхней не рисуем,
+  // иначе каркас выглядит как сетка на size, а не на реальное число участников.
+  const real=n=>n.player1_id&&n.player2_id;
+  const wait=n=>!real(n)&&(n.player1_id||n.player2_id)&&n.part!=='W';
+  const waitHtml=n=>`<div class="br-m wait"><div class="br-s"><span class="bn">${_ctNm(n.player1_id||n.player2_id)}</span><span class="bp"></span></div><div class="br-s"><span class="bn ct-tbd">ждёт проигравшего сверху</span><span class="bp"></span></div></div>`;
   const section=(keys,title)=>{
-    if(!keys.length)return'';
-    const cols=keys.map(k=>`<div class="br-col"><div class="br-crh">${rname(k)}</div><div class="br-colb">${groups[k].slice().sort((a,b)=>a.slot-b.slot).map(matchHtml).join('')}</div></div>`).join('');
+    const cols=keys.map(k=>{
+      const ms=groups[k].filter(n=>real(n)||wait(n)).sort((a,b)=>a.slot-b.slot);
+      if(!ms.length)return'';
+      return`<div class="br-col"><div class="br-crh">${rname(k)}</div><div class="br-colb">${ms.map(n=>real(n)?matchHtml(n):waitHtml(n)).join('')}</div></div>`;
+    }).join('');
+    if(!cols)return'';
     return`${title?`<div class="ct-rh" style="margin:10px 0 6px">${title}</div>`:''}<div class="br-wrap"><div class="br-cols">${cols}</div></div>`;
   };
   const keys=Object.keys(groups);
@@ -1305,7 +1316,8 @@ function ctRenderSim(){
     ${rows.map((r,i)=>`<div class="chrow" style="grid-template-columns:${cols};${r.out?'opacity:.45':''}"><div class="num">${i+1}</div><div class="nm">${_ctNm(r.pid)}${r.out?' <span class="mut" style="font-size:12px">— выбыл</span>':''}</div><div class="mut">${Math.round(r.elo)}</div>${_ctCell(r.fin)}${_ctCell(r.champ)}</div>`).join('')}
   </div>`;
   const forcedN=Object.keys(CT.forced).length;
-  out.innerHTML=`<details class="sect" open><summary>Схема сетки${CT.sim.tour?` · ${esc(CT.sim.tour)}`:''}${forcedN?` · зафиксировано пар: ${forcedN}`:''}</summary>
+  const byeN=pred.filter(n=>n.part==='W'&&n.round===1&&!real(n)).length;   // свободные проходы
+  out.innerHTML=`<details class="sect" open><summary>Схема сетки${CT.sim.tour?` · ${esc(CT.sim.tour)}`:''} · участников: ${pids.size}${byeN?` (свободных проходов: ${byeN})`:''}${forcedN?` · зафиксировано пар: ${forcedN}`:''}</summary>
       <div class="sect-b"><div class="chnote" style="margin:0 0 10px;text-align:left">${CT.sim.nodes?'Сетка турнира: сыгранные матчи зафиксированы, остальное — прогноз. ':''}${CT.replayTotal?`Посев и результаты с Challonge: учтено сыгранных ${CT.replayed} из ${CT.replayTotal}. `:''}Показан наиболее вероятный путь (в каждой паре ведёт фаворит по Elo). Кликни по игроку — назначь его победителем 📌, сетка пересчитается до конца.</div>${upper}${lower}</div>
     </details>
     <details class="sect" open><summary>Шансы на титул</summary>
