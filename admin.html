@@ -225,7 +225,7 @@
 // cache-busting: всегда грузим свежие web/*.js (без необходимости хард-рефреша).
 // document.write сохраняет порядок и синхронность загрузки.
 // predict/synergy/draft-sim — боевые движки: калибровка пар/трио зовёт Synergy.score/compPenalty напрямую (единый источник).
-['web/icons.js','web/core.js','web/bracket-model.js','web/bracket-engine.js','web/bracket-view.js','web/characters.js','web/signatures.js','web/players.js','web/tournaments.js','web/draft-import.js','web/matches.js','web/predict.js','web/synergy.js','web/draft-sim.js','web/weights.js']
+['web/icons.js','web/core.js','web/bracket-model.js','web/bracket-engine.js','web/bracket-view.js','web/characters.js','web/signatures.js','web/players.js','web/roster-import.js','web/tournaments.js','web/draft-import.js','web/matches.js','web/predict.js','web/synergy.js','web/draft-sim.js','web/weights.js']
   .forEach(function(s){document.write('<script src="'+s+'?v='+Date.now()+'"><\/script>');});
 </script>
 <script>

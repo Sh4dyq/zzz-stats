@@ -331,6 +331,11 @@
     </div>
   </div>
   <div class="res-panel" id="pvp-res"><div class="res-empty">Выбери двух игроков</div></div>
+  <div class="tour-pickrow" style="margin-top:14px;align-items:center;gap:10px">
+    <label style="font-size:13px;color:var(--sub)">Ростеры турнира:</label>
+    <select id="pv-tour" onchange="updatePvp()"></select>
+  </div>
+  <div id="pvp-roster"></div>
   <details class="sect" id="elo-sect" style="margin-top:18px">
     <summary>Рейтинг всех игроков</summary>
     <div class="sect-b">
@@ -476,6 +481,8 @@
 <script>document.write('<script src="web/predict.js?v='+Date.now()+'"><\/script>');</script>
 <script>document.write('<script src="web/synergy.js?v='+Date.now()+'"><\/script>');</script>
 <script>document.write('<script src="web/bracket-engine.js?v='+Date.now()+'"><\/script>');</script>
+<script>document.write('<script src="web/draft-sim.js?v='+Date.now()+'"><\/script>');</script>
+<script>document.write('<script src="web/roster-matchup.js?v='+Date.now()+'"><\/script>');</script>
 <script>
 const SB_URL='https://zoavnckfbfiejxfjakue.supabase.co';
 const SB_KEY='sb_publishable_37RZBsmdp3O1i795EuEfeg_vFpdPTFZ';
@@ -621,7 +628,7 @@ function buildBanAdj(bans,picks,mmap){
 }
 
 async function boot(){
-  const[ts,ps,cs,encs,ms,pks,pa,br,bn,rs,bc,bans]=await Promise.all([
+  const[ts,ps,cs,encs,ms,pks,pa,br,bn,rs,bc,bans,prosters,costs,cwRows,ccwRows]=await Promise.all([
     sb.from('tournaments').select('*').then(r=>r.data||[]),
     sb.from('players').select('*').then(r=>r.data||[]),
     sb.from('characters').select('*').then(r=>r.data||[]),
@@ -633,7 +640,11 @@ async function boot(){
     sb.from('bracket_nodes').select('*').then(r=>r.data||[],()=>[]),
     sb.from('tournament_results').select('*').then(r=>r.data||[],()=>[]),
     sb.from('bracket_cache').select('*').then(r=>r.data||[],()=>[]),
-    fetchAll(()=>sb.from('match_bans').select('*'))
+    fetchAll(()=>sb.from('match_bans').select('*')),
+    fetchAll(()=>sb.from('player_rosters').select('*')),
+    sb.from('tournament_costs').select('*').then(r=>r.data||[],()=>[]),
+    sb.from('char_weights').select('*').then(r=>r.data||[],()=>[]),
+    sb.from('char_const_weights').select('*').then(r=>r.data||[],()=>[])
   ]);
   D.tours=ts.slice().sort((a,b)=>(a.sort_order??1e9)-(b.sort_order??1e9));
   D.players=ps.slice().sort((a,b)=>(a.nickname||'').localeCompare(b.nickname||'','ru',{sensitivity:'base'}));
@@ -656,6 +667,7 @@ async function boot(){
     return Synergy.load(map);
   },()=>Synergy.load()).then(()=>updateDraft()).catch(e=>console.warn('synergy load',e));
   D.elo=Predict.buildRatings(D.tours,encs,D.mbe,D.playOrder);
+  D.h2h=Predict.buildH2H(encs,D.mbe);            // личные встречи — поправка в прогнозах
   // eloShown стянут к 1000 по числу игр (n₀=8) — только для показа; математика по eloRaw
   D.N0=8;
   D.picks=pks;D.mmap=mmap;
@@ -691,6 +703,21 @@ async function boot(){
       });
     });
   });
+  // ---- ростеры игроков по турнирам (для сравнительной силы ростеров) ----
+  D.rosters={};                                   // tid → pid → [{cid,ms}]
+  (prosters||[]).forEach(r=>{
+    const t=D.rosters[r.tournament_id]||(D.rosters[r.tournament_id]={});
+    (t[r.player_id]=t[r.player_id]||[]).push({cid:r.character_id,ms:r.mindscape||0});
+  });
+  D.costs={};(costs||[]).forEach(r=>{(D.costs[r.tournament_id]=D.costs[r.tournament_id]||[]).push(r);});
+  D.charW={};(cwRows||[]).forEach(r=>{if(r.manual_weight!=null)D.charW[r.character_id]=r.manual_weight;});
+  D.charConstW={};(ccwRows||[]).forEach(r=>{if(r.manual_weight!=null)(D.charConstW[r.character_id]=D.charConstW[r.character_id]||{})[r.mindscape]=r.manual_weight;});
+  D.encById={};encs.forEach(e=>D.encById[e.id]=e);
+  {const tri={};pks.forEach(p=>{if(!p.team_slot)return;const k=p.match_id+'|'+p.player_id+'|'+p.team_slot;(tri[k]=tri[k]||[]).push(p.character_id);});
+   D.comboModel=DraftSim.buildComboModel(Object.values(tri));}
+  {const rset={};(prosters||[]).forEach(r=>{const k=r.player_id+'|'+r.tournament_id;(rset[k]=rset[k]||new Set()).add(r.character_id);});
+   D.banModel=DraftSim.buildBanModel(ms,D.encById,(pid,tid)=>rset[pid+'|'+tid]||null,bans);}
+  D._mctx={};                                     // кэш контекста матчапа по турниру
   $('loading').style.display='none';
   initPvp();initDraft();initTour();
   const h=(location.hash||'').replace('#','')
@@ -738,6 +765,13 @@ function photoErr(img){
 function initPvp(){
   $('pv-a').innerHTML=playerOpts('— игрок 1 —');
   $('pv-b').innerHTML=playerOpts('— игрок 2 —');
+  // турниры, где есть загруженные ростеры (сравнение ростеров привязано к турниру:
+  // свои косты, своя ротация Шиюй)
+  const withR=D.tours.filter(t=>D.rosters[t.id]&&Object.keys(D.rosters[t.id]).length>1);
+  $('pv-tour').innerHTML='<option value="">— без ростеров —</option>'+
+    withR.map(t=>`<option value="${t.id}">${esc(t.name)}</option>`).join('');
+  const cur=withR.find(t=>t.status==='live')||withR[0];
+  if(cur)$('pv-tour').value=cur.id;
   renderEloTable();
 }
 function sideStats(pid,el,ph){
@@ -756,16 +790,47 @@ function updatePvp(){
   const pElo=Predict.pElo(D.elo.ratings[a]??1000,D.elo.ratings[b]??1000);
   const h=Predict.headToHead(a,b,D.encs,D.mbe);
   const n=h.w+h.d+h.l;
-  // поправка на личные встречи: байес-WR с сильным прайором, лёгкий вес в log-odds
-  const H2H_PRIOR=4,H2H_W=0.5;
-  let p=pElo;
-  if(n){
-    const wr=(h.w+0.5*h.d+H2H_PRIOR*0.5)/(n+H2H_PRIOR);
-    p=sigm(logit(pElo)+H2H_W*logit(wr));
-  }
+  const pH=Predict.pWin(D.elo.ratings[a]??1000,D.elo.ratings[b]??1000,h); // Elo + личные встречи
   const na=D.playerMap[a]?.nickname||'?',nb=D.playerMap[b]?.nickname||'?';
+  // сравнение ростеров (если выбран турнир с ростерами) — ещё один сдвиг в лог-оддсах
+  const tid=$('pv-tour')?$('pv-tour').value:'';
+  const cmp=tid?rosterCompare(a,b,tid):null;
+  const p=cmp?sigm(logit(pH)+RosterMatchup.delta(cmp)):pH;
   res.innerHTML=resBar(na,p,nb)+
-    `<div class="res-break"><span>По Elo: <b>${fPct(pElo)}</b></span><span>Личные встречи (игры): <b>${h.w}–${h.d}–${h.l}</b>${n?` → поправка до <b>${fPct(p)}</b>`:' — не играли'}</span></div>`;
+    `<div class="res-break"><span>По Elo: <b>${fPct(pElo)}</b></span><span>Личные встречи (игры): <b>${h.w}–${h.d}–${h.l}</b>${n?` → поправка до <b>${fPct(pH)}</b>`:' — не играли'}</span>${
+      cmp?`<span>Ростеры друг против друга: <b>${cmp.adv>=0?'+':''}${cmp.adv.toFixed(2)}</b> в пользу ${esc(cmp.adv>=0?na:nb)} → <b>${fPct(p)}</b></span>`:''}</div>`;
+  renderRosterCmp(a,b,tid,cmp,na,nb);
+}
+// разбор сравнения ростеров: силы сторон, что осталось после банов, пересечение
+function renderRosterCmp(a,b,tid,cmp,na,nb){
+  const box=$('pvp-roster');if(!box)return;
+  if(!tid){box.innerHTML='';return;}
+  const ra=rosterOf(a,tid),rb=rosterOf(b,tid);
+  if(!ra||!rb){
+    const who=[!ra?na:null,!rb?nb:null].filter(Boolean).join(' и ');
+    box.innerHTML=`<div class="chnote" style="text-align:left">Ростера на этом турнире нет у: <b>${esc(who)}</b>. Загрузить — админка → Игроки → «Импорт ростеров турнира».</div>`;return;
+  }
+  if(!cmp){box.innerHTML='';return;}
+  const nm=cid=>esc(D.charMap[cid]?.name||'?');
+  const team=(list,cls)=>list.map(e=>`<span class="ms-tag ${cls}">${nm(e.cid)}${e.ms?`<span class="ms-at"> M${e.ms}</span>`:''}</span>`).join('');
+  const sa=new Set(ra.map(e=>e.cid)),sb=new Set(rb.map(e=>e.cid));
+  const shared=[...sa].filter(c=>sb.has(c));
+  const onlyA=[...sa].filter(c=>!sb.has(c)),onlyB=[...sb].filter(c=>!sa.has(c));
+  const cols='1fr 90px 90px';
+  box.innerHTML=`<details class="sect" open><summary>Сравнение ростеров · ${esc(na)} vs ${esc(nb)}</summary><div class="sect-b">
+    <div class="chtbl">
+      <div class="chrow hd" style="grid-template-columns:${cols}"><div>Показатель</div><div>${esc(na)}</div><div>${esc(nb)}</div></div>
+      <div class="chrow" style="grid-template-columns:${cols}"><div class="nm">Сила состава после драфта</div><div class="chpct">${cmp.sa.toFixed(2)}</div><div class="chpct">${cmp.sb.toFixed(2)}</div></div>
+      <div class="chrow" style="grid-template-columns:${cols}"><div class="nm">Если первый пик у него</div><div class="chpct">${cmp.fpA>=0?'+':''}${cmp.fpA.toFixed(2)}</div><div class="chpct">${cmp.fpB<=0?'+':'−'}${Math.abs(cmp.fpB).toFixed(2)}</div></div>
+      <div class="chrow" style="grid-template-columns:${cols}"><div class="nm">Персонажей в ростере</div><div class="chpct">${ra.length}</div><div class="chpct">${rb.length}</div></div>
+      <div class="chrow" style="grid-template-columns:${cols}"><div class="nm">Только у него (эксклюзив)</div><div class="chpct">${onlyA.length}</div><div class="chpct">${onlyB.length}</div></div>
+    </div>
+    <div class="ct-rh" style="margin:12px 0 6px">Состав ${esc(na)} в смоделированном драфте</div><div>${team(cmp.teamsA,'ms-give')}</div>
+    <div class="ct-rh" style="margin:12px 0 6px">Состав ${esc(nb)}</div><div>${team(cmp.teamsB,'ms-give')}</div>
+    <div class="ct-rh" style="margin:12px 0 6px">Общие персонажи (${shared.length}) — уходят тому, чей пик раньше</div>
+    <div>${shared.map(c=>`<span class="ms-tag ms-self">${nm(c)}</span>`).join('')||'<span class="note-micro">нет</span>'}</div>
+    <div class="chnote" style="text-align:left;margin-top:10px">Прогоняется реальная последовательность драфта (3 бана и 6 пиков у каждого) обоими ботами, отдельно для каждого права первого пика. Сравниваются итоговые составы против ротации Шиюй этого турнира. На истории поправка почти не улучшает прогноз (вес ${RosterMatchup.weight}) — держи её как разбор матчапа, а не как основной фактор.</div>
+  </div></details>`;
 }
 let ELO_SORT={k:'elo',asc:false};
 function setEloSort(k){
@@ -1018,7 +1083,7 @@ function updateDraft(){
   // игроки (опц.): Elo ×ELO_W + личный WR ×PC_W
   const a=$('cb-a').value,b=$('cb-b').value;
   if(a&&b&&a!==b){
-    const pe=Predict.pElo(D.elo.ratings[a]??1000,D.elo.ratings[b]??1000);
+    const pe=Predict.pWin(D.elo.ratings[a]??1000,D.elo.ratings[b]??1000,Predict.h2hFor(D.h2h,a,b));
     L+=ELO_W*logit(pe);
     const pca=pcBwr(a,fA,stats),pcb=pcBwr(b,fB,stats);
     L+=PC_W*(logit(pca)-logit(pcb));
@@ -1069,6 +1134,77 @@ function updateDraft(){
   }
   if(noDataNames.length)parts.push(`<span class="note-micro">Мало статистических данных: ${noDataNames.map(esc).join(', ')}</span>`);
   res.innerHTML=resBar(na,p,nb)+`<div class="res-break">${parts.join('')}</div>`;
+}
+
+// ---- сравнительная сила ростеров (движок web/roster-matchup.js) ----
+// Контекст оценки строится по турниру: косты/лимит, ротация Шиюй (комнаты+баф),
+// статистика этого турнира поверх общей, ручная калибровка силы, комбо и модель банов.
+function mctx(tid){
+  if(D._mctx[tid])return D._mctx[tid];
+  const t=D.tours.find(x=>x.id===tid)||{};
+  const sh=t.shiyu_data||null;
+  const rooms=(sh&&sh.rooms)||[],buffTag=(sh&&sh.buff_tag)||null;
+  const tourPicks=(D.picks||[]).filter(pk=>{const m=D.mmap[pk.match_id];const e=m&&D.encById[m.encounter_id];return e&&e.tournament_id===tid;});
+  const tourStats=Predict.charStats(tourPicks,D.mmap);
+  const ctx=DraftSim.makeCtx(D.cstats,tourStats,D.charMap,buffTag,rooms,D.msStats,D.banModel,
+    {charW:D.charW,charConstW:D.charConstW},D.comboModel);
+  return(D._mctx[tid]=ctx);
+}
+const rosterOf=(pid,tid)=>(D.rosters[tid]&&D.rosters[tid][pid])||null;
+// ---- матрица матчапов для Монте-Карло ----
+// Каждая пара считается один раз (симуляция драфта ~0.3–0.7 с), результат кладётся в
+// D.advBias[tid][pairKey] как сдвиг в лог-оддсах для МЕНЬШЕГО id. Дальше МК берёт готовое.
+D.advBias={};
+async function buildRosterBias(tid,players,onProgress){
+  const ros=players.filter(p=>rosterOf(p,tid));
+  const bias=D.advBias[tid]||(D.advBias[tid]={});
+  const pairs=[];
+  for(let i=0;i<ros.length;i++)for(let j=i+1;j<ros.length;j++){
+    const a=ros[i],b=ros[j],k=Predict.pairKey(a,b);
+    if(!(k in bias))pairs.push([a,b,k]);
+  }
+  const t0=Date.now();
+  for(let i=0;i<pairs.length;i++){
+    const[a,b,k]=pairs[i];
+    const lo=String(a)<String(b)?a:b,hi=lo===a?b:a;
+    const cmp=rosterCompare(lo,hi,tid);
+    bias[k]=cmp?RosterMatchup.delta(cmp):0;
+    if(onProgress&&(i%3===2||i===pairs.length-1))
+      {onProgress(i+1,pairs.length,Math.round((Date.now()-t0)/(i+1)*(pairs.length-i-1)/1000));
+       await new Promise(r=>setTimeout(r,0));}      // отдаём поток, чтобы UI не вис
+  }
+  return bias;
+}
+const rosterBias=tid=>(tid&&D.advBias[tid]&&Object.keys(D.advBias[tid]).length)?D.advBias[tid]:null;
+// панель «учесть ростеры»: сколько пар посчитано, кнопка расчёта, прогресс
+function rbPanel(tid,players,rerender){
+  if(!tid||!window.RosterMatchup)return '';
+  const ros=players.filter(p=>rosterOf(p,tid));
+  if(ros.length<2)return `<div class="chnote" style="text-align:left">Ростеров этого турнира нет — сравнение ростеров в симуляции не участвует. Загрузить: админка → Игроки → «Импорт ростеров турнира».</div>`;
+  const need=ros.length*(ros.length-1)/2, have=Object.keys(D.advBias[tid]||{}).length;
+  window._rbRun=async()=>{
+    const box=$('rb-box');if(box)box.innerHTML='<span class="note-micro">Считаю матчапы…</span>';
+    await buildRosterBias(tid,ros,(i,n,eta)=>{if(box)box.innerHTML=
+      `<span class="note-micro">Матчапы ростеров: ${i} / ${n}${eta?` · осталось ~${eta} с`:''}</span>`;});
+    rerender();
+  };
+  return `<div class="chnote" style="text-align:left" id="rb-box">
+    ${have>=need
+      ?`Сравнение ростеров учтено в симуляции: пар ${have} (игроков с ростером ${ros.length}).`
+      :`Ростеры есть у ${ros.length} игроков. <button class="ct-btn" onclick="_rbRun()">Учесть ростеры в симуляции</button> — посчитаю ${need-have} матчапов (по ~0.4 с на пару), потом Монте-Карло пойдёт с ними.`}
+  </div>`;
+}
+// сравнение ростеров двух игроков на турнире (кэш по паре)
+const _mcCache={};
+function rosterCompare(a,b,tid){
+  if(!tid||!window.DraftSim||!window.RosterMatchup)return null;
+  const ra=rosterOf(a,tid),rb=rosterOf(b,tid);
+  if(!ra||!rb)return null;
+  const k=tid+'|'+Predict.pairKey(a,b);
+  if(k in _mcCache){const c=_mcCache[k];return c&&(String(a)<String(b)?c:{...c,adv:-c.adv,sa:c.sb,sb:c.sa});}
+  const cmp=RosterMatchup.compare(rosterOf(String(a)<String(b)?a:b,tid),rosterOf(String(a)<String(b)?b:a,tid),mctx(tid));
+  _mcCache[k]=cmp;
+  return cmp&&(String(a)<String(b)?cmp:{...cmp,adv:-cmp.adv,sa:cmp.sb,sb:cmp.sa});
 }
 
 // ---- конструктор турнира ----
@@ -1137,14 +1273,14 @@ function ctLoadTour(){
   if(nodes.length){
     setFmt(D.brTypes[tid]||t.bracket_type);
     CT.zones=[[]];
-    CT.sim={fmt:CT.fmt,parts:[],nodes:nodes.map(n=>Object.assign({},n,{_played:!!n.winner_id})),tour:t.name};
+    CT.sim={fmt:CT.fmt,parts:[],nodes:nodes.map(n=>Object.assign({},n,{_played:!!n.winner_id})),tour:t.name,tid};
     ctRender();ctRenderSim();return;
   }
   const cache=ctFromCache(tid);
   if(cache){
     setFmt(t.bracket_type);
     CT.zones=[cache.parts.filter(p=>D.playerMap[p])];   // в пул — только известные игроки
-    CT.sim={fmt:CT.fmt,parts:cache.parts,seeds:cache.seeds,size:cache.size,played:cache.played,names:cache.names,tour:t.name,src:'challonge'};
+    CT.sim={fmt:CT.fmt,parts:cache.parts,seeds:cache.seeds,size:cache.size,played:cache.played,names:cache.names,tour:t.name,tid,src:'challonge'};
     ctRender();ctRenderSim();return;
   }
   // ни сетки, ни кэша — участники (сеяние из tournament_participants, добор из встреч)
@@ -1155,7 +1291,7 @@ function ctLoadTour(){
   if(parts.length<2){out.innerHTML='<div class="panel"><h3>Нет данных</h3><p>У турнира нет ни сетки, ни известных участников.</p></div>';return;}
   setFmt(t.bracket_type);
   CT.zones=[parts];
-  CT.sim={fmt:CT.fmt,parts:parts.slice(),tour:t.name};
+  CT.sim={fmt:CT.fmt,parts:parts.slice(),tour:t.name,tid};
   ctRender();ctRenderSim();
 }
 function ctAddGroup(){CT.zones.push([]);ctRender();}
@@ -1200,6 +1336,8 @@ function ctDrop(e,zone){
 const _ctPct=p=>p>=.0005?(p*100).toFixed(1)+'%':'—';
 const _ctCell=p=>`<div><span class="chpct">${_ctPct(p)}</span><div class="chbar"><i style="width:${Math.min(100,p*100)}%"></i></div></div>`;
 const _ctNm=pid=>esc(D.playerMap[pid]?.nickname||(CT.sim&&CT.sim.names&&CT.sim.names[pid])||'—');
+// вероятность пары в конструкторе: Elo + личные встречи (та же формула, что в симуляции)
+const ctP=(a,b)=>Predict.pWin(D.elo.ratings[a]??1000,D.elo.ratings[b]??1000,Predict.h2hFor(D.h2h,a,b));
 function ctSimulate(){
   const out=$('ct-out');
   if(CT.fmt==='RR'){CT.sim=null;ctRenderRR(out);return;}
@@ -1212,10 +1350,8 @@ function ctSimulate(){
 // свежая сетка из текущего состава (сеяние = порядок), byes авто-разрешены seed()
 function ctBuildNodes(){
   if(CT.sim.nodes)return CT.sim.nodes.map(n=>Object.assign({},n)); // сетка турнира: сыгранное зафиксировано
-  const parts=CT.sim.parts,sd=CT.sim.seeds;
-  const size=BracketEngine.nextPow2(CT.sim.size||parts.length);
-  const nodes=BracketEngine.generate(CT.sim.fmt,size);
-  BracketEngine.seed(nodes,parts.map((pid,i)=>({player_id:pid,seed:(sd&&sd[pid])||i+1})),size);
+  // parts уже в порядке посева; ранг 1..N (посев кэша может быть с дырами)
+  const nodes=BracketEngine.build(CT.sim.fmt,CT.sim.parts.map((pid,i)=>({player_id:pid,seed:i+1})));
   return ctReplay(nodes,CT.sim.played);
 }
 // проигрывает известные результаты по сетке: пара найдена в истории → исход зафиксирован
@@ -1250,7 +1386,7 @@ function ctPredict(nodes){
     const a=n.player1_id,b=n.player2_id;
     if(!a||!b){if(a||b)BracketEngine.applyWinner(by,n,a||b);return;} // walkover
     const f=FF[Predict.pairKey(a,b)];
-    const w=(f===a||f===b)?f:(Predict.pElo(R[a]??1000,R[b]??1000)>=0.5?a:b);
+    const w=(f===a||f===b)?f:(ctP(a,b)>=0.5?a:b);
     BracketEngine.applyWinner(by,n,w);
   });
   return nodes;
@@ -1267,13 +1403,13 @@ function ctRenderSim(){
   const R=D.elo.ratings,out=$('ct-out');
   const pred=ctPredict(ctBuildNodes());
   CT.byId={};pred.forEach(n=>CT.byId[n.id]=n);
-  const sim=Predict.simulateBracket(ctBuildNodes(),R,10000,ctForced());
+  const sim=Predict.simulateBracket(ctBuildNodes(),R,10000,ctForced(),D.h2h,rosterBias(CT.sim.tid));
   const rname=k=>{const[p,r]=k.split('|');return p==='GF'?'Гранд-финал':(p==='L'?'Нижняя · Раунд '+r:(CT.sim.fmt==='DE'?'Верхняя · ':'')+'Раунд '+r);};
   const groups={};pred.forEach(n=>{const k=n.part+'|'+n.round;(groups[k]=groups[k]||[]).push(n);});
   const seat=(n,slot)=>{
     const a=n.player1_id,b=n.player2_id,pid=slot===1?a:b;
     if(!pid)return`<div class="br-s"><span class="bn ct-tbd">—</span><span class="bp"></span></div>`;
-    let pp='';if(a&&b){const p=Predict.pElo(R[a]??1000,R[b]??1000);pp=Math.round((slot===1?p:1-p)*100)+'%';}
+    let pp='';if(a&&b){const p=ctP(a,b);pp=Math.round((slot===1?p:1-p)*100)+'%';}
     const win=n.winner_id===pid,forced=a&&b&&CT.forced[Predict.pairKey(a,b)]===pid;
     const can=a&&b&&!n._played;                   // сыгранный матч не переигрываем
     const clk=can?`onclick="ctPick('${n.id}',${slot})"`:'';
@@ -1318,21 +1454,21 @@ function ctRenderSim(){
   const forcedN=Object.keys(CT.forced).length;
   const byeN=pred.filter(n=>n.part==='W'&&n.round===1&&!real(n)).length;   // свободные проходы
   out.innerHTML=`<details class="sect" open><summary>Схема сетки${CT.sim.tour?` · ${esc(CT.sim.tour)}`:''} · участников: ${pids.size}${byeN?` (свободных проходов: ${byeN})`:''}${forcedN?` · зафиксировано пар: ${forcedN}`:''}</summary>
-      <div class="sect-b"><div class="chnote" style="margin:0 0 10px;text-align:left">${CT.sim.nodes?'Сетка турнира: сыгранные матчи зафиксированы, остальное — прогноз. ':''}${CT.replayTotal?`Посев и результаты с Challonge: учтено сыгранных ${CT.replayed} из ${CT.replayTotal}. `:''}Показан наиболее вероятный путь (в каждой паре ведёт фаворит по Elo). Кликни по игроку — назначь его победителем 📌, сетка пересчитается до конца.</div>${upper}${lower}</div>
+      <div class="sect-b"><div class="chnote" style="margin:0 0 10px;text-align:left">${CT.sim.nodes?'Сетка турнира: сыгранные матчи зафиксированы, остальное — прогноз. ':''}${CT.replayTotal?`Посев и результаты с Challonge: учтено сыгранных ${CT.replayed} из ${CT.replayTotal}. `:''}Показан наиболее вероятный путь (в каждой паре ведёт фаворит по Elo и личным встречам). Кликни по игроку — назначь его победителем 📌, сетка пересчитается до конца.</div>${upper}${lower}</div>
     </details>
     <details class="sect" open><summary>Шансы на титул</summary>
-      <div class="sect-b">${oddsTbl}<div class="chnote">Монте-Карло 10 000 симуляций на Elo; зафиксированные пары учтены (эти двое всегда играют по назначенному исходу).</div></div>
+      <div class="sect-b">${oddsTbl}${rbPanel(CT.sim.tid,[...pids],ctRenderSim)}<div class="chnote">Монте-Карло 10 000 симуляций: Elo + поправка на личные встречи; зафиксированные пары учтены (эти двое всегда играют по назначенному исходу).</div></div>
     </details>`;
 }
 function ctRenderRR(out){
   const R=D.elo.ratings;
   const groups=CT.zones.map((g,i)=>({i,g})).filter(x=>x.g.length>=2);
   if(!groups.length){out.innerHTML='<div class="panel"><h3>Мало игроков</h3><p>В группе должно быть минимум два игрока.</p></div>';return;}
-  const pairRow=(p1,p2)=>{const p=Predict.pElo(R[p1]??1000,R[p2]??1000);
+  const pairRow=(p1,p2)=>{const p=ctP(p1,p2);
     return`<div class="ct-mrow${p>=.5?' fav':''}"><span class="n">${_ctNm(p1)}</span><span class="p">${(p*100).toFixed(1)}%</span></div>
       <div class="ct-mrow${p<.5?' fav':''}"><span class="n">${_ctNm(p2)}</span><span class="p">${((1-p)*100).toFixed(1)}%</span></div>`;};
   out.innerHTML=groups.map(({i,g})=>{
-    const sim=Predict.simulateRoundRobin(g,[],R,10000);
+    const sim=Predict.simulateRoundRobin(g,[],R,10000,D.h2h);
     const top=(pid,k)=>sim[pid].placeP.slice(0,k).reduce((a,b)=>a+b,0);
     const rows=g.map(pid=>({pid,elo:eloShown(pid),exp:sim[pid].expPlace,p1:top(pid,1),p2:top(pid,2)})).sort((a,b)=>a.exp-b.exp);
     const cols='40px 1fr 70px 90px 120px 120px';
@@ -1384,13 +1520,13 @@ function renderTour(){
   };
   // 1) точная симуляция по своей сетке
   if(nodes.length){
-    const sim=Predict.simulateBracket(nodes,R,10000);
+    const sim=Predict.simulateBracket(nodes,R,10000,null,D.h2h,rosterBias(t.id));
     const pids=new Set();
     nodes.forEach(n=>{if(n.player1_id)pids.add(n.player1_id);if(n.player2_id)pids.add(n.player2_id);});
     const rows=[...pids].map(pid=>({pid,elo:eloShown(pid),champ:sim[pid]?.champ||0,fin:sim[pid]?.final||0}))
       .sort((a,b)=>b.champ-a.champ||b.fin-a.fin||b.elo-a.elo);
     if(!rows.length){out.innerHTML='<div class="panel"><h3>Сетка ещё не заполнена</h3><p>Шансы появятся, когда участники будут расставлены по сетке.</p></div>';return;}
-    out.innerHTML=bTable(rows)+'<div class="chnote">Точная симуляция по структуре сетки.</div>';
+    out.innerHTML=bTable(rows)+'<div class="chnote">Точная симуляция по структуре сетки.</div>'+rbPanel(t.id,[...pids],renderTour);
     return;
   }
   // 1.5) многоэтапный (GROUPS->SE/DE): групповые поражения — не вылет
@@ -1405,7 +1541,7 @@ function renderTour(){
     encs.forEach(e=>{if(e.player1_id)pids.add(e.player1_id);if(e.player2_id)pids.add(e.player2_id);});
     const players=[...pids].filter(Boolean);
     if(players.length<2){out.innerHTML='<div class="panel"><h3>Недостаточно участников</h3><p>Шансы появятся, когда будут известны участники группы.</p></div>';return;}
-    const sim=Predict.simulateRoundRobin(players,encs,R,10000);
+    const sim=Predict.simulateRoundRobin(players,encs,R,10000,D.h2h,rosterBias(t.id));
     const top=(pid,k)=>sim[pid].placeP.slice(0,k).reduce((a,b)=>a+b,0);
     const rows=players.map(pid=>({pid,elo:eloShown(pid),exp:sim[pid].expPlace,p1:top(pid,1),p2:top(pid,2),p4:top(pid,4)}))
       .sort((a,b)=>a.exp-b.exp);
@@ -1437,10 +1573,10 @@ function renderTour(){
     const l=e.winner_id===e.player1_id?e.player2_id:e.player1_id;
     if(l)losses[l]=(losses[l]||0)+1;
   });
-  const sim=Predict.simulateElimination(players,losses,fmtType,R,10000);
+  const sim=Predict.simulateElimination(players,losses,fmtType,R,10000,D.h2h,rosterBias(t.id));
   const rows=players.map(pid=>({pid,elo:eloShown(pid),out:(losses[pid]||0)>=(fmtType==='DE'?2:1),champ:sim[pid]?.champ||0,fin:sim[pid]?.final||0}))
     .sort((a,b)=>b.champ-a.champ||b.fin-a.fin||b.elo-a.elo);
-  out.innerHTML=bTable(rows)+'<div class="chnote">Структура пар этой сетки не загружена — пары среди оставшихся разыгрываются жребием (приближение).</div>';
+  out.innerHTML=bTable(rows)+rbPanel(t.id,players,renderTour)+'<div class="chnote">Структура пар этой сетки не загружена — пары среди оставшихся разыгрываются жребием (приближение).</div>';
 }
 
 // многоэтапный турнир (GROUPS->SE/DE): группы из bracket_cache, вылет — последнее место
@@ -1474,7 +1610,7 @@ async function renderTourStaged(t,encs,stages,R,out,bTable){
     // группы ещё идут — round robin по пулу
     const players=[...allPids].filter(Boolean);
     if(players.length<2){out.innerHTML='<div class="panel"><h3>Недостаточно участников</h3><p>Шансы появятся, когда будут известны участники группы.</p></div>';return;}
-    const sim=Predict.simulateRoundRobin(players,encs,R,10000);
+    const sim=Predict.simulateRoundRobin(players,encs,R,10000,D.h2h,rosterBias(t.id));
     const top=(pid,k)=>sim[pid].placeP.slice(0,k).reduce((a,b)=>a+b,0);
     const rows=players.map(pid=>({pid,elo:eloShown(pid),exp:sim[pid].expPlace,p1:top(pid,1),p2:top(pid,2),p4:top(pid,4)}))
       .sort((a,b)=>a.exp-b.exp);
@@ -1496,7 +1632,7 @@ async function renderTourStaged(t,encs,stages,R,out,bTable){
     if(l)losses[l]=(losses[l]||0)+1;
   });
   const alive=[...allPids].filter(p=>p&&!lastOut.has(p));
-  const sim=Predict.simulateElimination(alive,losses,poType,R,10000);
+  const sim=Predict.simulateElimination(alive,losses,poType,R,10000,D.h2h,rosterBias(t.id));
   const rows=[...allPids].filter(Boolean)
     .map(pid=>({pid,elo:eloShown(pid),out:lastOut.has(pid)||(losses[pid]||0)>=thr,champ:sim[pid]?.champ||0,fin:sim[pid]?.final||0}))
     .sort((a,b)=>b.champ-a.champ||b.fin-a.fin||(a.out?1:0)-(b.out?1:0)||b.elo-a.elo);

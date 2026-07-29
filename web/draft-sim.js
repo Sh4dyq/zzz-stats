@@ -201,7 +201,19 @@ function compPenalty(entries,ctx){
 }
 // room (опц.) — КОНКРЕТНАЯ комната Шиюй, куда идёт тройка; матчап считаем против неё, а не агрегата
 // (fire-резист в 1-й половине не топит fire-тройку, если она пойдёт во 2-ю). null → агрегат по всем.
+// Кэш на ctx: перебор разбиений (poolSplit) и пиков бота зовёт teamScore тысячами раз на
+// одних и тех же тройках. Ключ — состав с мидскейпами + комната; ctx неизменен по построению.
 function teamScore(entries,ctx,room){
+  const e0=entries.filter(Boolean);
+  if(!ctx||!e0.length)return _teamScore(e0,ctx,room);
+  const c=ctx._tsCache||(ctx._tsCache=new Map());
+  const k=e0.map(x=>x.cid+':'+(x.ms||0)).sort().join('|')+'#'+(room?(room.id||(room.monsters||[]).map(m=>m.name||m.id||'').join('~')):'');
+  if(c.has(k))return c.get(k);
+  const v=_teamScore(e0,ctx,room);
+  if(c.size>300000)c.clear();
+  c.set(k,v);return v;
+}
+function _teamScore(entries,ctx,room){
   const e=entries.filter(Boolean);if(!e.length)return 0;
   const names=namesOf(e.map(x=>x.cid),ctx);
   const str=e.reduce((s,x)=>s+charStrength(x,ctx),0)/e.length;   // сила = калибровка+WR

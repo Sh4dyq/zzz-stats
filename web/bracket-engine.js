@@ -92,18 +92,66 @@
     return {nodes,by,k};
   }
 
+  // DE с ПЛЕЙ-ИНОМ: верхняя сетка на upper (степень 2, сеяные 1..upper), а лишние
+  // участники (upper+1..N) стартуют СРАЗУ В НИЖНЕЙ и в предварительном раунде играют
+  // с проигравшими верхнего R1. Так строит сетку на 12 (8 наверху + 4 внизу) сайт
+  // турнира: байев нет, у стартующих снизу одна жизнь.
+  // Структура = genDE(upper), у которого раунды нижней сдвинуты на +1, а раунд L1 —
+  // новый: upper/2 матчей (слот1 — лишний участник, слот2 — проигравший верхнего R1).
+  function genDEPlayIn(upper){
+    const {nodes,k}=genDE(upper);
+    const ren={};                                    // старый id → новый (сдвиг L-раундов)
+    nodes.forEach(n=>{if(n.part==='L')ren[n.id]=key('L',n.round+1,n.slot);});
+    nodes.forEach(n=>{
+      ['next_win_node','next_lose_node'].forEach(f=>{if(n[f]&&ren[n[f]])n[f]=ren[n[f]];});
+      if(n.part==='L'){n.id=ren[n.id];n.round++;}
+    });
+    const by={};nodes.forEach(n=>by[n.id]=n);
+    const m=upper/2;                                 // матчей в плей-ине
+    for(let s=0;s<m;s++){
+      const n=mk('L',1,s);nodes.push(n);by[n.id]=n;
+      n.next_win_node=key('L',2,Math.floor(s/2));n.next_win_slot=(s%2)+1;
+    }
+    // проигравший верхнего R1 → плей-ин, в обратном порядке (против ранних реваншей)
+    for(let s=0;s<m;s++){
+      const w=by[key('W',1,s)];
+      w.next_lose_node=key('L',1,m-1-s);w.next_lose_slot=2;
+    }
+    return {nodes,by,k};
+  }
+
+  // план сетки по числу участников: DE с плей-ином, если лишние помещаются в него,
+  // иначе обычная сетка ближайшего размера (с байями).
+  function plan(type,n){
+    n=Math.max(2,n|0);
+    if(type!=='DE')return{size:nextPow2(n),playIn:false,extras:0};
+    const u=Math.pow(2,Math.floor(Math.log2(n))),extras=n-u;
+    if(u>=4&&extras>0&&extras<=u/2)return{size:u,playIn:true,extras};
+    return{size:nextPow2(n),playIn:false,extras:0};
+  }
+
   // главный вход: структура сетки по формату и размеру; присваивает identifier.
-  function generate(type,size){
+  // playIn — size трактуется как размер верхней сетки, добавляется раунд плей-ина.
+  function generate(type,size,playIn){
     size=nextPow2(size);
-    const {nodes}=type==='DE'?genDE(size):genSE(size);
+    const {nodes}=type!=='DE'?genSE(size):(playIn&&size>=4?genDEPlayIn(size):genDE(size));
     nodes.forEach((n,i)=>n.identifier=i+1);          // сквозная нумерация встреч
     return nodes;
   }
 
+  // сборка «под ключ» по списку участников: plan → generate → seed.
+  function build(type,participants){
+    const n=participants.length,p=plan(type,n);
+    const nodes=generate(type,p.size,p.playIn);
+    seed(nodes,participants,p.size,p.playIn);
+    return nodes;
+  }
+
   // ---- РАССТАНОВКА УЧАСТНИКОВ + BYE ----
-  // participants: [{player_id, seed}] (seed 1..N). size — размер сетки.
-  // Заполняет первый раунд верхней сетки по seedSlots; seed>N → BYE → авто-победа.
-  function seed(nodes,participants,size){
+  // participants: [{player_id, seed}] (seed 1..N). size — размер сетки (при playIn —
+  // размер ВЕРХНЕЙ сетки). Заполняет первый раунд верхней по seedSlots; seed>N → BYE.
+  // При playIn лишние (seed>size) садятся в плей-ин нижней, тоже по порядку сеяния.
+  function seed(nodes,participants,size,playIn){
     size=nextPow2(size);
     const by={};nodes.forEach(n=>by[n.id]=n);
     const order=seedSlots(size);                     // позиции → seed
@@ -116,11 +164,20 @@
       n.player1_id=pa?pa.player_id:null;
       n.player2_id=pb?pb.player_id:null;
     });
+    const N=participants.length;
+    if(playIn){                                      // лишние — в предварительный раунд низа
+      const pre=nodes.filter(n=>n.part==='L'&&n.round===1).sort((a,b)=>a.slot-b.slot);
+      const ord=seedSlots(pre.length);               // позиция матча → номер лишнего (1..)
+      pre.forEach((n,i)=>{
+        const sd=size+ord[i],p=bySeed[sd];
+        n.seed1=sd;if(p)n.player1_id=p.player_id;
+      });
+      return nodes;                                  // байев в верхней при плей-ине нет
+    }
     // Дропдауны R1 не переставляем: при стандартном посеве BYE (seed>N) выпадают
     // напротив реальных матчей, поэтому в матч LB R1 приходит один проигравший —
     // он ждёт проигравшего из верхнего R2 в LB R2. Так же считает Challonge.
     // резолв BYE: где одна сторона пуста (seed>N) — другая авто-проходит
-    const N=participants.length;
     r1.forEach(n=>{
       const a=n.seed1<=N,b=n.seed2<=N;
       if(a&&!b&&n.player1_id){n.is_bye=true;applyWinner(by,n,n.player1_id);}
@@ -150,6 +207,6 @@
     return [...changed];
   }
 
-  g.BracketEngine={nextPow2,seedSlots,generate,seed,applyWinner};
+  g.BracketEngine={nextPow2,seedSlots,plan,generate,seed,build,applyWinner};
   if(typeof module!=='undefined'&&module.exports) module.exports=g.BracketEngine;
 })(typeof window!=='undefined'?window:globalThis);

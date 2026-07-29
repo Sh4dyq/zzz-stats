@@ -22,7 +22,21 @@ async function pgPlayers(){
       <button class="icon-btn danger" title="Удалить" onclick="delPlayer('${p.id}')">✕</button>
     </div>
   </div>`;}).join('');
+  const tourOpts=(D.tours||[]).map(t=>`<option value="${t.id}">${escapeHtml(t.name)}</option>`).join('');
   html(`<details class="panel">
+    <summary>Импорт ростеров турнира<span class="chev">▾</span></summary>
+    <div class="panel-body">
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
+        <div style="flex:1;min-width:200px"><label>Турнир</label><select id="ri-tour">${tourOpts}</select></div>
+        <button class="btn" onclick="riPreview()">Разобрать</button>
+        <button class="btn btn-y" onclick="riCommit()">Сохранить в турнир</button>
+      </div>
+      <label style="margin-top:10px">Вставь ростеры — текстом или JSON (персонажей руками проставлять не нужно)</label>
+      <textarea id="ri-src" rows="8" placeholder="Ник: Miyabi M2, Yanagi, Astra Yao&#10;Другой ник — Ellen; Lycaon M6&#10;&#10;или блоками:&#10;Ник&#10;Miyabi M2&#10;Yanagi&#10;&#10;или JSON: {&quot;Ник&quot;:[&quot;Miyabi M2&quot;,&quot;Yanagi&quot;]}" style="width:100%;font-family:'JetBrains Mono',monospace;font-size:12px"></textarea>
+      <div id="ri-out" style="margin-top:10px"></div>
+    </div>
+  </details>
+  <details class="panel">
     <summary>Добавить игрока<span class="chev">▾</span></summary>
     <div class="panel-body">
       <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
@@ -47,6 +61,30 @@ async function pgPlayers(){
   <div class="pgrid" id="player-list">${list||''}<p data-empty style="color:var(--sub);font-size:14px;${D.players.length?'display:none':''}">Игроков ещё нет</p></div>`);
   if(typeof enableReorder==='function')enableReorder(document.getElementById('player-list'),'players',pgPlayers);
 }
+// ---- импорт ростеров (разбор в web/roster-import.js) ----
+let _RI=null;
+function riPreview(){
+  const tid=v('ri-tour'),out=document.getElementById('ri-out');
+  _RI=riParse(document.getElementById('ri-src').value,tid);
+  if(!_RI.length){out.innerHTML='<p style="color:var(--sub);font-size:13px">Пусто — вставь текст с ростерами.</p>';return;}
+  const chip=(t,c)=>`<span style="background:#12141d;border:1px solid ${c};border-radius:6px;padding:2px 7px;font-size:12px">${escapeHtml(t)}</span>`;
+  out.innerHTML=`<div style="display:flex;flex-direction:column;gap:7px">${_RI.map(r=>{
+    const nick=r.player?escapeHtml(r.player.nickname):`<span style="color:#f87171">${escapeHtml(r.nick||'—')} — игрок не найден</span>`;
+    const cs=r.chars.map(c=>chip(c.name+(c.ms?' M'+c.ms:''),'var(--border)')).join(' ');
+    const bad=r.bad.length?' '+r.bad.map(b=>chip(b,'#7f1d1d')).join(' '):'';
+    return`<div style="display:flex;gap:8px;align-items:baseline;flex-wrap:wrap"><b style="min-width:130px">${nick}</b><span style="color:var(--sub);font-size:12px">${r.chars.length}</span>${cs}${bad}</div>`;
+  }).join('')}</div>
+  <p style="color:var(--sub);font-size:12px;margin-top:8px">Готово к записи: <b>${_RI.filter(r=>r.player&&r.chars.length).length}</b> игроков · нераспознанных имён: <b>${_RI.reduce((s,r)=>s+r.bad.length,0)}</b>. Существующие ростеры этих игроков на турнире будут заменены.</p>`;
+}
+async function riCommit(){
+  const tid=v('ri-tour');if(!tid)return toast('Выбери турнир','err');
+  if(!_RI)riPreview();
+  const res=await riSave(_RI||[],tid);
+  if(res.err)return;
+  if(!res.saved)return toast('Нечего сохранять: игроки не распознаны','err');
+  toast(`Ростеры сохранены: ${res.saved} игроков, ${res.chars} персонажей`);
+}
+
 async function addPlayer(){const n=v('p-nick');if(!n)return;
 const dup=findPlayerByNick(n);if(dup)return toast(`Такой игрок уже есть: «${dup.nickname}»`,'err');
 const{error}=await sb.from('players').insert({nickname:n,age:vn('p-age'),highest_place:vn('p-place'),highest_place_count:vn('p-place-cnt'),prize:vn('p-prize')});if(dbErr(error,'добавление игрока'))return;toast('Игрок добавлен');await refreshData();pgPlayers();}

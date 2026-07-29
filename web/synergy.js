@@ -254,6 +254,26 @@ async function load(pre){
   NAME2ID={};for(const id in TAGS)NAME2ID[TAGS[id].name]=id;
 }
 
-g.Synergy={load,score,bestTeam,splitSide,elementMatchup,bestMatchup,buffMatchup,rid:x=>rid(x),
+// Мемоизация чистых оценок состава: score/elementMatchup/buffMatchup зависят только от
+// набора имён (и комнаты/бафа). Симуляции драфта зовут их десятками тысяч раз на одних и
+// тех же тройках — без кэша сравнение ростеров считается секундами вместо миллисекунд.
+const _memo=new Map();
+function _cached(tag,members,extra,fn){
+  if(!TAGS)return fn();
+  const k=tag+'|'+members.slice().sort().join(',')+'|'+extra;
+  if(_memo.has(k))return _memo.get(k);
+  const v=fn();
+  if(_memo.size>200000)_memo.clear();
+  _memo.set(k,v);return v;
+}
+const _rid=o=>o&&o.id!=null?o.id:(o&&o.name)||'';
+const scoreC=members=>_cached('s',members,'',()=>score(members));
+const elementMatchupC=(members,room)=>_cached('e',members,
+  (room&&(room.id||(room.monsters||[]).map(m=>m.name||m.id||'').join('~')))||'',()=>elementMatchup(members,room));
+const buffMatchupC=(members,tag)=>_cached('b',members,tag?_rid(tag)+'|'+(tag.elem||'')+'|'+((tag.elems||[]).join('/')):'',
+  ()=>buffMatchup(members,tag));
+
+g.Synergy={load,score:scoreC,bestTeam,splitSide,elementMatchup:elementMatchupC,bestMatchup,buffMatchup:buffMatchupC,
+  rid:x=>rid(x),clearCache:()=>_memo.clear(),
   get ready(){return !!TAGS;},get tags(){return TAGS;}};
 })(typeof window!=='undefined'?window:globalThis);
