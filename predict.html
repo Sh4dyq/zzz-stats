@@ -419,17 +419,6 @@
   </div>
 </div>
 
-<!-- Майндскейпы (мидскейп-слой тегов) -->
-<div class="pane">
-  <details class="method" id="ms-pane">
-    <summary>Майндскейпы: что даёт себе / команде · прикидка урона</summary>
-    <div class="m-body">
-      <p class="m-note">Слой поверх базовых тегов (M0). «Даёт себе» — личные бафы от констелляций, «Даёт команде» — обновление командных тегов; <code>@M</code> — минимальный майндскейп, с которого эффект активен. Урон — грубая датамайн-прикидка личного множителя к M0. A-ранги показаны как M6. Источник: профили zzz.nanoka.cc.</p>
-      <div id="ms-table-wrap"></div>
-    </div>
-  </details>
-</div>
-
 <!-- Методология -->
 <div class="pane">
   <details class="method">
@@ -1668,53 +1657,6 @@ async function renderTourStaged(t,encs,stages,R,out,bTable){
     .sort((a,b)=>b.champ-a.champ||b.fin-a.fin||(a.out?1:0)-(b.out?1:0)||b.elo-a.elo);
   out.innerHTML=bTable(rows)+'<div class="chnote">Плей-офф: пары среди оставшихся разыгрываются жребием (приближение). «Выбыл» = последнее место группы или лимит поражений в плей-офф.</div>';
 }
-
-// ---- справочная таблица мидскейп-слоя тегов ----
-const MS_LBL={crit_buff:'КРИТ',dmg_buff:'DMG/RES↓',atk_buff:'ATK',anomaly_buff:'Аном',
-  sheer_dmg_buff:'Шир',pen_buff:'PEN/DEF↓',def_shred:'DEF↓',daze:'Оглуш',
-  amp_on_stun:'Stun-множ',decibel:'Децибел',ether_veil:'Вуаль',anomaly_assist:'Аном-ассист',abloom:'Расцвет'};
-function msTags(obj,cls){
-  if(!obj)return '';
-  return Object.entries(obj).sort((a,b)=>(a[1].at-b[1].at)||b[1].mag-a[1].mag)
-    .map(([t,v])=>`<span class="ms-tag ${cls}">${MS_LBL[t]||t}·${v.mag}<span class="ms-at"> @M${v.at}</span></span>`).join('');
-}
-function msDmg(d){
-  if(!d)return '';
-  return [1,2,3,4,5,6].map(m=>{const v=d[m];if(v==null)return '<td class="c">·</td>';
-    const s=v.toFixed(2).replace(/0$/,'');return `<td class="c ms-dmg">${v>=1.2?`<b>×${s}</b>`:`×${s}`}</td>`;}).join('');
-}
-let _msLoaded=false;
-async function renderMsTable(){
-  if(_msLoaded)return; _msLoaded=true;
-  const wrap=$('ms-table-wrap');
-  let TAGS=(window.Synergy&&Synergy.ready)?Synergy.tags:null;
-  if(!TAGS){
-    try{await Synergy.load();TAGS=Synergy.tags;}
-    catch(e){wrap.innerHTML='<p class="m-note">Не удалось загрузить теги.</p>';_msLoaded=false;return;}
-  }
-  const rows=Object.entries(TAGS).filter(([,c])=>c.ms)
-    .sort((a,b)=>(a[1].ms.a_rank?1:0)-(b[1].ms.a_rank?1:0)||a[1].name.localeCompare(b[1].name));
-  const tr=rows.map(([id,c])=>{
-    const m=c.ms;const rank=m.a_rank?'A·M6':'S';
-    return `<tr data-name="${c.name.toLowerCase()}">
-      <td>${c.name}<div class="ms-rank">${rank} · ${c.element}/${c.specialty}</div></td>
-      <td>${msTags(m.gives_self,'ms-self')||'<span class="ms-at">—</span>'}</td>
-      <td>${msTags(m.gives,'ms-give')||'<span class="ms-at">—</span>'}</td>
-      ${msDmg(m.dmg)}
-    </tr>`;}).join('');
-  wrap.innerHTML=`<div class="ms-filter">
-      <input id="ms-q" placeholder="фильтр по имени…" style="background:var(--panel-2);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:5px 10px;font-size:13px">
-      <span class="ms-at">${rows.length} персонажей</span></div>
-    <div class="ms-scroll"><table class="ms-tbl">
-      <thead><tr><th>Персонаж</th><th>Даёт себе</th><th>Даёт команде</th>
-        <th>M1</th><th>M2</th><th>M3</th><th>M4</th><th>M5</th><th>M6</th></tr></thead>
-      <tbody>${tr}</tbody></table></div>`;
-  $('ms-q').addEventListener('input',e=>{const q=e.target.value.toLowerCase();
-    wrap.querySelectorAll('tbody tr').forEach(r=>r.style.display=r.dataset.name.includes(q)?'':'none');});
-}
-document.addEventListener('DOMContentLoaded',()=>{
-  const p=$('ms-pane');if(p)p.addEventListener('toggle',()=>{if(p.open)renderMsTable();});
-});
 
 boot();
 </script>
