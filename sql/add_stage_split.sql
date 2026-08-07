@@ -11,5 +11,12 @@ alter table player_rosters add column if not exists stage text;
 -- shiyu_data остаётся общей ротацией/фолбэком (и совместимостью со старыми турнирами).
 alter table tournaments add column if not exists shiyu_stages jsonb;
 
+-- Старый уникальный ключ (tournament_id,player_id,character_id) не даёт держать одного
+-- персонажа на двух этапах — заменяем на ключ с этапом. NULL в уникальном индексе не
+-- дедуплицируется, поэтому вместо колонки берём coalesce(stage,'') .
+alter table player_rosters drop constraint if exists player_rosters_tournament_id_player_id_character_id_key;
+create unique index if not exists player_rosters_tour_player_char_stage_key
+  on player_rosters (tournament_id, player_id, character_id, coalesce(stage,''));
+
 -- RLS/GRANT: обе таблицы уже открыты на чтение anon и запись authenticated —
 -- новые колонки наследуют политики таблицы.

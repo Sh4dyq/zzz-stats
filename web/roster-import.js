@@ -28,7 +28,9 @@ const RU2DB={
   'нэкомата':'Nekomiya Mana','люсия':'Lucia Elowen','паньиньху':'Pan Yinhu','звёздныйбилли':'Starlight - Billy',
   'звездныйбилли':'Starlight - Billy','исюань':'Yixuan','йидхари':'Yidhari Murphy','манато':'Komano Manato',
   'вивиан':'Vivian Banshee','промея':'Promeia','цезарь':'Caesar King','бен':'Ben Bigger',
-  'орфи':'Orphie Magnusson & Magus','баньюэ':'Banyue','банюэ':'Banyue','сигрид':'Sigrid'};
+  'орфи':'Orphie Magnusson & Magus','орфеяимагус':'Orphie Magnusson & Magus',
+  'орфейимагус':'Orphie Magnusson & Magus','орфия':'Orphie Magnusson & Magus','орфей':'Orphie Magnusson & Magus',
+  'орфея':'Orphie Magnusson & Magus','магус':'Orphie Magnusson & Magus','баньюэ':'Banyue','банюэ':'Banyue','сигрид':'Sigrid'};
 
 // Разбор HTML со страницы ростеров турнира: карточка игрока = ник в шапке + агенты
 // (img из /characters/crops с alt-именем) + бейдж «M6|145». Амплификаторы игнорируем.
