@@ -69,6 +69,7 @@
   .badge-s{font-size:9px;font-weight:800;padding:1px 5px;border-radius:4px;background:linear-gradient(180deg,#f8d36a,#d99a16);color:#231703;font-family:'Rajdhani',sans-serif;letter-spacing:.05em}
   .badge-a{font-size:9px;font-weight:700;padding:1px 5px;border-radius:4px;background:var(--panel-3);color:var(--sub);font-family:'Rajdhani',sans-serif;letter-spacing:.05em}
   .fav{display:inline-flex;align-items:center;gap:7px;flex-wrap:nowrap;white-space:nowrap;height:24px}
+  .tsrc{color:var(--sub);font-size:12px;font-family:'JetBrains Mono',monospace;display:inline-block;max-width:170px;overflow:hidden;text-overflow:ellipsis;vertical-align:bottom}
   .fav .cnt{color:var(--sub);font-size:12px;font-family:'JetBrains Mono',monospace;margin-left:-2px;line-height:1}
   .plc{display:inline-block;font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:900;font-size:18px;line-height:1;color:var(--text);padding-right:.18em}
   .plc.g1,.plc.g2,.plc.g3{-webkit-background-clip:text;background-clip:text;color:transparent}
@@ -549,6 +550,7 @@ async function loadAll(){
     sb.from('signatures').select('*'),
     fetchAll(()=>sb.from('tournament_costs').select('*'))
   ]);
+  S.results=await fetchAll(()=>sb.from('tournament_results').select('*'));
   S.characters=chars||[];S.players=(pls||[]).slice().sort((a,b)=>(a.nickname||'').localeCompare(b.nickname||'','ru',{sensitivity:'base'}));S.sigs=sigs||[];S.allCosts=allCosts||[];
   S.charMap={};S.characters.forEach(c=>S.charMap[c.id]=c);
   S.playerMap={};S.players.forEach(p=>S.playerMap[p.id]=p);
@@ -1137,14 +1139,30 @@ function placeCell(pl,cnt){
   const c=(cnt!=null&&cnt>1)?` <span class="cnt">(${cnt})</span>`:'';
   return`<span class="plc${cls}">${pl} место</span>${c}`;
 }
+// Места/призовые берём из tournament_results (ручной ввод по турнирам); поля
+// players.highest_place/prize — только фолбэк для игроков без строк результата.
+function placeStats(){
+  const out={};
+  (S.results||[]).forEach(r=>{
+    if(S.tour!==ALL&&r.tournament_id!==S.tour)return;
+    const o=out[r.player_id]||(out[r.player_id]={place:null,cnt:0,prize:null});
+    if(r.place!=null){
+      if(o.place==null||r.place<o.place){o.place=r.place;o.cnt=1;}
+      else if(r.place===o.place)o.cnt++;
+    }
+    if(r.prize!=null)o.prize=(o.prize||0)+ +r.prize;
+  });
+  return out;
+}
 function renderMisc(){
   const data=computeMisc();
   const isAll=S.tour===ALL;
+  const res=placeStats();
   // во «все турниры» дописываем серым, где поставлен лучший таймер
   const bestT=d=>{
     if(d.bestT==null)return'—';
     const nm=isAll?(TOURS.find(t=>t.id===d.bestTour)?.name):null;
-    return fSec(d.bestT)+(nm?` <span class="cnt">(${esc(nm)})</span>`:'');
+    return fSec(d.bestT)+(nm?` <span class="tsrc" title="${esc(nm)}">(${esc(nm)})</span>`:'');
   };
   const head=`<thead><tr><th class="nc">Ник</th><th>Любимый персонаж</th><th onclick="sortP(2)">Σ игр</th><th onclick="sortP(3)">Σ турниров</th><th onclick="sortP(4)" title="Лучший (наименьший) таймер">Лучший таймер</th><th onclick="sortP(5)">Наивысшее место</th><th onclick="sortP(6)">Призовые ₽</th><th onclick="sortP(7)">Возраст</th></tr></thead>`;
   // показываем всех игроков, у кого есть встречи в текущем фильтре
@@ -1157,10 +1175,13 @@ function renderMisc(){
       : '—';
     // фото игрока приоритетно; финальный фолбэк — зафиксированная аватарка (без рерандома)
     const avatar=picP(p,iconChar(S.charMap[d.avatar],24));
-    const pr=S.playerMap[p.id]?.prize;
+    const r=res[p.id];
+    const pr=r&&r.prize!=null?r.prize:(isAll?S.playerMap[p.id]?.prize:null);
+    const pl=r&&r.place!=null?r.place:(isAll?p.highest_place:null);
+    const plc=r&&r.place!=null?r.cnt:(isAll?p.highest_place_count:null);
     const prize=pr!=null?`<span class="prize-rub">${String(pr).replace(/\B(?=(\d{3})+(?!\d))/g,' ')} ₽</span>`:'—';
     return`<tr><td class="nc"><div style="display:flex;align-items:center;gap:6px">${avatar}<span>${esc(p.nickname)}</span></div></td>`+
-      `<td>${fav}</td><td>${d.matches}</td><td>${d.tours.size}</td><td>${bestT(d)}</td><td>${placeCell(p.highest_place,p.highest_place_count)}</td><td>${prize}</td><td>${p.age??'—'}</td></tr>`;
+      `<td>${fav}</td><td>${d.matches}</td><td>${d.tours.size}</td><td>${bestT(d)}</td><td>${placeCell(pl,plc)}</td><td>${prize}</td><td>${p.age??'—'}</td></tr>`;
   });
   document.getElementById('players-area').innerHTML=`<table>${head}<tbody>${rows.join('')}</tbody></table>`;
 }
