@@ -581,13 +581,13 @@ async function loadAll(){
     S.bracketCache=bc?.json||null;
   }
 
-  S.costs={};S.rosters={};S.rostersTour=[];
+  S.costs={};S.costsTour=[];S.rosters={};S.rostersTour=[];
   if(S.tour!==ALL){
     const[cs,rs]=await Promise.all([
       fetchAll(()=>sb.from('tournament_costs').select('*').eq('tournament_id',S.tour)),
       fetchAll(()=>sb.from('player_rosters').select('*').eq('tournament_id',S.tour))
     ]);
-    (cs||[]).forEach(c=>{if(!S.costs[c.character_id])S.costs[c.character_id]={};S.costs[c.character_id][c.mindscape]=c;});
+    S.costsTour=cs||[];   // срез по стадии в applyPhase (в плей-оффе рулсет другой)
     S.rostersTour=rs||[];   // срез по стадии делается в applyPhase (ростеры меняются в плей-оффе)
   }
 
@@ -667,8 +667,26 @@ function applyPhase(){
 
   // Ростеры — тоже по стадии: в плей-оффе игроки собирают состав заново.
   // Строки без stage считаются общими на турнир (фолбэк).
+  // На этапе показываем ростеры только тех, кто на нём играл: иначе выбывшие в группах
+  // «доезжают» до плей-оффа через фолбэк на общий ростер турнира.
   S.rosters={};
-  Phase.rosterSplit(S.rostersTour||[],S.phase).forEach(x=>{(S.rosters[x.player_id]=S.rosters[x.player_id]||[]).push(x);});
+  let rrows=Phase.rosterSplit(S.rostersTour||[],S.phase);
+  // Исключение: явно загруженный ростер ЭТОГО этапа (stage===фаза) показываем всегда —
+  // игрок мог пройти в плей-офф, но не сыграть матч (тех. причины). Внутри группы фильтр строгий.
+  if(S.phase!=='all'||S.group){
+    const alive=new Set();S.encounters.forEach(e=>{if(e.player1_id)alive.add(e.player1_id);if(e.player2_id)alive.add(e.player2_id);});
+    rrows=rrows.filter(r=>alive.has(r.player_id)||(!S.group&&r.stage===S.phase));
+  }
+  rrows.forEach(x=>{(S.rosters[x.player_id]=S.rosters[x.player_id]||[]).push(x);});
+
+  // Косты — по стадии: строки этапа, иначе общие ('' = весь турнир).
+  S.costs={};
+  {const rows=S.costsTour||[];
+   const key=S.phase==='all'?'':S.phase;
+   const own=rows.filter(r=>(r.stage||'')===key);
+   (own.length?own:rows.filter(r=>!(r.stage||''))).forEach(c=>{
+     if(!S.costs[c.character_id])S.costs[c.character_id]={};
+     S.costs[c.character_id][c.mindscape]=c;});}
 
   renderGroupBox(groups,r.encounters);
   syncShiyuBtn();
@@ -683,7 +701,8 @@ function buildAmpMap(){
   const m={};
   const rows=S.tour!==ALL
     ? [].concat(...Object.values(S.costs).map(o=>Object.values(o)))
-    : (S.allCosts||[]);
+    // «Все турниры»: общие косты турнира приоритетнее этапных (карта строится по первой строке sig_id)
+    : (S.allCosts||[]).slice().sort((a,b)=>((a.stage||'')?1:0)-((b.stage||'')?1:0));
   rows.forEach(row=>{
     if(row.sig_id==null||m[row.sig_id])return;
     m[row.sig_id]={own:Array.isArray(row.sig_costs)?row.sig_costs:[],
@@ -1067,7 +1086,7 @@ function computeMisc(){
   const out={};
   // avatar — фиксируем выбор аватарки один раз (favCharOf использует random),
   // чтобы picP в renderMisc и исключение при ничьей совпадали.
-  S.players.forEach(p=>out[p.id]={fav:null,favN:0,avatar:avatarCidOf(p),matches:0,tours:new Set()});
+  S.players.forEach(p=>out[p.id]={fav:null,favN:0,avatar:avatarCidOf(p),matches:0,tours:new Set(),bestT:null,bestTour:null});
   // Σ игр = число матчей (matches), а не встреч (encounters) — чтобы не было
   // расхождения с «любимым персонажем», который считается по пикам (на игру).
   S.matches.forEach(m=>{
@@ -1076,6 +1095,11 @@ function computeMisc(){
       if(!out[pid])return;
       out[pid].matches++;
       if(enc.tournament_id!=null)out[pid].tours.add(enc.tournament_id);
+    });
+    // лучший (наименьший) таймер + турнир, где он поставлен
+    [[enc.player1_id,m.player1_timer_sec],[enc.player2_id,m.player2_timer_sec]].forEach(([pid,t])=>{
+      const o=out[pid];if(!o||!t)return;
+      if(o.bestT==null||t<o.bestT){o.bestT=t;o.bestTour=enc.tournament_id;}
     });
   });
   const pickCnt={}; // pickCnt[pid][cid] — считаем все ранги
@@ -1115,10 +1139,17 @@ function placeCell(pl,cnt){
 }
 function renderMisc(){
   const data=computeMisc();
-  const head=`<thead><tr><th class="nc">Ник</th><th>Любимый персонаж</th><th onclick="sortP(2)">Σ игр</th><th onclick="sortP(3)">Σ турниров</th><th onclick="sortP(4)">Наивысшее место</th><th onclick="sortP(5)">Призовые ₽</th><th onclick="sortP(6)">Возраст</th></tr></thead>`;
+  const isAll=S.tour===ALL;
+  // во «все турниры» дописываем серым, где поставлен лучший таймер
+  const bestT=d=>{
+    if(d.bestT==null)return'—';
+    const nm=isAll?(TOURS.find(t=>t.id===d.bestTour)?.name):null;
+    return fSec(d.bestT)+(nm?` <span class="cnt">(${esc(nm)})</span>`:'');
+  };
+  const head=`<thead><tr><th class="nc">Ник</th><th>Любимый персонаж</th><th onclick="sortP(2)">Σ игр</th><th onclick="sortP(3)">Σ турниров</th><th onclick="sortP(4)" title="Лучший (наименьший) таймер">Лучший таймер</th><th onclick="sortP(5)">Наивысшее место</th><th onclick="sortP(6)">Призовые ₽</th><th onclick="sortP(7)">Возраст</th></tr></thead>`;
   // показываем всех игроков, у кого есть встречи в текущем фильтре
   const activePl=S.players.filter(p=>data[p.id]&&data[p.id].matches);
-  if(!activePl.length){document.getElementById('players-area').innerHTML=`<table>${head}<tbody><tr><td class="empty" colspan="7">Нет данных</td></tr></tbody></table>`;return;}
+  if(!activePl.length){document.getElementById('players-area').innerHTML=`<table>${head}<tbody><tr><td class="empty" colspan="8">Нет данных</td></tr></tbody></table>`;return;}
   const rows=activePl.map(p=>{
     const d=data[p.id];
     const fav=d.fav
@@ -1129,7 +1160,7 @@ function renderMisc(){
     const pr=S.playerMap[p.id]?.prize;
     const prize=pr!=null?`<span class="prize-rub">${String(pr).replace(/\B(?=(\d{3})+(?!\d))/g,' ')} ₽</span>`:'—';
     return`<tr><td class="nc"><div style="display:flex;align-items:center;gap:6px">${avatar}<span>${esc(p.nickname)}</span></div></td>`+
-      `<td>${fav}</td><td>${d.matches}</td><td>${d.tours.size}</td><td>${placeCell(p.highest_place,p.highest_place_count)}</td><td>${prize}</td><td>${p.age??'—'}</td></tr>`;
+      `<td>${fav}</td><td>${d.matches}</td><td>${d.tours.size}</td><td>${bestT(d)}</td><td>${placeCell(p.highest_place,p.highest_place_count)}</td><td>${prize}</td><td>${p.age??'—'}</td></tr>`;
   });
   document.getElementById('players-area').innerHTML=`<table>${head}<tbody>${rows.join('')}</tbody></table>`;
 }
@@ -1148,7 +1179,7 @@ function sortP(idx){
   const parse=txt=>{
     txt=(txt||'').trim();
     if(txt===''||txt==='—')return{n:null,s:''};
-    const t=txt.match(/^(\d+):(\d{2})$/);
+    const t=txt.match(/^(\d+):(\d{2})/);
     if(t)return{n:+t[1]*60+ +t[2]};
     const num=parseFloat(txt.replace(/\s/g,'').replace(',','.').replace(/[^\d.\-]/g,''));
     return isNaN(num)?{n:null,s:txt.toLowerCase()}:{n:num};
@@ -1334,7 +1365,7 @@ function sortR(idx){
   const rows=[...tb.rows].filter(r=>!r.querySelector('.empty'));if(rows.length<2)return;
   rSort.asc=rSort.idx===idx?!rSort.asc:false;rSort.idx=idx;const asc=rSort.asc;
   const parse=txt=>{txt=(txt||'').trim();if(txt===''||txt==='—')return{n:null,s:''};
-    const t=txt.match(/^(\d+):(\d{2})$/);if(t)return{n:+t[1]*60+ +t[2]};
+    const t=txt.match(/^(\d+):(\d{2})/);if(t)return{n:+t[1]*60+ +t[2]};
     const num=parseFloat(txt.replace(/\s/g,'').replace(',','.').replace(/[^\d.\-]/g,''));
     return isNaN(num)?{n:null,s:txt.toLowerCase()}:{n:num};};
   rows.sort((a,b)=>{const A=parse(a.cells[idx]&&a.cells[idx].textContent),B=parse(b.cells[idx]&&b.cells[idx].textContent);

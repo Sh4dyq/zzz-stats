@@ -18,5 +18,15 @@ alter table player_rosters drop constraint if exists player_rosters_tournament_i
 create unique index if not exists player_rosters_tour_player_char_stage_key
   on player_rosters (tournament_id, player_id, character_id, coalesce(stage,''));
 
+-- Косты персонажей и амплификаторов тоже разные по этапам (в плей-оффе другой рулсет).
+-- Здесь stage NOT NULL DEFAULT '' ('' = весь турнир): upsert по onConflict требует обычный
+-- уникальный ключ, а NULL в нём не дедуплицируется.
+alter table tournament_costs add column if not exists stage text not null default '';
+update tournament_costs set stage='' where stage is null;
+alter table tournament_costs drop constraint if exists tournament_costs_tournament_id_character_id_mindscape_key;
+alter table tournament_costs drop constraint if exists tournament_costs_tour_char_ms_stage_key;
+alter table tournament_costs add constraint tournament_costs_tour_char_ms_stage_key
+  unique (tournament_id, character_id, mindscape, stage);
+
 -- RLS/GRANT: обе таблицы уже открыты на чтение anon и запись authenticated —
 -- новые колонки наследуют политики таблицы.

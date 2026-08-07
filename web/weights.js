@@ -89,8 +89,15 @@ async function _cmpLoadSolo(){
   const[costs,picks,matches,saved,csaved]=await Promise.all([
     _fetchAllW('tournament_costs'),_fetchAllW('match_picks'),_fetchAllW('matches'),_fetchAllW('char_weights'),_fetchAllW('char_const_weights')
   ]);
-  const avgCost=_avgCosts(costs), wr=_winrates(picks,matches);
-  _W.consts=_constsByChar(picks,matches,costs);
+  // этапные косты (tournament_costs.stage) не должны дублировать турнир в среднем:
+  // берём общие строки турнира, а если их нет — строки первого встреченного этапа
+  const _byT={};costs.forEach(c=>{(_byT[c.tournament_id]=_byT[c.tournament_id]||[]).push(c);});
+  const costsGen=[].concat(...Object.values(_byT).map(rows=>{
+    const gen=rows.filter(r=>!(r.stage||''));
+    return gen.length?gen:rows.filter(r=>(r.stage||'')===(rows[0].stage||''));
+  }));
+  const avgCost=_avgCosts(costsGen), wr=_winrates(picks,matches);
+  _W.consts=_constsByChar(picks,matches,costsGen);
   const savedMap={};saved.forEach(r=>savedMap[r.character_id]=r);
   _W.saved=savedMap;
   _W.cweights={};csaved.forEach(r=>{(_W.cweights[r.character_id]=_W.cweights[r.character_id]||{})[r.mindscape]=r.manual_weight;});

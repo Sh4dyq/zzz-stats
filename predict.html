@@ -706,7 +706,14 @@ async function boot(){
      const[tid,pid]=k.split('|');
      (D.rosters[tid]=D.rosters[tid]||{})[pid]=Object.entries(m).map(([cid,ms])=>({cid,ms}));
    });}
+  // Косты могут быть разбиты по этапам (tournament_costs.stage) — здесь берём общие
+  // ('' = весь турнир), а если у турнира только этапные, то первый этап.
   D.costs={};(costs||[]).forEach(r=>{(D.costs[r.tournament_id]=D.costs[r.tournament_id]||[]).push(r);});
+  Object.keys(D.costs).forEach(tid=>{
+    const rows=D.costs[tid],gen=rows.filter(r=>!(r.stage||''));
+    if(gen.length){D.costs[tid]=gen;return;}
+    const first=(rows[0].stage||'');D.costs[tid]=rows.filter(r=>(r.stage||'')===first);
+  });
   D.charW={};(cwRows||[]).forEach(r=>{if(r.manual_weight!=null)D.charW[r.character_id]=r.manual_weight;});
   D.charConstW={};(ccwRows||[]).forEach(r=>{if(r.manual_weight!=null)(D.charConstW[r.character_id]=D.charConstW[r.character_id]||{})[r.mindscape]=r.manual_weight;});
   D.encById={};encs.forEach(e=>D.encById[e.id]=e);

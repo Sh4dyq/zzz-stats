@@ -1085,16 +1085,47 @@ async function clearParticipants(tourId,tourName){
   if(dbErr(error,'очистка участников'))return;openParticipants(tourId,tourName);
 }
 
-async function openCosts(tourId,tourName){
+// Косты ведутся по этапам: tournament_costs.stage ('' = весь турнир, 's1'/'s2' — этап).
+// В плей-оффе рулсет обычно другой. Если у этапа своих строк нет — форма заполняется
+// общими значениями, и сохранение создаст этапные (общие останутся нетронутыми).
+let _costStage='';
+async function openCosts(tourId,tourName,stage){
+  _costStage=stage||'';
   document.getElementById('page-title').textContent=`Косты — ${tourName}`;
-  const{data:existing}=await sb.from('tournament_costs').select('*').eq('tournament_id',tourId);
+  const{data:all}=await sb.from('tournament_costs').select('*').eq('tournament_id',tourId);
+  const rows=all||[];
+  const own=rows.filter(r=>(r.stage||'')===_costStage);
+  const existing=own.length?own:(_costStage?rows.filter(r=>!(r.stage||'')):[]);
   const{data:tour}=await sb.from('tournaments').select('restart_penalties').eq('id',tourId).maybeSingle();
-  renderCostsPage(tourId,tourName,existing||[],tour?.restart_penalties||[]);
+  renderCostsPage(tourId,tourName,existing,tour?.restart_penalties||[],{inherited:_costStage&&!own.length&&existing.length});
+}
+// Селект этапа над таблицами костов.
+function costStageControls(tourId,tourName,inherited){
+  const t=D.tours.find(x=>x.id===tourId)||{};
+  const stages=(typeof Phase!=='undefined')?Phase.stagesOf(t):[];
+  if(!stages.length)return'';
+  const opts=[{key:'',label:'Весь турнир'},...stages.map(s=>({key:s.key,label:s.full||s.label}))]
+    .map(o=>`<option value="${o.key}"${o.key===_costStage?' selected':''}>${escapeHtml(o.label)}</option>`).join('');
+  const nm=(tourName||'').replace(/'/g,"\\'");
+  return`<div class="card" style="margin-bottom:16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+    <span style="font-weight:600;font-size:14px">Этап:</span>
+    <select id="cost-stage" style="font-size:13px;padding:5px 10px" onchange="openCosts('${tourId}','${nm}',this.value)">${opts}</select>
+    <span style="font-size:12px;color:var(--sub)">${inherited?'Своих костов у этапа нет — показаны общие. «Сохранить всё» запишет их как костами этапа.':'Косты сохраняются для выбранного этапа; «Весь турнир» — фолбэк для этапов без своих костов.'}</span>
+    ${_costStage?`<button class="btn-r" style="font-size:12px;padding:5px 12px" onclick="clearStageCosts('${tourId}','${nm}')">Удалить косты этапа</button>`:''}
+  </div>`;
+}
+async function clearStageCosts(tourId,tourName){
+  if(!_costStage)return;
+  if(!confirm('Удалить косты этого этапа? Останутся общие косты турнира.'))return;
+  const{error}=await sb.from('tournament_costs').delete().eq('tournament_id',tourId).eq('stage',_costStage);
+  if(dbErr(error,'удаление костов этапа'))return;
+  toast('Косты этапа удалены');openCosts(tourId,tourName,_costStage);
 }
 
 // Совмещённая страница: два раскрывающихся блока (косты персонажей / костов амплификаторов), оба изначально свёрнуты.
-function renderCostsPage(tourId,tourName,existing,penalties){
+function renderCostsPage(tourId,tourName,existing,penalties,opt){
   html(`<button class="btn btn-g" style="margin-bottom:16px" onclick="go('tournaments')">← Назад</button>
+  ${costStageControls(tourId,tourName,opt&&opt.inherited)}
   ${costsTopControls(tourId,penalties)}
   <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap">
     <button id="cost-tg-char" class="btn btn-g" onclick="toggleCostSection('char')">▸ Косты персонажей</button>
@@ -1431,8 +1462,9 @@ async function copyCosts(tourId){
   if(!srcId)return;
   const srcTour=D.tours.find(t=>t.id===srcId);
   if(!confirm(`Скопировать косты из «${srcTour?.name||srcId}»? Текущие незаполненные ячейки будут заполнены, заполненные — перезаписаны.`))return;
-  const{data:srcCosts,error}=await sb.from('tournament_costs').select('*').eq('tournament_id',srcId);
+  const{data:srcAll,error}=await sb.from('tournament_costs').select('*').eq('tournament_id',srcId);
   if(dbErr(error,'загрузка костов'))return;
+  const srcCosts=(srcAll||[]).filter(r=>!(r.stage||''));   // копируем общие косты турнира-источника
   (srcCosts||[]).forEach(sc=>{
     const msEl=document.querySelector(`.ci-ms[data-c="${sc.character_id}"][data-m="${sc.mindscape}"]`);
     if(msEl&&sc.cost!=null)msEl.value=sc.cost;
@@ -1451,9 +1483,9 @@ async function saveCosts(tourId){
   document.querySelectorAll('.ci-ms').forEach(el=>{
     if(!el.value)return;
     const c=el.dataset.c,ms=+el.dataset.m;
-    valid.push({tournament_id:tourId,character_id:c,mindscape:ms,cost:+el.value,is_allowed:true});
+    valid.push({tournament_id:tourId,character_id:c,mindscape:ms,cost:+el.value,is_allowed:true,stage:_costStage});
   });
-  if(valid.length){const{error}=await sb.from('tournament_costs').upsert(valid,{onConflict:'tournament_id,character_id,mindscape'});if(dbErr(error,'сохранение костов'))return;}
+  if(valid.length){const{error}=await sb.from('tournament_costs').upsert(valid,{onConflict:'tournament_id,character_id,mindscape,stage'});if(dbErr(error,'сохранение костов'))return;}
   // Штрафы за рестарты — обрезаем хвост нулей, пишем в турнир.
   let pen=[...document.querySelectorAll('.rp-in')].map(el=>+el.value||0);
   while(pen.length&&pen[pen.length-1]===0)pen.pop();
@@ -1574,18 +1606,18 @@ async function saveAmpCosts(tourId){
     if(hasAny){
       // проставляем на строки персонажа; если строк нет — заводим заглушку M0
       const{data:upd,error}=await sb.from('tournament_costs')
-        .update(fields).eq('tournament_id',tourId).eq('character_id',gr.char).select('id');
+        .update(fields).eq('tournament_id',tourId).eq('character_id',gr.char).eq('stage',_costStage).select('id');
       if(dbErr(error,'сохранение коста амплификатора'))return;
       if(!upd||!upd.length){
         const{error:insErr}=await sb.from('tournament_costs')
-          .insert({tournament_id:tourId,character_id:gr.char,mindscape:0,cost:null,is_allowed:true,...fields});
+          .insert({tournament_id:tourId,character_id:gr.char,mindscape:0,cost:null,is_allowed:true,stage:_costStage,...fields});
         if(dbErr(insErr,'создание строки коста амплификатора'))return;
       }
       set++;
     }else{
       // снимаем кост только если этот амплификатор был привязан к персонажу
       const{data:upd,error}=await sb.from('tournament_costs')
-        .update({sig_id:null,sig_cost:null,sig_costs:[],sig_offrole_cost:null,sig_bis:{}}).eq('tournament_id',tourId).eq('character_id',gr.char).eq('sig_id',gr.sig).select('id');
+        .update({sig_id:null,sig_cost:null,sig_costs:[],sig_offrole_cost:null,sig_bis:{}}).eq('tournament_id',tourId).eq('character_id',gr.char).eq('stage',_costStage).eq('sig_id',gr.sig).select('id');
       if(dbErr(error,'очистка коста амплификатора'))return;
       if(upd&&upd.length)cleared++;
     }

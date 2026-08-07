@@ -500,7 +500,12 @@ async function boot(){
       const t=m[p+'_timer_sec'],r=m[p+'_restarts'],cids=pByRun[m.id+'|'+pid];
       if(t>0&&!r&&cids&&cids.length===6)timeSamples.push({cids,t});});});
   D.timeModel=DraftSim.fitTimeModel(timeSamples);
+  // этапные косты (tournament_costs.stage): берём общие турнира, иначе первый этап
   D.costs={};costs.forEach(r=>{(D.costs[r.tournament_id]=D.costs[r.tournament_id]||[]).push(r);});
+  Object.keys(D.costs).forEach(tid=>{
+    const rows=D.costs[tid],gen=rows.filter(r=>!(r.stage||''));
+    D.costs[tid]=gen.length?gen:rows.filter(r=>(r.stage||'')===(rows[0].stage||''));
+  });
   // теги синергии (фолбэк на статический JSON)
   const map=synRows.length?{}:null;synRows.forEach(x=>map[x.character_id]=x.data);
   try{await Synergy.load(map);}catch(e){console.warn('synergy',e);}
