@@ -1161,8 +1161,10 @@ function renderMisc(){
   // во «все турниры» дописываем серым, где поставлен лучший таймер
   const bestT=d=>{
     if(d.bestT==null)return'—';
-    const nm=isAll?(TOURS.find(t=>t.id===d.bestTour)?.name):null;
-    return fSec(d.bestT)+(nm?` <span class="tsrc" title="${esc(nm)}">(${esc(nm)})</span>`:'');
+    const full=isAll?(TOURS.find(t=>t.id===d.bestTour)?.name):null;
+    // режем общий префикс «Nexus Shiyu» — иначе не влезает в колонку
+    const nm=full?full.replace(/^\s*nexus\s+shiyu\s*[:\-–—]?\s*/i,'').trim()||full:null;
+    return fSec(d.bestT)+(nm?` <span class="tsrc" title="${esc(full)}">(${esc(nm)})</span>`:'');
   };
   const head=`<thead><tr><th class="nc">Ник</th><th>Любимый персонаж</th><th onclick="sortP(2)">Σ игр</th><th onclick="sortP(3)">Σ турниров</th><th onclick="sortP(4)" title="Лучший (наименьший) таймер">Лучший таймер</th><th onclick="sortP(5)">Наивысшее место</th><th onclick="sortP(6)">Призовые ₽</th><th onclick="sortP(7)">Возраст</th></tr></thead>`;
   // показываем всех игроков, у кого есть встречи в текущем фильтре
