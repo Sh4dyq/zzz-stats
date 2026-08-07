@@ -22,8 +22,10 @@ function validateMatchData(o){
   const dblId=fpId===p1Id?p2Id:p1Id;
   // правильность стороны + «фп действительно фп»
   if([p1Id,p2Id].indexOf(fpId)<0)errors.push('фп не входит в эту встречу');
-  else if(fpId!==(+num===1?p1Id:p2Id))errors.push(`фп матча ${num} должен быть «Игрок ${num}» встречи`);
-  // сторона фп не дублируется внутри встречи (фп чередуется между матчами)
+  // фп чередуется по номеру игры: нечётные — «Игрок 1», чётные — «Игрок 2»
+  // (в сериях длиннее Bo2 чередование продолжается тем же порядком).
+  else if(fpId!==(+num%2===1?p1Id:p2Id))errors.push(`фп матча ${num} должен быть «Игрок ${+num%2===1?1:2}» встречи`);
+  // otherFpId передают только для Bo2 — там сторона фп не должна дублироваться
   if(otherFpId&&otherFpId===fpId)errors.push('этот игрок уже фп в другом матче встречи — сторона дублируется (фп должен чередоваться)');
   // пики с флагом is_fp должны принадлежать именно фп (и наоборот)
   picks.forEach(p=>{
@@ -97,7 +99,9 @@ async function auditTournamentMatches(tourId){
     const lbl=`${pn(e.player1_id)} vs ${pn(e.player2_id)}`;
     if(list.length<2)warnings.push(`${lbl}: только ${list.length} матч(ей) из 2 (пара собралась не полностью)`);
     list.forEach(m=>{
-      const other=(list.find(x=>x!==m)||{}).fp_player_id||null;
+      // проверка «сторона фп не дублируется» осмысленна только для Bo2:
+      // в длинной серии фп чередуется, и повтор стороны нормален
+      const other=list.length===2?((list.find(x=>x!==m)||{}).fp_player_id||null):null;
       const onP1=m.fp_player_id===e.player1_id;
       const t1=onP1?m.player1_timer_sec:m.player2_timer_sec; // t1 = таймер фп
       const t2=onP1?m.player2_timer_sec:m.player1_timer_sec;
@@ -139,11 +143,36 @@ async function pgMatches(){
   const tourMap={};D.tours.forEach(t=>tourMap[t.id]=t);
   const plMap={};D.players.forEach(p=>plMap[p.id]=p);
 
+  // Пары, у которых в турнире несколько встреч (рематч/длинная серия) — им
+  // показываем «Слить в серию»; направление склейки выбирает человек.
+  const pairKey=e=>e.tournament_id+'|'+[e.player1_id,e.player2_id].filter(Boolean).sort().join('|');
+  const byPair={};(encs||[]).forEach(e=>{(byPair[pairKey(e)]=byPair[pairKey(e)]||[]).push(e);});
+  Object.values(byPair).forEach(a=>a.sort((x,y)=>(x.sort_order??1e9)-(y.sort_order??1e9)||new Date(x.created_at)-new Date(y.created_at)));
+
+  // индекс для инлайнового выбора цели склейки (см. openMergePicker)
+  _encIndex={byId:{},ms:mByEnc,pairs:byPair,pairKey};
+  (encs||[]).forEach(e=>_encIndex.byId[e.id]=e);
+
   const list=(encs||[]).map(e=>{
     const t=tourMap[e.tournament_id],p1=plMap[e.player1_id],p2=plMap[e.player2_id],win=plMap[e.winner_id];
+    const hasTwin=(byPair[pairKey(e)]||[]).length>1;
     const ems=mByEnc[e.id]||[];
-    const m1done=ems.find(m=>m.match_number===1)?.winner_id||ems.find(m=>m.match_number===1)?.is_draw;
-    const m2done=ems.find(m=>m.match_number===2)?.winner_id||ems.find(m=>m.match_number===2)?.is_draw;
+    // Обычно Bo2, но серия может быть длиннее (суперфинал Bo2+Bo2+Bo1 = одна встреча
+    // из 5 игр) — показываем кнопку на каждую сыгранную игру плюс одну про запас.
+    const nGames=Math.max(2,...ems.map(m=>m.match_number||0))+1;
+    const gameBtns=Array.from({length:nGames},(_,i)=>{
+      const n=i+1,m=ems.find(x=>x.match_number===n),done=m?.winner_id||m?.is_draw;
+      return`<button class="btn ${done?'btn-g':'btn-y'}" style="font-size:12px;padding:5px 14px" onclick="openMatch('${e.id}',${n},'${e.player1_id}','${e.player2_id}')">
+          ${done?'✓':''} Матч ${n}</button>`;
+    }).join('');
+    // Этап многоэтапного турнира: явная разметка (иначе встречу игроков одной
+    // группы в плей-офф статистика отнесёт к групповому этапу).
+    const stages=(typeof Phase!=='undefined'?Phase.stagesOf(t):[]);
+    const stageSel=stages.length<2?'':`<select draggable="false" title="Этап турнира для статистики"
+          onchange="updateEncMeta('${e.id}',{stage_key:this.value||null})" style="font-size:12px;padding:5px 8px">
+          <option value=""${e.stage_key?'':' selected'}>этап: авто</option>
+          ${stages.map(s=>`<option value="${s.key}"${e.stage_key===s.key?' selected':''}>${s.label}</option>`).join('')}
+        </select>`;
     return`<div class="card" draggable="true" data-id="${e.id}">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:8px">
         <div style="display:flex;align-items:center;gap:8px;min-width:0">
@@ -157,17 +186,19 @@ async function pgMatches(){
         <input id="stage-${e.id}" type="text" value="${escapeHtml(e.stage||'')}" placeholder="стадия (напр. Гранд-финал) — пусто = скрыто" draggable="false"
           onchange="updateEncMeta('${e.id}',{stage:this.value.trim()||null})"
           title="Стадия встречи; показывается на главной в блоке последних матчей" style="font-size:12px;padding:5px 8px;flex:1;min-width:180px">
+        ${stageSel}
         <input type="date" id="date-${e.id}" value="${e.played_at||''}" draggable="false"
           onchange="updateEncMeta('${e.id}',{played_at:this.value||null})"
           title="Дата проведения (для актуальности на главной)" style="font-size:12px;padding:4px 8px">
       </div>
-      <div style="display:flex;gap:8px">
-        <button class="btn ${m1done?'btn-g':'btn-y'}" style="font-size:12px;padding:5px 14px" onclick="openMatch('${e.id}',1,'${e.player1_id}','${e.player2_id}')">
-          ${m1done?'✓':''} Матч 1</button>
-        <button class="btn ${m2done?'btn-g':'btn-y'}" style="font-size:12px;padding:5px 14px" onclick="openMatch('${e.id}',2,'${e.player1_id}','${e.player2_id}')">
-          ${m2done?'✓':''} Матч 2</button>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        ${gameBtns}
+        ${hasTwin?`<button class="btn btn-y" style="font-size:12px;padding:5px 14px"
+          title="Перенести игры этой встречи в другую встречу той же пары (суперфинал Bo2+Bo2+Bo1 = одна серия)"
+          onclick="openMergePicker('${e.id}')">⤵ Слить в серию</button>`:''}
         <button class="btn-r" style="margin-left:auto" onclick="delEnc('${e.id}')">Удалить встречу</button>
       </div>
+      <div id="merge-${e.id}"></div>
     </div>`;
   }).join('');
 
@@ -319,6 +350,81 @@ async function addEnc(){
   if(dbErr(error,'создание встречи'))return;
   toast('Встреча создана');pgMatches();
 }
+// Склейка встреч одной пары в одну серию. Массовый импорт раскладывает игры по
+// Bo2-встречам (фп чередуется, третья игра пары = новая встреча) — это верно для
+// обычного формата, но суперфинал вида Bo2+Bo2+Bo1 регламентно одна серия, и в
+// счёте она должна считаться за одну победу.
+let _encIndex={byId:{},ms:{},pairs:{},pairKey:null};
+
+// Инлайновый выбор цели: какие игры куда переносим — решает человек, автовыбор
+// «самой ранней встречи» слишком легко склеивает не то (у пары бывают рематчи).
+function openMergePicker(id){
+  const box=document.getElementById('merge-'+id);
+  if(!box)return;
+  if(box.dataset.open==='1'){box.innerHTML='';box.dataset.open='';return;}
+  const src=_encIndex.byId[id];
+  const cands=(_encIndex.pairs[_encIndex.pairKey(src)]||[]).filter(e=>e.id!==id);
+  if(!cands.length)return toast('Нет другой встречи этой пары','err');
+  const pn=x=>D.players.find(p=>p.id===x)?.nickname||'?';
+  const pSec=s=>s?`${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`:'—';
+  const descr=e=>{
+    const ms=(_encIndex.ms[e.id]||[]).slice().sort((a,b)=>(a.match_number||0)-(b.match_number||0));
+    const games=ms.map(m=>`${pSec(m.player1_timer_sec)}/${pSec(m.player2_timer_sec)}`).join(', ');
+    return `${pn(e.player1_id)} vs ${pn(e.player2_id)} · ${ms.length} игр(ы)`
+      +(e.stage?` · ${e.stage}`:'')+` · ${String(e.created_at).slice(0,10)}`+(games?` · ${games}`:'');
+  };
+  const srcN=(_encIndex.ms[id]||[]).length;
+  box.dataset.open='1';
+  box.innerHTML=`<div style="margin-top:8px;padding:9px 11px;border:1px solid var(--border);border-radius:8px;background:var(--bg2,transparent)">
+    <div style="font-size:12px;color:var(--sub);margin-bottom:6px">
+      Перенести ${srcN} игр(ы) этой встречи <b>в конец</b> выбранной. Эта встреча будет удалена, победитель цели пересчитается по сумме таймеров.</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <select id="merge-dst-${id}" draggable="false" style="font-size:12px;padding:5px 8px;flex:1;min-width:240px">
+        ${cands.map(e=>`<option value="${e.id}">${escapeHtml(descr(e))}</option>`).join('')}
+      </select>
+      <button class="btn btn-y" style="font-size:12px;padding:5px 14px"
+        onclick="mergeEncounterIntoSeries('${id}',document.getElementById('merge-dst-${id}').value)">Слить</button>
+      <button class="btn btn-g" style="font-size:12px;padding:5px 14px" onclick="openMergePicker('${id}')">Отмена</button>
+    </div>
+    <div style="font-size:11px;color:var(--sub);margin-top:6px">Источник: ${escapeHtml(descr(src))}</div>
+  </div>`;
+}
+
+async function mergeEncounterIntoSeries(id,dstId){
+  if(!dstId)return toast('Не выбрана встреча-цель','err');
+  if(id===dstId)return toast('Нельзя слить встречу саму с собой','err');
+  const{data:src}=await sb.from('encounters').select('*').eq('id',id).maybeSingle();
+  const{data:dst}=await sb.from('encounters').select('*').eq('id',dstId).maybeSingle();
+  if(!src||!dst)return toast('Встреча не найдена','err');
+  if(src.tournament_id!==dst.tournament_id)return toast('Встречи из разных турниров','err');
+  const samePair=(dst.player1_id===src.player1_id&&dst.player2_id===src.player2_id)
+                ||(dst.player1_id===src.player2_id&&dst.player2_id===src.player1_id);
+  if(!samePair)return toast('Это встречи разных пар','err');
+  const pn=x=>D.players.find(p=>p.id===x)?.nickname||'?';
+  const{data:dstMs}=await sb.from('matches').select('match_number').eq('encounter_id',dst.id);
+  const{data:srcMs}=await sb.from('matches').select('*').eq('encounter_id',id);
+  if(!srcMs?.length)return toast('В этой встрече нет матчей','err');
+  let next=Math.max(0,...(dstMs||[]).map(m=>m.match_number||0));
+  // порядок игроков во встречах может отличаться — тогда стороны матча меняем местами
+  const flip=dst.player1_id===src.player2_id;
+  if(!confirm(`Перенести ${srcMs.length} игр(ы) во встречу ${pn(dst.player1_id)} vs ${pn(dst.player2_id)}`
+    +` (станут матчами ${next+1}–${next+srcMs.length}) и удалить эту встречу?`))return;
+  for(const m of srcMs.slice().sort((a,b)=>(a.match_number||0)-(b.match_number||0))){
+    const patch={encounter_id:dst.id,match_number:++next};
+    if(flip)Object.assign(patch,{player1_timer_sec:m.player2_timer_sec,player2_timer_sec:m.player1_timer_sec,
+      player1_restarts:m.player2_restarts,player2_restarts:m.player1_restarts});
+    const{error}=await sb.from('matches').update(patch).eq('id',m.id);
+    if(dbErr(error,'перенос матча'))return;
+  }
+  {const{error}=await sb.from('encounters').delete().eq('id',id);if(dbErr(error,'удаление пустой встречи'))return;}
+  // победитель серии — по суммарному таймеру всех игр (как и для Bo2)
+  const{data:allMs}=await sb.from('matches').select('*').eq('encounter_id',dst.id);
+  let a=0,b=0;(allMs||[]).forEach(m=>{a+=m.player1_timer_sec||0;b+=m.player2_timer_sec||0;});
+  await sb.from('encounters').update({winner_id:a<=b?dst.player1_id:dst.player2_id}).eq('id',dst.id);
+  toast(`Серия склеена: ${allMs?.length||0} игр`);
+  pgMatches();
+}
+
 // Массовое удаление: все встречи выбранного в фильтре турнира (матчи/пики/баны каскадом).
 async function bulkDeleteEncounters(){
   const t=_encTourFilter;
@@ -492,7 +598,9 @@ async function importMatchFromLink(encId,num,p1Id,p2Id,link,pen){
   const desc=parseDraftLink(link);
   if(!desc)throw new Error('не разобрал ссылку');
   const norm=normalizeDraft(await fetchDraftState(desc));
-  const fpId=num===1?p1Id:p2Id,dblId=num===1?p2Id:p1Id;
+  // фп чередуется по чётности номера игры (в сериях длиннее Bo2 — тем же порядком)
+  const fpFirst=+num%2===1;
+  const fpId=fpFirst?p1Id:p2Id,dblId=fpFirst?p2Id:p1Id;
   const fp=D.players.find(p=>p.id===fpId),dbl=D.players.find(p=>p.id===dblId);
   const ps=[norm.players.player0,norm.players.player1];
   const nm=s=>(s||'').trim().toLowerCase();
@@ -514,7 +622,8 @@ async function importMatchFromLink(encId,num,p1Id,p2Id,link,pen){
   }
   // Валидация стороны/фп/дублирования перед записью (см. validateMatchData).
   const{data:otherMs}=await sb.from('matches').select('fp_player_id').eq('encounter_id',encId).neq('match_number',+num);
-  const otherFpId=(otherMs||[]).map(m=>m.fp_player_id).find(Boolean)||null;
+  // только для Bo2: в серии длиннее фп чередуется и сторона законно повторяется
+  const otherFpId=(otherMs||[]).length===1?((otherMs[0].fp_player_id)||null):null;
   const vr=validateMatchData({num,p1Id,p2Id,fpId,t1:fpT,t2:dblT,isDraw,winnerId,otherFpId});
   if(vr.errors.length)throw new Error('валидация: '+vr.errors.join('; '));
   const mData={encounter_id:encId,match_number:+num,fp_player_id:fpId,is_draw:isDraw,winner_id:winnerId,
@@ -617,8 +726,9 @@ async function autofillRostersFromMatch(tournamentId,agents,stage){
 }
 
 async function openMatch(encId,num,p1Id,p2Id){
-  const fpId=num===1?p1Id:p2Id;
-  const dblId=num===1?p2Id:p1Id;
+  const fpFirst=+num%2===1;               // фп чередуется по чётности номера игры
+  const fpId=fpFirst?p1Id:p2Id;
+  const dblId=fpFirst?p2Id:p1Id;
   const fp=D.players.find(p=>p.id===fpId),dbl=D.players.find(p=>p.id===dblId);
   const{data:match}=window.DEV_PREVIEW
     ?{data:window.DEV_MATCH||null}
@@ -998,7 +1108,8 @@ async function saveMatch(encId,num,p1Id,p2Id,fpId,existingId){
   // Многоуровневая валидация перед записью: сторона/фп/дубли/таймеры.
   // otherFpId — фп соседнего матча встречи (для проверки, что сторона не дублируется).
   const{data:otherMs}=await sb.from('matches').select('fp_player_id').eq('encounter_id',encId).neq('match_number',+num);
-  const otherFpId=(otherMs||[]).map(m=>m.fp_player_id).find(Boolean)||null;
+  // только для Bo2: в серии длиннее фп чередуется и сторона законно повторяется
+  const otherFpId=(otherMs||[]).length===1?((otherMs[0].fp_player_id)||null):null;
   const vr=validateMatchData({num,p1Id,p2Id,fpId,t1,t2,isDraw:draw,winnerId,picks,bans,otherFpId});
   const rWarn=await rosterConsistencyWarnings(encId,picks,existingId);
   const warnings=[...vr.warnings,...rWarn];

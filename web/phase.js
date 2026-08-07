@@ -65,6 +65,9 @@
   function encStageKey(enc,t,ctx){
     const stages=stagesOf(t);
     if(stages.length<2)return's1';
+    // Явная разметка приоритетнее эвристики: игроки из одной группы могут
+    // встретиться и в плей-офф, по составу групп это не различить.
+    if(enc&&enc.stage_key&&stages.some(s=>s.key===enc.stage_key))return enc.stage_key;
     const s1=stages[0];
     if(GROUPISH.test(s1.fmt)){
       if(encGroup(enc,ctx&&ctx.groups))return's1';
