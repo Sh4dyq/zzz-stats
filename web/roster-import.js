@@ -139,15 +139,75 @@ function riParse(text,tid){
   return out.filter(r=>r.nick||r.chars.length);
 }
 
-// запись в player_rosters: полная замена ростера игрока на турнире, source='manual'
-async function riSave(rows,tid){
+// ===== Сбор ростера этапа из уже загруженных матчей =====
+// Полного ростера (17+) в БД нет — он приходит только в момент импорта драфта, поэтому
+// здесь собираем то, что реально сыграно: пики матчей выбранного этапа (макс. мидскейп).
+// Возвращает {player_id: {character_id: mindscape}}.
+async function riStagePicks(tid,stage){
+  if(!tid)return{};
+  const{data:encs}=await sb.from('encounters').select('*').eq('tournament_id',tid);
+  let list=encs||[];
+  if(stage&&typeof Phase!=='undefined'){
+    const t=(D.tours||[]).find(x=>x.id===tid);
+    const{data:bc}=await sb.from('bracket_cache').select('json').eq('tournament_id',tid).maybeSingle();
+    const nickToId={};(D.players||[]).forEach(p=>{if(p.nickname)nickToId[p.nickname.toLowerCase()]=p.id;});
+    const groups=Phase.groupsOf(t,bc?.json||null,nickToId,list);
+    list=list.filter(e=>Phase.encStageKey(e,t,{groups})===stage);
+  }
+  const encIds=list.map(e=>e.id);if(!encIds.length)return{};
+  const{data:ms}=await sb.from('matches').select('id').in('encounter_id',encIds);
+  const mIds=(ms||[]).map(m=>m.id);if(!mIds.length)return{};
+  const picks=[];
+  for(let i=0;i<mIds.length;i+=200){                       // чанки по match_id: и URL короче, и лимит 1000 не ловим
+    const{data}=await sb.from('match_picks').select('player_id,character_id,mindscape').in('match_id',mIds.slice(i,i+200));
+    (data||[]).forEach(p=>picks.push(p));
+  }
+  const out={};
+  picks.forEach(p=>{
+    const m=out[p.player_id]=out[p.player_id]||{};
+    if(m[p.character_id]==null||(p.mindscape||0)>m[p.character_id])m[p.character_id]=p.mindscape||0;
+  });
+  return out;
+}
+
+// Массовая запись собранного из пиков ростера этапа (source='auto' — импорт драфта
+// потом дополнит недостающими персонажами). Существующие ручные ростеры этапа не трогаем.
+async function riSaveFromPicks(tid,stage){
+  stage=stage||null;
+  const byP=await riStagePicks(tid,stage);
+  const pids=Object.keys(byP);
+  if(!pids.length)return{saved:0,chars:0};
+  const{data:ex,error:exErr}=await sb.from('player_rosters').select('player_id,source,stage').eq('tournament_id',tid);
+  if(dbErr(exErr,'чтение ростеров'))return{saved:0,err:true};
+  const manual=new Set((ex||[]).filter(r=>(r.stage||null)===stage&&r.source==='manual').map(r=>r.player_id));
+  const ids=pids.filter(p=>!manual.has(p));
+  if(!ids.length)return{saved:0,chars:0,skipped:pids.length};
+  let dq=sb.from('player_rosters').delete().eq('tournament_id',tid).in('player_id',ids);
+  dq=stage?dq.eq('stage',stage):dq.is('stage',null);
+  const{error:dErr}=await dq;
+  if(dbErr(dErr,'очистка ростеров'))return{saved:0,err:true};
+  const ins=[];
+  ids.forEach(pid=>Object.entries(byP[pid]).forEach(([cid,ms])=>
+    ins.push({tournament_id:tid,player_id:pid,character_id:cid,mindscape:ms,source:'auto',stage})));
+  const{error}=await sb.from('player_rosters').insert(ins);
+  if(dbErr(error,'сохранение ростеров'))return{saved:0,err:true};
+  return{saved:ids.length,chars:ins.length,skipped:pids.length-ids.length};
+}
+
+// запись в player_rosters: полная замена ростера игрока на турнире, source='manual'.
+// stage: null = ростер на весь турнир, 's1'/'s2' = только этот этап (ростеры между
+// группами и плей-оффом отличаются) — соседние этапы не затираются.
+async function riSave(rows,tid,stage){
+  stage=stage||null;
   const ok=rows.filter(r=>r.player&&r.chars.length);
   if(!ok.length)return{saved:0};
   const ids=ok.map(r=>r.player.id);
-  const{error:dErr}=await sb.from('player_rosters').delete().eq('tournament_id',tid).in('player_id',ids);
+  let q=sb.from('player_rosters').delete().eq('tournament_id',tid).in('player_id',ids);
+  q=stage?q.eq('stage',stage):q.is('stage',null);
+  const{error:dErr}=await q;
   if(dbErr(dErr,'очистка ростеров'))return{saved:0,err:true};
   const ins=[];
-  ok.forEach(r=>r.chars.forEach(c=>ins.push({tournament_id:tid,player_id:r.player.id,character_id:c.cid,mindscape:c.ms,source:'manual'})));
+  ok.forEach(r=>r.chars.forEach(c=>ins.push({tournament_id:tid,player_id:r.player.id,character_id:c.cid,mindscape:c.ms,source:'manual',stage})));
   const{error}=await sb.from('player_rosters').insert(ins);
   if(dbErr(error,'сохранение ростеров'))return{saved:0,err:true};
   return{saved:ok.length,chars:ins.length};

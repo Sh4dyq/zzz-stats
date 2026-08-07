@@ -94,5 +94,46 @@
       .map(s=>({nm:nickOf(s.pid),w:s.w,l:s.l}));
   }
 
-  g.Phase={FMT,stagesOf,groupsOf,encGroup,encStageKey,standingsFor};
+  // ===== Данные, привязанные к стадии =====
+  // player_rosters.stage и tournaments.shiyu_stages: null/отсутствие = «на весь турнир».
+  // Ростеры реально меняются между этапами (плей-офф собирают заново), Шиюй тоже
+  // может быть другой — поэтому оба резолвятся по текущей стадии с фолбэком на общее.
+
+  // Строки ростера ОДНОГО игрока в ОДНОМ турнире → срез по стадии.
+  // key='all' → объединение стадий (по персонажу берём больший мидскейп).
+  function rosterFor(rows,key){
+    rows=rows||[];
+    if(key&&key!=='all'){
+      const own=rows.filter(r=>r.stage===key);
+      return own.length?own:rows.filter(r=>!r.stage);
+    }
+    const by={};
+    rows.forEach(r=>{const p=by[r.character_id];if(!p||(r.mindscape||0)>(p.mindscape||0))by[r.character_id]=r;});
+    return Object.values(by);
+  }
+  // Тот же срез для плоского списка строк (много игроков/турниров).
+  function rosterSplit(rows,key){
+    const by={};
+    (rows||[]).forEach(r=>{const k=r.tournament_id+'|'+r.player_id;(by[k]=by[k]||[]).push(r);});
+    return [].concat(...Object.values(by).map(a=>rosterFor(a,key)));
+  }
+  // Ротация Шиюй для стадии: shiyu_stages[key] → shiyu_data (общая) → null.
+  function shiyuFor(t,key){
+    if(!t)return null;
+    const st=t.shiyu_stages||{};
+    if(key&&key!=='all'&&st[key])return st[key];
+    return t.shiyu_data||null;
+  }
+  // Все ротации турнира: [{key,label,data}] — для режима «Всё» и админки.
+  function shiyuList(t){
+    if(!t)return[];
+    const st=t.shiyu_stages||{},stages=stagesOf(t),out=[];
+    if(stages.length>1){
+      stages.forEach(s=>{const d=st[s.key]||(s.key==='s1'?t.shiyu_data:null);if(d&&d.rooms&&d.rooms.length)out.push({key:s.key,label:s.full||s.label,data:d});});
+      if(out.length)return out;
+    }
+    return (t.shiyu_data&&t.shiyu_data.rooms&&t.shiyu_data.rooms.length)?[{key:'all',label:'',data:t.shiyu_data}]:[];
+  }
+
+  g.Phase={FMT,stagesOf,groupsOf,encGroup,encStageKey,standingsFor,rosterFor,rosterSplit,shiyuFor,shiyuList};
 })(window);

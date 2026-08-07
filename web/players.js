@@ -27,9 +27,11 @@ async function pgPlayers(){
     <summary>Импорт ростеров турнира<span class="chev">▾</span></summary>
     <div class="panel-body">
       <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
-        <div style="flex:1;min-width:200px"><label>Турнир</label><select id="ri-tour">${tourOpts}</select></div>
+        <div style="flex:1;min-width:200px"><label>Турнир</label><select id="ri-tour" onchange="fillStageSel('ri-stage',this.value)">${tourOpts}</select></div>
+        <div style="min-width:150px"><label>Этап</label><select id="ri-stage"></select></div>
         <button class="btn" onclick="riPreview()">Разобрать</button>
         <button class="btn btn-y" onclick="riCommit()">Сохранить в турнир</button>
+        <button class="btn btn-g" onclick="riPicksCommit()" title="Собрать ростеры всех игроков из пиков матчей выбранного этапа (только сыгранные персонажи)">Собрать из матчей этапа</button>
       </div>
       <label style="margin-top:10px">Вставь ростеры — текстом или JSON (персонажей руками проставлять не нужно)</label>
       <textarea id="ri-src" rows="8" placeholder="Ник: Miyabi M2, Yanagi, Astra Yao&#10;Другой ник — Ellen; Lycaon M6&#10;&#10;или блоками:&#10;Ник&#10;Miyabi M2&#10;Yanagi&#10;&#10;или JSON: {&quot;Ник&quot;:[&quot;Miyabi M2&quot;,&quot;Yanagi&quot;]}" style="width:100%;font-family:'JetBrains Mono',monospace;font-size:12px"></textarea>
@@ -60,6 +62,7 @@ async function pgPlayers(){
   </div>
   <div class="pgrid" id="player-list">${list||''}<p data-empty style="color:var(--sub);font-size:14px;${D.players.length?'display:none':''}">Игроков ещё нет</p></div>`);
   if(typeof enableReorder==='function')enableReorder(document.getElementById('player-list'),'players',pgPlayers);
+  fillStageSel('ri-stage',v('ri-tour'));
 }
 // ---- импорт ростеров (разбор в web/roster-import.js) ----
 let _RI=null;
@@ -79,10 +82,23 @@ function riPreview(){
 async function riCommit(){
   const tid=v('ri-tour');if(!tid)return toast('Выбери турнир','err');
   if(!_RI)riPreview();
-  const res=await riSave(_RI||[],tid);
+  const res=await riSave(_RI||[],tid,v('ri-stage')||null);
   if(res.err)return;
   if(!res.saved)return toast('Нечего сохранять: игроки не распознаны','err');
   toast(`Ростеры сохранены: ${res.saved} игроков, ${res.chars} персонажей`);
+}
+
+// Массовый сбор ростеров этапа из пиков уже загруженных матчей (полного ростера в БД нет —
+// только сыгранные персонажи). Ручные ростеры этапа пропускаются.
+async function riPicksCommit(){
+  const tid=v('ri-tour');if(!tid)return toast('Выбери турнир','err');
+  const stage=v('ri-stage')||null;
+  if(!confirm(`Собрать ростеры из пиков матчей${stage?' выбранного этапа':' всего турнира'}?\n\nВ ростер попадут только реально сыгранные персонажи. Ручные ростеры этого этапа не тронем.`))return;
+  toast('Считаю пики…');
+  const res=await riSaveFromPicks(tid,stage);
+  if(res.err)return;
+  if(!res.saved)return toast(res.skipped?'Все ростеры этапа помечены ручными — ничего не менял':'Пиков на этом этапе нет','err');
+  toast(`Собрано: ${res.saved} игроков, ${res.chars} персонажей${res.skipped?` · пропущено ручных: ${res.skipped}`:''}`);
 }
 
 async function addPlayer(){const n=v('p-nick');if(!n)return;
@@ -119,7 +135,9 @@ async function openRoster(pid,pnick){
     <h3>Персонажи ростера</h3>
     <div style="display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap;margin-bottom:14px">
       <div style="flex:1;min-width:160px"><label>Турнир</label>${sel('r-tour',D.tours,x=>x.id,x=>x.name)}</div>
+      <div style="min-width:150px"><label>Этап</label><select id="r-stage" onchange="loadTourRoster('${pid}')"></select></div>
       <button class="btn btn-g" onclick="loadTourRoster('${pid}')">Загрузить</button>
+      <button class="btn btn-g" onclick="pullStagePicks('${pid}')" title="Добавить персонажей из пиков матчей этого этапа (сыгранные)">Подтянуть из матчей этапа</button>
       <button class="btn btn-y" onclick="saveRoster('${pid}')">Сохранить ростер</button>
     </div>
 
@@ -130,6 +148,22 @@ async function openRoster(pid,pnick){
 
     <div style="display:flex;flex-wrap:wrap;gap:8px">${charGrid}</div>
   </div>`);
+  const tsel=document.getElementById('r-tour');
+  if(tsel)tsel.onchange=()=>{fillStageSel('r-stage',v('r-tour'));loadTourRoster(pid);};
+  fillStageSel('r-stage',v('r-tour'));
+}
+
+// Селект этапа турнира для ростеров: «Весь турнир» (stage=null) + этапы многоэтапного
+// турнира (s1/s2 из bracket_type). Ростер этапа перекрывает общий — состав в плей-оффе другой.
+function fillStageSel(id,tid){
+  const el=document.getElementById(id);if(!el)return;
+  const t=(D.tours||[]).find(x=>x.id===tid);
+  const stages=(typeof Phase!=='undefined')?Phase.stagesOf(t):[];
+  const cur=el.value;
+  el.innerHTML=`<option value="">Весь турнир</option>`+
+    stages.map(s=>`<option value="${s.key}">${escapeHtml(s.full||s.label)}</option>`).join('');
+  el.value=stages.some(s=>s.key===cur)?cur:'';
+  el.disabled=!stages.length;
 }
 
 function charPickClick(cid){
@@ -167,13 +201,37 @@ function renderSelected(){
 
 async function loadTourRoster(pid){
   const tourId=v('r-tour');if(!tourId)return;
-  const{data}=await sb.from('player_rosters').select('*').eq('tournament_id',tourId).eq('player_id',pid);
-  _RS=(data||[]).map(r=>({character_id:r.character_id,mindscape:r.mindscape}));
+  const stage=v('r-stage')||null;
+  const{data:all}=await sb.from('player_rosters').select('*').eq('tournament_id',tourId).eq('player_id',pid);
+  // «Весь турнир» → строки без stage; этап → строки этапа (если их нет — показываем общий как основу)
+  const own=(all||[]).filter(r=>(r.stage||null)===stage);
+  const data=own.length?own:(stage?(all||[]).filter(r=>!r.stage):[]);
+  _RS=data.map(r=>({character_id:r.character_id,mindscape:r.mindscape}));
   renderSelected();
   // Подсказка об источнике: 'auto' — собран из пиков (перетрётся новыми результатами),
   // 'manual' — защищён от авто-сбора. Сохранение тут всегда делает ростер ручным.
-  const isAuto=(data||[]).length&&(data||[]).every(r=>r.source==='auto');
-  toast(data?.length?(isAuto?'Ростер собран авто из пиков (сохранение зафиксирует как ручной)':'Ростер ручной (защищён от авто-сбора)'):'Ростер для этого турнира пуст');
+  const isAuto=data.length&&data.every(r=>r.source==='auto');
+  if(stage&&!own.length&&data.length)toast('Ростера на этот этап нет — показан общий (сохранение создаст этапный)');
+  else toast(data.length?(isAuto?'Ростер собран авто из пиков (сохранение зафиксирует как ручной)':'Ростер ручной (защищён от авто-сбора)'):'Ростер пуст');
+}
+
+// Подтянуть в текущий (несохранённый) ростер персонажей из пиков матчей выбранного этапа.
+// Дополняет, а не заменяет: у уже добавленных берём больший мидскейп.
+async function pullStagePicks(pid){
+  const tid=v('r-tour');if(!tid)return toast('Выбери турнир','err');
+  const stage=v('r-stage')||null;
+  toast('Считаю пики…');
+  const byP=await riStagePicks(tid,stage);
+  const mine=byP[pid];
+  if(!mine||!Object.keys(mine).length)return toast('Пиков этого игрока на выбранном этапе нет','err');
+  let add=0;
+  Object.entries(mine).forEach(([cid,ms])=>{
+    const ex=_RS.find(r=>r.character_id===cid);
+    if(ex)ex.mindscape=Math.max(ex.mindscape||0,ms);
+    else{_RS.push({character_id:cid,mindscape:ms});add++;}
+  });
+  renderSelected();
+  toast(`Добавлено ${add} персонажей из пиков (всего ${_RS.length}). Не забудь «Сохранить ростер».`);
 }
 
 async function saveProfile(pid){
@@ -211,11 +269,15 @@ async function saveProfile(pid){
 
 async function saveRoster(pid){
   const tourId=v('r-tour');if(!tourId)return toast('Выбери турнир','err');
-  const{error:dErr}=await sb.from('player_rosters').delete().match({tournament_id:tourId,player_id:pid});
+  const stage=v('r-stage')||null;
+  // Чистим только строки этого этапа (или только общие, если этап не выбран) — соседний этап не трогаем.
+  let q=sb.from('player_rosters').delete().match({tournament_id:tourId,player_id:pid});
+  q=stage?q.eq('stage',stage):q.is('stage',null);
+  const{error:dErr}=await q;
   if(dbErr(dErr,'очистка ростера'))return;
   if(_RS.length){
     // source='manual' → авто-сбор из результатов больше не перетрёт этот ростер.
-    const rows=_RS.map(r=>({tournament_id:tourId,player_id:pid,character_id:r.character_id,mindscape:r.mindscape,source:'manual'}));
+    const rows=_RS.map(r=>({tournament_id:tourId,player_id:pid,character_id:r.character_id,mindscape:r.mindscape,source:'manual',stage}));
     const{error}=await sb.from('player_rosters').insert(rows);
     if(dbErr(error,'сохранение ростера'))return;
   }

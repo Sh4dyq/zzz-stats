@@ -56,8 +56,9 @@ async function rosterConsistencyWarnings(encId,picks,existingId){
   const plMap={};D.players.forEach(p=>plMap[p.id]=p);
   const nm=id=>chMap[id]?.name||'?',pn=id=>plMap[id]?.nickname||'?';
   // зарегистрированный ростер турнира
+  // мидскейп может отличаться по этапам (ростер плей-оффа) — держим набор допустимых
   const{data:rost}=await sb.from('player_rosters').select('player_id,character_id,mindscape').eq('tournament_id',tid);
-  const rkey={};(rost||[]).forEach(r=>rkey[r.player_id+'|'+r.character_id]=r.mindscape);
+  const rkey={};(rost||[]).forEach(r=>(rkey[r.player_id+'|'+r.character_id]=rkey[r.player_id+'|'+r.character_id]||new Set()).add(r.mindscape));
   const rostPlayers=new Set((rost||[]).map(r=>r.player_id));
   // пики в других матчах турнира → минскейп персонажа по игроку (между матчами)
   const{data:encs}=await sb.from('encounters').select('id').eq('tournament_id',tid);
@@ -69,8 +70,8 @@ async function rosterConsistencyWarnings(encId,picks,existingId){
   const warns=[];
   picks.forEach(p=>{
     const rk=p.player_id+'|'+p.character_id;
-    if(rkey[rk]!=null&&rkey[rk]!==p.mindscape)warns.push(`${pn(p.player_id)}: ${nm(p.character_id)} M${p.mindscape} ≠ ростер турнира (M${rkey[rk]})`);
-    else if(rkey[rk]==null&&rostPlayers.has(p.player_id))warns.push(`${pn(p.player_id)}: ${nm(p.character_id)} не в зарегистрированном ростере турнира`);
+    if(rkey[rk]&&!rkey[rk].has(p.mindscape))warns.push(`${pn(p.player_id)}: ${nm(p.character_id)} M${p.mindscape} ≠ ростер турнира (M${[...rkey[rk]].join('/')})`);
+    else if(!rkey[rk]&&rostPlayers.has(p.player_id))warns.push(`${pn(p.player_id)}: ${nm(p.character_id)} не в зарегистрированном ростере турнира`);
     if(seen[rk]!=null&&seen[rk]!==p.mindscape)warns.push(`${pn(p.player_id)}: ${nm(p.character_id)} M${p.mindscape} ≠ другой матч турнира (M${seen[rk]})`);
   });
   return[...new Set(warns)];
@@ -108,13 +109,13 @@ async function auditTournamentMatches(tourId){
   });
   // сквозная ростер-консистентность турнира
   const{data:rost}=await sb.from('player_rosters').select('player_id,character_id,mindscape').eq('tournament_id',tourId);
-  const rkey={};(rost||[]).forEach(r=>rkey[r.player_id+'|'+r.character_id]=r.mindscape);
+  const rkey={};(rost||[]).forEach(r=>(rkey[r.player_id+'|'+r.character_id]=rkey[r.player_id+'|'+r.character_id]||new Set()).add(r.mindscape));
   const rostPlayers=new Set((rost||[]).map(r=>r.player_id));
   const seen={};
   (ms||[]).forEach(m=>(m.picks||[]).forEach(p=>{
     const k=p.player_id+'|'+p.character_id;
-    if(rkey[k]!=null&&rkey[k]!==p.mindscape)warnings.push(`${pn(p.player_id)}: ${cn(p.character_id)} M${p.mindscape} ≠ ростер турнира (M${rkey[k]})`);
-    else if(rkey[k]==null&&rostPlayers.has(p.player_id))warnings.push(`${pn(p.player_id)}: ${cn(p.character_id)} вне зарегистрированного ростера`);
+    if(rkey[k]&&!rkey[k].has(p.mindscape))warnings.push(`${pn(p.player_id)}: ${cn(p.character_id)} M${p.mindscape} ≠ ростер турнира (M${[...rkey[k]].join('/')})`);
+    else if(!rkey[k]&&rostPlayers.has(p.player_id))warnings.push(`${pn(p.player_id)}: ${cn(p.character_id)} вне зарегистрированного ростера`);
     if(seen[k]!=null&&seen[k]!==p.mindscape)warnings.push(`${pn(p.player_id)}: ${cn(p.character_id)} M${p.mindscape} расходится между матчами (было M${seen[k]})`);
     if(seen[k]==null)seen[k]=p.mindscape;
   }));
@@ -560,8 +561,8 @@ async function importMatchFromLink(encId,num,p1Id,p2Id,link,pen){
       rosterAgents.push({player_id:pid,character_id:ch.id,mindscape:ms||0});
     });
   });
-  const{data:encRow}=await sb.from('encounters').select('tournament_id').eq('id',encId).maybeSingle();
-  if(encRow?.tournament_id)await autofillRostersFromMatch(encRow.tournament_id,rosterAgents);
+  const{data:encRow}=await sb.from('encounters').select('*').eq('id',encId).maybeSingle();
+  if(encRow?.tournament_id)await autofillRostersFromMatch(encRow.tournament_id,rosterAgents,await stageOfEnc(encRow));
 }
 
 // ===== Автозаполнение ростеров из результатов =====
@@ -575,8 +576,22 @@ async function importMatchFromLink(encId,num,p1Id,p2Id,link,pen){
 // Ростеры, помеченные source='manual' (правились вручную), НЕ трогаются —
 // это «флаг защиты от перетира». Тихо выходит, если колонки source ещё нет
 // (до запуска sql/add_roster_source.sql).
-async function autofillRostersFromMatch(tournamentId,agents){
+// Этап встречи ('s1'/'s2'…) для многоэтапного турнира, иначе null (= весь турнир).
+// Состав групп берём из bracket_cache (как в статистике), чтобы плей-офф не смешался с группами.
+async function stageOfEnc(enc){
+  if(typeof Phase==='undefined'||!enc)return null;
+  const t=(D.tours||[]).find(x=>x.id===enc.tournament_id);
+  if(Phase.stagesOf(t).length<2)return null;
+  const{data:bc}=await sb.from('bracket_cache').select('json').eq('tournament_id',enc.tournament_id).maybeSingle();
+  const nickToId={};(D.players||[]).forEach(p=>{if(p.nickname)nickToId[p.nickname.toLowerCase()]=p.id;});
+  const{data:encs}=await sb.from('encounters').select('*').eq('tournament_id',enc.tournament_id);
+  const groups=Phase.groupsOf(t,bc?.json||null,nickToId,encs||[]);
+  return Phase.encStageKey(enc,t,{groups})||null;
+}
+
+async function autofillRostersFromMatch(tournamentId,agents,stage){
   if(!tournamentId||!agents?.length)return;
+  stage=stage||null;
   // персонаж → макс. минскейп этого матча, по каждому игроку
   const byPlayer={};
   agents.forEach(p=>{
@@ -584,15 +599,19 @@ async function autofillRostersFromMatch(tournamentId,agents){
     if(m[p.character_id]==null||(p.mindscape||0)>m[p.character_id])m[p.character_id]=p.mindscape||0;
   });
   for(const pid of Object.keys(byPlayer)){
-    const{data:ex,error:exErr}=await sb.from('player_rosters').select('character_id,mindscape,source').eq('tournament_id',tournamentId).eq('player_id',pid);
-    if(exErr)return; // колонки source ещё нет (миграция не применена) — выходим тихо
-    if((ex||[]).some(r=>r.source==='manual'))continue; // защита ручного ростера
+    // копим/перетираем строго в пределах своего этапа (stage), чужой этап не трогаем
+    const{data:exAll,error:exErr}=await sb.from('player_rosters').select('character_id,mindscape,source,stage').eq('tournament_id',tournamentId).eq('player_id',pid);
+    if(exErr)return; // колонки source/stage ещё нет (миграция не применена) — выходим тихо
+    const ex=(exAll||[]).filter(r=>(r.stage||null)===stage);
+    if(ex.some(r=>r.source==='manual'))continue; // защита ручного ростера
     // слияние: имеющиеся авто-строки + пики этого матча (макс минскейп)
     const merged={};
-    (ex||[]).forEach(r=>merged[r.character_id]=r.mindscape||0);
+    ex.forEach(r=>merged[r.character_id]=r.mindscape||0);
     Object.entries(byPlayer[pid]).forEach(([cid,msv])=>{if(merged[cid]==null||msv>merged[cid])merged[cid]=msv;});
-    await sb.from('player_rosters').delete().match({tournament_id:tournamentId,player_id:pid});
-    const rows=Object.entries(merged).map(([cid,msv])=>({tournament_id:tournamentId,player_id:pid,character_id:cid,mindscape:msv,source:'auto'}));
+    let dq=sb.from('player_rosters').delete().match({tournament_id:tournamentId,player_id:pid});
+    dq=stage?dq.eq('stage',stage):dq.is('stage',null);
+    await dq;
+    const rows=Object.entries(merged).map(([cid,msv])=>({tournament_id:tournamentId,player_id:pid,character_id:cid,mindscape:msv,source:'auto',stage}));
     if(rows.length)await sb.from('player_rosters').insert(rows);
   }
 }

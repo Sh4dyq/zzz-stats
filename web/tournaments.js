@@ -123,12 +123,35 @@ async function openTourSettings(id,name){
   </div>
   <div class="card" style="margin-bottom:16px">
     <h3>Ротация Шиюй (Frontier 4)</h3>
-    <div style="font-size:12px;color:var(--sub);margin-bottom:10px">Вставь ссылку на актуальную Шиюй выше и жми «Импорт». Картинки мобов берутся с nanoka на лету — в базе хранятся только данные и имена файлов.</div>
-    <div id="${p}shiyu-status" style="font-size:13px;margin-bottom:10px">${shiyuStatusHTML(t.shiyu_data)}</div>
+    <div style="font-size:12px;color:var(--sub);margin-bottom:10px">Вставь ссылку на актуальную Шиюй выше и жми «Импорт». Картинки мобов берутся с nanoka на лету — в базе хранятся только данные и имена файлов.<br>Если этапы игрались на разных Шиюй — выбери этап и импортируй ротацию отдельно для каждого.</div>
+    <div style="margin-bottom:10px;max-width:280px"><label>Этап</label><select id="${p}shiyu-stage" onchange="pgShiyuStage('${id}')"></select></div>
+    <div id="${p}shiyu-status" style="font-size:13px;margin-bottom:10px"></div>
     <button class="btn btn-y" onclick="importShiyuRotation('${id}')">📥 Импорт ротации с nanoka</button>
-    ${t.shiyu_data?`<button class="btn-r" style="margin-left:8px;font-size:12px;padding:6px 12px" onclick="clearShiyuRotation('${id}')">Очистить ротацию</button>`:''}
-    ${t.shiyu_data?buffTagEditorHTML(id,t.shiyu_data.buff_tag):''}
+    <span id="${p}shiyu-acts"></span>
+    <div id="${p}shiyu-buff"></div>
   </div>`);
+  fillShiyuStageSel(id);
+  pgShiyuStage(id);
+}
+// Селект этапа для ротации: «Весь турнир» (shiyu_data) + этапы (shiyu_stages.s1/s2).
+function fillShiyuStageSel(id){
+  const el=document.getElementById('ts-shiyu-stage');if(!el)return;
+  const t=D.tours.find(x=>x.id===id)||{};
+  const stages=(typeof Phase!=='undefined')?Phase.stagesOf(t):[];
+  el.innerHTML=`<option value="">Весь турнир</option>`+stages.map(s=>`<option value="${s.key}">${escapeHtml(s.full||s.label)}</option>`).join('');
+  el.disabled=!stages.length;
+}
+// Перерисовка статуса/кнопок/тега бафа под выбранный этап.
+function pgShiyuStage(id){
+  const t=D.tours.find(x=>x.id===id)||{};
+  const stage=document.getElementById('ts-shiyu-stage')?.value||'';
+  const sd=stage?((t.shiyu_stages||{})[stage]||null):(t.shiyu_data||null);
+  const st=document.getElementById('ts-shiyu-status');
+  if(st)st.innerHTML=shiyuStatusHTML(sd)+(stage&&!sd&&t.shiyu_data?' <span style="color:var(--sub)">Будет показана общая ротация турнира.</span>':'');
+  const acts=document.getElementById('ts-shiyu-acts');
+  if(acts)acts.innerHTML=sd?`<button class="btn-r" style="margin-left:8px;font-size:12px;padding:6px 12px" onclick="clearShiyuRotation('${id}')">Очистить ротацию</button>`:'';
+  const bf=document.getElementById('ts-shiyu-buff');
+  if(bf)bf.innerHTML=sd?buffTagEditorHTML(id,sd.buff_tag):'';
 }
 // Тег бафа для формулы предикта (авто-эвристика + ручная правка). Влияет на бонус
 // «попадания в баф ротации» в predict.html (Synergy.buffMatchup). См. память shiyu-rotation.
@@ -151,8 +174,11 @@ function buffTagEditorHTML(id,tag){
     </div></div>`;
 }
 async function saveBuffTag(id){
-  const t=D.tours.find(x=>x.id===id);if(!t||!t.shiyu_data)return;
-  const prev=t.shiyu_data.buff_tag||{};
+  const t=D.tours.find(x=>x.id===id);if(!t)return;
+  const stage=document.getElementById('ts-shiyu-stage')?.value||'';
+  const cur=stage?((t.shiyu_stages||{})[stage]||null):(t.shiyu_data||null);
+  if(!cur)return;
+  const prev=cur.buff_tag||{};
   const elemSel=document.getElementById('bt-elem-'+id).value||null;
   // если элемент в селекте изменён вручную — переопределяем список; иначе сохраняем авто-elems
   const elems=elemSel&&elemSel!==(prev.elems&&prev.elems[0])?[elemSel]:(prev.elems||(prev.elem?[prev.elem]:[]));
@@ -160,10 +186,12 @@ async function saveBuffTag(id){
     mech:document.getElementById('bt-mech-'+id).value||null,
     strength:Math.max(0,Math.min(1,parseFloat(document.getElementById('bt-str-'+id).value)||0)),
     effects:prev.effects||[]}; // авто-эффекты (tag/pct/mag/flat/cond) сохраняем
-  const sd={...t.shiyu_data,buff_tag:tag};
-  const{error}=await sb.from('tournaments').update({shiyu_data:sd}).eq('id',id);
+  const sd={...cur,buff_tag:tag};
+  const patch=stage?{shiyu_stages:{...(t.shiyu_stages||{}),[stage]:sd}}:{shiyu_data:sd};
+  const{error}=await sb.from('tournaments').update(patch).eq('id',id);
   if(dbErr(error,'сохранение тега бафа'))return;
-  t.shiyu_data=sd;toast('Тег бафа сохранён');
+  if(stage)t.shiyu_stages={...(t.shiyu_stages||{}),[stage]:sd};else t.shiyu_data=sd;
+  toast('Тег бафа сохранён');
 }
 // краткий статус сохранённой ротации (для карточки настроек)
 function shiyuStatusHTML(sd){
@@ -298,15 +326,23 @@ async function importShiyuRotation(tourId){
   }catch(e){return toast('Не удалось скачать JSON ротации: '+e.message,'err');}
   let data;
   try{data=normalizeShiyu(doc,url,ver);}catch(e){return toast('Разбор ротации не удался: '+e.message,'err');}
-  const{error}=await sb.from('tournaments').update({shiyu_url:url,shiyu_data:data}).eq('id',tourId);
+  // этап выбран → пишем в shiyu_stages[key], иначе в общий shiyu_data
+  const stage=document.getElementById('ts-shiyu-stage')?.value||'';
+  const t0=D.tours.find(x=>x.id===tourId)||{};
+  const patch=stage?{shiyu_stages:{...(t0.shiyu_stages||{}),[stage]:data}}:{shiyu_url:url,shiyu_data:data};
+  const{error}=await sb.from('tournaments').update(patch).eq('id',tourId);
   if(dbErr(error,'сохранение ротации'))return;
   toast(`Ротация загружена: ${data.frontier||'Frontier'} · мобов ${data.rooms.reduce((s,r)=>s+r.monsters.length,0)}`);
   await refreshData();
-  const st=document.getElementById('ts-shiyu-status');if(st)st.innerHTML=shiyuStatusHTML(data);
+  pgShiyuStage(tourId);
 }
 async function clearShiyuRotation(tourId){
-  if(!confirm('Очистить сохранённую ротацию Шиюй?'))return;
-  const{error}=await sb.from('tournaments').update({shiyu_data:null}).eq('id',tourId);
+  const stage=document.getElementById('ts-shiyu-stage')?.value||'';
+  if(!confirm(stage?'Очистить ротацию этого этапа?':'Очистить общую ротацию Шиюй турнира?'))return;
+  const t0=D.tours.find(x=>x.id===tourId)||{};
+  let patch={shiyu_data:null};
+  if(stage){const s={...(t0.shiyu_stages||{})};delete s[stage];patch={shiyu_stages:Object.keys(s).length?s:null};}
+  const{error}=await sb.from('tournaments').update(patch).eq('id',tourId);
   if(dbErr(error,'очистка ротации'))return;
   toast('Ротация очищена');await refreshData();
   const t=D.tours.find(x=>x.id===tourId);openTourSettings(tourId,t?.name||'');

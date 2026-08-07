@@ -153,6 +153,7 @@
   .shiyu-btn.active::after{content:"";position:absolute;left:22px;right:22px;bottom:-1px;height:3px;border-radius:3px 3px 0 0;background:var(--grad)}
   /* Shiyu rotation layout */
   .sh-wrap{display:flex;flex-direction:column;gap:18px}
+  .sh-stage+.sh-stage{margin-top:24px;padding-top:20px;border-top:1px solid var(--line,#232735)}
   .sh-lbl{font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;text-transform:uppercase;letter-spacing:.09em;color:var(--sub);font-size:12.5px}
   .sh-card{border:1px solid var(--border);border-radius:12px;background:var(--card);padding:16px 18px}
   .sh-buff h4{margin:0 0 7px;font-family:'Saira Condensed',sans-serif;font-style:italic;font-weight:800;font-size:17px;color:#fff;letter-spacing:.01em}
@@ -580,14 +581,14 @@ async function loadAll(){
     S.bracketCache=bc?.json||null;
   }
 
-  S.costs={};S.rosters={};
+  S.costs={};S.rosters={};S.rostersTour=[];
   if(S.tour!==ALL){
     const[cs,rs]=await Promise.all([
       fetchAll(()=>sb.from('tournament_costs').select('*').eq('tournament_id',S.tour)),
       fetchAll(()=>sb.from('player_rosters').select('*').eq('tournament_id',S.tour))
     ]);
     (cs||[]).forEach(c=>{if(!S.costs[c.character_id])S.costs[c.character_id]={};S.costs[c.character_id][c.mindscape]=c;});
-    (rs||[]).forEach(r=>{if(!S.rosters[r.player_id])S.rosters[r.player_id]=[];S.rosters[r.player_id].push(r);});
+    S.rostersTour=rs||[];   // срез по стадии делается в applyPhase (ростеры меняются в плей-оффе)
   }
 
   // все ростеры по всем турнирам — для вкладки «Ростеры» (среднее по турнирам)
@@ -664,7 +665,13 @@ function applyPhase(){
   S.picks=cut?r.picks.filter(p=>S.matchMap[p.match_id]):r.picks;
   S.bans=cut?r.bans.filter(b=>S.matchMap[b.match_id]):r.bans;
 
+  // Ростеры — тоже по стадии: в плей-оффе игроки собирают состав заново.
+  // Строки без stage считаются общими на турнир (фолбэк).
+  S.rosters={};
+  Phase.rosterSplit(S.rostersTour||[],S.phase).forEach(x=>{(S.rosters[x.player_id]=S.rosters[x.player_id]||[]).push(x);});
+
   renderGroupBox(groups,r.encounters);
+  syncShiyuBtn();
   renderAll();
 }
 
@@ -1001,10 +1008,10 @@ function setView(v){
 const RBUCK={atk:'atk',stun:'stun',rupt:'rupt',sup:'sd',def:'sd',ano:'ano'};
 const RKEYS=['atk','stun','rupt','sd','ano'];
 function computeRosters(isAll){
-  const raw=S.rostersRaw||[];
+  // «Все турниры» — объединение стадий каждого турнира; конкретный турнир — срез по стадии.
+  const raw=isAll?Phase.rosterSplit(S.rostersRaw||[],'all'):[].concat(...Object.values(S.rosters||{}));
   const map={}; // map[pid][tid][bucket] = {cid:count}
   raw.forEach(r=>{
-    if(!isAll && r.tournament_id!==S.tour)return;
     const c=S.charMap[r.character_id];if(!c)return;
     const b=RBUCK[c.role];if(!b)return;
     const pm=map[r.player_id]=map[r.player_id]||{};
@@ -1431,9 +1438,20 @@ function _shMonImg(m){
   return `<div class="sh-mon-img"><img src="${u}" alt="${esc(m.name)}" loading="lazy" onerror="this.parentNode.innerHTML='${_shPhSvg.replace(/'/g,"\\'")}'"></div>`;
 }
 function renderShiyu(){
-  // источник = ротация выбранного турнира (shiyu_data из админ-импорта); фолбэк — статичный срез
+  // источник = ротация выбранного турнира и ЭТАПА (shiyu_stages[s1|s2] → shiyu_data);
+  // в режиме «Всё» многоэтапного турнира показываем все ротации подряд. Фолбэк — статичный срез.
   const t=(typeof TOURS!=='undefined'?TOURS:[]).find(x=>x.id===S.tour);
-  const r=(t&&t.shiyu_data&&t.shiyu_data.rooms&&t.shiyu_data.rooms.length)?t.shiyu_data:SHIYU_ROTATION;
+  const list=Phase.shiyuList(t);
+  if(S.phase==='all'&&list.length>1){
+    document.getElementById('shiyu-area').innerHTML=list.map(x=>
+      `<div class="sh-stage"><div class="sh-lbl" style="margin-bottom:6px">${esc(x.label||'')}</div>${shiyuHTML(x.data)}</div>`).join('');
+    return;
+  }
+  const sh=Phase.shiyuFor(t,S.phase);
+  const r=(sh&&sh.rooms&&sh.rooms.length)?sh:SHIYU_ROTATION;
+  document.getElementById('shiyu-area').innerHTML=shiyuHTML(r);
+}
+function shiyuHTML(r){
   const buff=`<div class="sh-card sh-buff">${r.buff.title?`<h4>${r.buff.title}</h4>`:''}${r.buff.lines.map(l=>`<div class="bl">${String(l).replace(/^[·•]\s*/,'')}</div>`).join('')}</div>`;
   const halfLbl=['Первая половина','Вторая половина'];
   const rooms=r.rooms.map((rm,i)=>{
@@ -1455,7 +1473,7 @@ function renderShiyu(){
       <div class="sh-grid">${mons}</div>
     </div>`;
   }).join('');
-  document.getElementById('shiyu-area').innerHTML=`<div class="sh-wrap"><div class="sh-lbl">Бафф комнаты</div>${buff}${rooms}</div>`;
+  return `<div class="sh-wrap"><div class="sh-lbl">Бафф комнаты</div>${buff}${rooms}</div>`;
 }
 function openShiyu(){
   document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
@@ -1472,13 +1490,21 @@ function activateTour(id,tab){
   S.tour=id;S.group=null; // фильтр по группе привязан к турниру
   document.querySelectorAll('.tour-tab').forEach(t=>t.classList.remove('active'));
   if(tab)tab.classList.add('active');
-  // кнопка «Шиюй турнира» — только в выбранном турнире, у которого загружена ротация
-  const sbtn=document.getElementById('shiyu-btn');
-  const curTour=TOURS.find(x=>x.id===id);
-  const hasShiyu=!!(curTour&&curTour.shiyu_data&&curTour.shiyu_data.rooms&&curTour.shiyu_data.rooms.length);
-  if(id===ALL||!hasShiyu){sbtn.style.display='none';sbtn.classList.remove('active');}
-  else{sbtn.style.display='inline-flex';}
+  syncShiyuBtn(id);
   loadAll();
+}
+// Кнопка «Шиюй турнира» — только там, где для турнира (и текущего этапа) есть ротация.
+// Если вкладка Шиюй открыта — перерисовываем: у этапов ротации разные.
+function syncShiyuBtn(tourId){
+  const id=tourId||S.tour;
+  const sbtn=document.getElementById('shiyu-btn');if(!sbtn)return;
+  const t=TOURS.find(x=>x.id===id);
+  const has=id!==ALL&&Phase.shiyuList(t).length>0;
+  if(!has){sbtn.style.display='none';sbtn.classList.remove('active');}
+  else{
+    sbtn.style.display='inline-flex';
+    if(sbtn.classList.contains('active'))renderShiyu();
+  }
 }
 async function init(){
   const{data:tours}=await sb.from('tournaments').select('*').order('created_at',{ascending:false});

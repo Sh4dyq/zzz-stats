@@ -694,11 +694,18 @@ async function boot(){
     });
   });
   // ---- ростеры игроков по турнирам (для сравнительной силы ростеров) ----
+  // Ростер может быть разбит по этапам (player_rosters.stage: группы/плей-офф) —
+  // здесь берём объединение по турниру, персонаж один раз с максимальным мидскейпом.
   D.rosters={};                                   // tid → pid → [{cid,ms}]
-  (prosters||[]).forEach(r=>{
-    const t=D.rosters[r.tournament_id]||(D.rosters[r.tournament_id]={});
-    (t[r.player_id]=t[r.player_id]||[]).push({cid:r.character_id,ms:r.mindscape||0});
-  });
+  {const acc={};
+   (prosters||[]).forEach(r=>{
+     const k=r.tournament_id+'|'+r.player_id,m=acc[k]=acc[k]||{};
+     if(m[r.character_id]==null||(r.mindscape||0)>m[r.character_id])m[r.character_id]=r.mindscape||0;
+   });
+   Object.entries(acc).forEach(([k,m])=>{
+     const[tid,pid]=k.split('|');
+     (D.rosters[tid]=D.rosters[tid]||{})[pid]=Object.entries(m).map(([cid,ms])=>({cid,ms}));
+   });}
   D.costs={};(costs||[]).forEach(r=>{(D.costs[r.tournament_id]=D.costs[r.tournament_id]||[]).push(r);});
   D.charW={};(cwRows||[]).forEach(r=>{if(r.manual_weight!=null)D.charW[r.character_id]=r.manual_weight;});
   D.charConstW={};(ccwRows||[]).forEach(r=>{if(r.manual_weight!=null)(D.charConstW[r.character_id]=D.charConstW[r.character_id]||{})[r.mindscape]=r.manual_weight;});

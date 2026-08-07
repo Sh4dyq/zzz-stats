@@ -464,9 +464,12 @@ async function boot(){
   D.chars=cs;D.charMap={};cs.forEach(c=>D.charMap[c.id]=c);
   D.players=(players||[]).slice().sort((a,b)=>(a.nickname||'').localeCompare(b.nickname||'','ru'));
   // ростеры игроков: player_id → tournament_id → [{cid,ms}]
+  // объединяем этапные ростеры (player_rosters.stage): персонаж один раз, макс. мидскейп
   D.prosters={};(prosters||[]).forEach(r=>{
     const byP=D.prosters[r.player_id]||(D.prosters[r.player_id]={});
-    (byP[r.tournament_id]=byP[r.tournament_id]||[]).push({cid:r.character_id,ms:r.mindscape||0});});
+    const arr=byP[r.tournament_id]=byP[r.tournament_id]||[];
+    const ex=arr.find(x=>x.cid===r.character_id);
+    if(ex)ex.ms=Math.max(ex.ms,r.mindscape||0);else arr.push({cid:r.character_id,ms:r.mindscape||0});});
   // ручная калибровка силы из админки (char_weights + по мидскейпам)
   D.charW={};(cwRows||[]).forEach(r=>{if(r.manual_weight!=null)D.charW[r.character_id]=r.manual_weight;});
   D.charConstW={};(ccwRows||[]).forEach(r=>{if(r.manual_weight!=null)(D.charConstW[r.character_id]=D.charConstW[r.character_id]||{})[r.mindscape]=r.manual_weight;});
