@@ -110,11 +110,12 @@
 
   /** Тир по итогам турнира. Вызывать ОДИН раз, после последней встречи
    *  и начисления очков за место.
-   *  prevTier — тир игрока до этого турнира (или null для новичка). */
+   *  prevTier — тир игрока до этого турнира; null для новичка, тогда отсчёт идёт
+   *  от стартового тира, чтобы окно защиты работало с первого же турнира. */
   function settleTier(r, prevTier) {
     const cur = tierIndex(tierOf(r));
-    const prev = prevTier == null ? -1 : tierIndex(prevTier);
-    if (prev < 0 || cur > prev) return CFG.TIERS[cur].name;      // повышение сразу
+    const prev = tierIndex(prevTier == null ? tierOf(CFG.START) : prevTier);
+    if (cur > prev) return CFG.TIERS[cur].name;                  // повышение сразу
     if (cur === prev) return CFG.TIERS[cur].name;
     // понижение только при пробитии границы с запасом
     return r < CFG.TIERS[prev].min - CFG.GUARD
