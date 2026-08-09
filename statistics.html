@@ -1469,11 +1469,11 @@ async function renderElo(){
     eloRows=data;
     if(S.rview!=='e')return;   // успели переключить вкладку, пока грузилось
   }
-  if(!eloRows.length){area.innerHTML=`<table><tbody><tr><td class="empty" colspan="6">Рейтинг ещё не посчитан — пересчитай в админке</td></tr></tbody></table>`;note.textContent='';return;}
+  if(!eloRows.length){area.innerHTML=`<table><tbody><tr><td class="empty" colspan="6">Рейтинг ещё не посчитан</td></tr></tbody></table>`;note.textContent='';return;}
   const byNick={};S.players.forEach(p=>byNick[(p.nickname||'').toLowerCase()]=p);
   const anyAdj=eloRows.some(r=>r.adjust);
   const head=`<thead><tr><th>#</th><th>Тир</th><th onclick="sortR(2)">Рейтинг</th><th onclick="sortR(3)">Игрок</th>`+
-    (anyAdj?`<th class="rk-col" title="Ручная правка сверх формулы, наведи на значение — увидишь причину">Правка</th>`:'')+
+    (anyAdj?`<th class="rk-col" title="Ручная правка сверх формулы">Правка</th>`:'')+
     `<th class="rk-col" onclick="sortR(${anyAdj?5:4})">В–П</th><th class="rk-col" onclick="sortR(${anyAdj?6:5})">Турниров</th></tr></thead>`;
   const rows=eloRows.map((r,i)=>{
     const p=byNick[(r.nickname||'').toLowerCase()];
@@ -1486,7 +1486,7 @@ async function renderElo(){
   }).join('');
   area.innerHTML=`<table>${head}<tbody>${rows}</tbody></table>`;
   const upd=eloRows[0]&&eloRows[0].updated_at?new Date(eloRows[0].updated_at).toLocaleDateString('ru-RU'):'—';
-  note.textContent=(anyAdj?`«Правка» — ручная корректировка сверх формулы, причина в подсказке. `:'')+
+  note.textContent=(anyAdj?`«Правка» — ручная корректировка сверх формулы. `:'')+
     `Эло за сезон: старт 1000, K=50, шкала 600, единица — встреча (Bo2), очки за места сверх Эло. `+
     `Тиры: S+ ≥1300, S ≥1200, A ≥1100, B ≥900, C <900; понижение только при заходе на 40 ниже границы, пересчёт тира — по итогам турнира. `+
     `Считается по всем турнирам с категорией, выбор турнира сверху на таблицу не влияет. Обновлено: ${upd}.`;
