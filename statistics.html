@@ -1472,24 +1472,21 @@ async function renderElo(){
   if(!eloRows.length){area.innerHTML=`<table><tbody><tr><td class="empty" colspan="6">Рейтинг ещё не посчитан</td></tr></tbody></table>`;note.textContent='';return;}
   const byNick={};S.players.forEach(p=>byNick[(p.nickname||'').toLowerCase()]=p);
   const anyAdj=eloRows.some(r=>r.adjust);
-  const head=`<thead><tr><th>#</th><th>Тир</th><th onclick="sortR(2)">Рейтинг</th><th onclick="sortR(3)">Игрок</th>`+
+  const head=`<thead><tr><th>Место</th><th onclick="sortR(1)">Игрок</th><th>Тир</th><th onclick="sortR(3)">Рейтинг</th>`+
     (anyAdj?`<th class="rk-col" title="Ручная правка сверх формулы">Правка</th>`:'')+
-    `<th class="rk-col" onclick="sortR(${anyAdj?5:4})">В–П</th><th class="rk-col" onclick="sortR(${anyAdj?6:5})">Турниров</th></tr></thead>`;
+    `<th class="rk-col" onclick="sortR(${anyAdj?5:4})">В–П</th><th class="rk-col" onclick="sortR(${anyAdj?6:5})">Турниры</th></tr></thead>`;
   const rows=eloRows.map((r,i)=>{
     const p=byNick[(r.nickname||'').toLowerCase()];
     const who=p?picP(p):`<span class="pphoto"></span>`;
     const adj=r.adjust?`<span title="${esc(r.reason||'')}" class="${r.adjust<0?'r':'g'}">${r.adjust>0?'+':''}${r.adjust}</span>`:'—';
-    return`<tr><td class="rk-num">${i+1}</td><td>${tierBadge(r.tier)}</td><td><span class="rk-score">${r.rating}</span></td>`+
+    return`<tr><td class="rk-num">${i+1}</td>`+
       `<td><div style="display:flex;align-items:center;gap:6px">${who}<span>${esc(r.nickname)}</span></div></td>`+
+      `<td>${tierBadge(r.tier)}</td><td><span class="rk-score">${r.rating}</span></td>`+
       (anyAdj?`<td class="rk-col">${adj}</td>`:'')+
       `<td class="rk-col">${r.wins}–${r.losses}</td><td class="rk-col">${r.tours}</td></tr>`;
   }).join('');
   area.innerHTML=`<table>${head}<tbody>${rows}</tbody></table>`;
   const upd=eloRows[0]&&eloRows[0].updated_at?new Date(eloRows[0].updated_at).toLocaleDateString('ru-RU'):'—';
-  note.textContent=(anyAdj?`«Правка» — ручная корректировка сверх формулы. `:'')+
-    `Эло за сезон: старт 1000, K=50, шкала 600, единица — встреча (Bo2), очки за места сверх Эло. `+
-    `Тиры: S+ ≥1300, S ≥1200, A ≥1100, B ≥900, C <900; понижение только при заходе на 40 ниже границы, пересчёт тира — по итогам турнира. `+
-    `Считается по всем турнирам с категорией, выбор турнира сверху на таблицу не влияет. Обновлено: ${upd}.`;
 }
 
 function renderAll(){
