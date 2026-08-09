@@ -55,6 +55,7 @@ async function pgTournaments(){
         <div style="flex:1;min-width:90px"><label>Участников</label><input id="t-exp" type="number" min="2" placeholder="30"></div>
         <div style="flex:1;min-width:90px"><label>Этапов</label><input id="t-stages" type="number" min="1" value="1"></div>
         <div style="flex:1;min-width:110px"><label>Призовой фонд</label><input id="t-prize" type="text" placeholder="5 000 ₽"></div>
+        <div style="flex:1;min-width:170px"><label>Категория (рейтинг)</label>${ratingCatSelect('t-',null)}</div>
       </div>
       <h4 style="margin:18px 0 8px">Ссылки</h4>
       <div class="grid3">
@@ -66,6 +67,12 @@ async function pgTournaments(){
       <button class="btn btn-y" style="margin-top:14px" onclick="addTour()">Добавить турнир</button>
     </div>
   </details>
+  <div class="card" style="margin-bottom:16px">
+    <h3>Рейтинг игроков</h3>
+    <div style="font-size:12px;color:var(--sub);margin-bottom:10px">Пересчёт всего сезона с нуля: турниры с категорией в хронологии + ручные правки. Правки и константы системы — в разделе «Рейтинг».</div>
+    <button class="btn btn-y" onclick="recalcRating()">🔄 Пересчитать рейтинг</button>
+    <span id="rt-status" style="font-size:13px;color:var(--sub);margin-left:10px"></span>
+  </div>
   <div class="listbar">
     <div style="font-size:12px;color:var(--sub);line-height:1.45;flex:1;min-width:200px">💡 После турнира: поставь ему «✓ Завершён», новому — «🔴 Идёт сейчас». «Текущим» на сайте станет live-турнир автоматически.</div>
     <span class="count-chip">${D.tours.length} тур.</span>
@@ -73,6 +80,16 @@ async function pgTournaments(){
   <div class="space-y" id="tour-list">${list||'<p style="color:var(--sub);font-size:14px">Турниров ещё нет</p>'}</div>`);
   if(typeof enableReorder==='function')enableReorder(document.getElementById('tour-list'),'tournaments',pgTournaments);
 }
+// Категория турнира для рейтинга: множитель к приросту Эло + строка очков за места.
+// Пусто = турнир в рейтинг не идёт. Значения совпадают с ключами Rating.CFG.CATEGORY_W.
+const RATING_CATS=[
+  ['','— не учитывать —'],
+  ['fastcap','Фасткап ×0.8 (места: 25 / 10)'],
+  ['main','Обычный ×1.0 (места: 50 / 25 / 15)'],
+  ['major','Крупный ×1.2 (места: 75 / 50 / 35 / 25 / 10)']
+];
+const ratingCatSelect=(p,cur)=>`<select id="${p}cat">${RATING_CATS.map(([v,l])=>`<option value="${v}" ${v===(cur||'')?'selected':''}>${l}</option>`).join('')}</select>`;
+
 function tourFormPatch(p){
   const fmt=document.getElementById(p+'fmt')?.value||'SE';
   const fmt2=document.getElementById(p+'fmt2')?.value||'';
@@ -85,7 +102,8 @@ function tourFormPatch(p){
   const shy=document.getElementById(p+'shiyu')?.value?.trim()||null;
   const tg=document.getElementById(p+'tg')?.value?.trim()||null;
   const prize=document.getElementById(p+'prize')?.value?.trim()||null;
-  return{bracket_type:bracket,event_date:d1,event_date_end:d2,expected_players:exp?+exp:null,stages_count:stg?+stg:(fmt2?2:1),challonge_url:ch,shiyu_url:shy,tg_url:tg,prize_pool:prize};
+  const cat=document.getElementById(p+'cat')?.value||'';
+  return{bracket_type:bracket,event_date:d1,event_date_end:d2,expected_players:exp?+exp:null,stages_count:stg?+stg:(fmt2?2:1),challonge_url:ch,shiyu_url:shy,tg_url:tg,prize_pool:prize,rating_category:cat||null};
 }
 // Подтягивает картинку-анонс из поста Telegram в tournaments.announce_image (кэш для главной).
 async function refreshTgImage(id,url){
@@ -118,7 +136,9 @@ async function openTourSettings(id,name){
       <div style="grid-column:1/-1"><label>Ссылка на Шиюй (nanoka, Frontier 4)</label><input id="${p}shiyu" type="text" value="${escapeHtml(t.shiyu_url||'')}" placeholder="https://zzz.nanoka.cc/shiyu/620531"></div>
       <div style="grid-column:1/-1"><label>Пост-анонс в Telegram <span style="color:var(--sub)">— картинка на главной + кнопка «Подробнее»</span></label><input id="${p}tg" type="text" value="${escapeHtml(t.tg_url||'')}" placeholder="https://t.me/nexus_shiyu/1116"></div>
       <div><label>Призовой фонд (карточка на главной)</label><input id="${p}prize" type="text" value="${escapeHtml(t.prize_pool||'')}" placeholder="5 000 ₽"></div>
+      <div><label>Категория (рейтинг)</label>${ratingCatSelect(p,t.rating_category)}</div>
     </div>
+    <div style="font-size:11px;color:var(--sub);margin-top:8px">Категория — множитель к приросту Эло и очки за места. Без неё турнир в рейтинг не попадёт.</div>
     <button class="btn btn-y" style="margin-top:12px" onclick="saveTourSettings('${id}')">Сохранить</button>
   </div>
   <div class="card" style="margin-bottom:16px">

@@ -386,6 +386,7 @@
       <button id="rseg-c" class="seg-btn on" onclick="setRating('c')">Персонажи</button>
       <button id="rseg-a" class="seg-btn" onclick="setRating('a')">Амплификаторы</button>
       <button id="rseg-p" class="seg-btn" onclick="setRating('p')">Игроки</button>
+      <button id="rseg-e" class="seg-btn" onclick="setRating('e')">Таблица Elo</button>
     </div>
     <div id="rating-area" class="tbl-wrap">
       <table><tbody><tr><td class="empty" colspan="6">Нет данных</td></tr></tbody></table>
@@ -1427,7 +1428,9 @@ function computeRating(view){
 }
 
 function renderRating(){
-  const view=S.rview,data=computeRating(view);
+  const view=S.rview;
+  if(view==='e')return renderElo();
+  const data=computeRating(view);
   const area=document.getElementById('rating-area'),note=document.getElementById('rating-note');
   if(!data.length){area.innerHTML=`<table><tbody><tr><td class="empty" colspan="6">Нет данных</td></tr></tbody></table>`;note.textContent='';return;}
   const rk=s=>`<span class="rk-cell">${ratingBadge(s)}<span class="rk-score">${s.toFixed(1)}</span></span>`;
@@ -1447,7 +1450,47 @@ function renderRating(){
   }
   area.innerHTML=`<table>${head}<tbody>${rows}</tbody></table>`;
 }
-function setRating(v){S.rview=v;rSort={idx:null,asc:true};['c','a','p'].forEach(k=>{const b=document.getElementById('rseg-'+k);if(b)b.className='seg-btn'+(k===v?' on':'');});renderRating();}
+function setRating(v){S.rview=v;rSort={idx:null,asc:true};['c','a','p','e'].forEach(k=>{const b=document.getElementById('rseg-'+k);if(b)b.className='seg-btn'+(k===v?' on':'');});renderRating();}
+
+// --- ТАБЛИЦА ELO ---
+// Рейтинг за сезон целиком (docs/rating-system.md). Считает админка кнопкой «Пересчитать рейтинг»,
+// здесь только показ готовой player_ratings: выбор турнира сверху на неё не влияет.
+const TIER_TIP={'S+':'S+ ≥ 1300','S':'S 1200–1300','A':'A 1100–1200','B':'B 900–1100','C':'C < 900'};
+const tierBadge=t=>`<img class="rk-img" src="web/icons/grades/${encodeURIComponent(t||'C')}.png" alt="${t||''}" title="${TIER_TIP[t]||t||''}">`;
+const CAT_RU={fastcap:'фасткап',main:'обычный',major:'крупный'};
+
+let eloRows=null;
+async function renderElo(){
+  const area=document.getElementById('rating-area'),note=document.getElementById('rating-note');
+  if(!eloRows){
+    area.innerHTML=`<table><tbody><tr><td class="empty" colspan="6">Загрузка…</td></tr></tbody></table>`;note.textContent='';
+    const{data,error}=await sb.from('player_ratings').select('*').order('rating',{ascending:false});
+    if(error||!data){area.innerHTML=`<table><tbody><tr><td class="empty" colspan="6">Рейтинг ещё не посчитан</td></tr></tbody></table>`;return;}
+    eloRows=data;
+    if(S.rview!=='e')return;   // успели переключить вкладку, пока грузилось
+  }
+  if(!eloRows.length){area.innerHTML=`<table><tbody><tr><td class="empty" colspan="6">Рейтинг ещё не посчитан — пересчитай в админке</td></tr></tbody></table>`;note.textContent='';return;}
+  const byNick={};S.players.forEach(p=>byNick[(p.nickname||'').toLowerCase()]=p);
+  const anyAdj=eloRows.some(r=>r.adjust);
+  const head=`<thead><tr><th>#</th><th>Тир</th><th onclick="sortR(2)">Рейтинг</th><th onclick="sortR(3)">Игрок</th>`+
+    (anyAdj?`<th class="rk-col" title="Ручная правка сверх формулы, наведи на значение — увидишь причину">Правка</th>`:'')+
+    `<th class="rk-col" onclick="sortR(${anyAdj?5:4})">В–П</th><th class="rk-col" onclick="sortR(${anyAdj?6:5})">Турниров</th></tr></thead>`;
+  const rows=eloRows.map((r,i)=>{
+    const p=byNick[(r.nickname||'').toLowerCase()];
+    const who=p?picP(p):`<span class="pphoto"></span>`;
+    const adj=r.adjust?`<span title="${esc(r.reason||'')}" class="${r.adjust<0?'r':'g'}">${r.adjust>0?'+':''}${r.adjust}</span>`:'—';
+    return`<tr><td class="rk-num">${i+1}</td><td>${tierBadge(r.tier)}</td><td><span class="rk-score">${r.rating}</span></td>`+
+      `<td><div style="display:flex;align-items:center;gap:6px">${who}<span>${esc(r.nickname)}</span></div></td>`+
+      (anyAdj?`<td class="rk-col">${adj}</td>`:'')+
+      `<td class="rk-col">${r.wins}–${r.losses}</td><td class="rk-col">${r.tours}</td></tr>`;
+  }).join('');
+  area.innerHTML=`<table>${head}<tbody>${rows}</tbody></table>`;
+  const upd=eloRows[0]&&eloRows[0].updated_at?new Date(eloRows[0].updated_at).toLocaleDateString('ru-RU'):'—';
+  note.textContent=(anyAdj?`«Правка» — ручная корректировка сверх формулы, причина в подсказке. `:'')+
+    `Эло за сезон: старт 1000, K=50, шкала 600, единица — встреча (Bo2), очки за места сверх Эло. `+
+    `Тиры: S+ ≥1300, S ≥1200, A ≥1100, B ≥900, C <900; понижение только при заходе на 40 ниже границы, пересчёт тира — по итогам турнира. `+
+    `Считается по всем турнирам с категорией, выбор турнира сверху на таблицу не влияет. Обновлено: ${upd}.`;
+}
 
 function renderAll(){
   const isAll=S.tour===ALL;

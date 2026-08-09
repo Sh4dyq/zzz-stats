@@ -174,6 +174,7 @@
     <div class="nav-group">Соревнования</div>
     <a class="nav-a" data-page="tournaments"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4h10v4a5 5 0 0 1-10 0V4Z"></path><path d="M7 5.5H4.5V7a2.5 2.5 0 0 0 2.5 2.5"></path><path d="M17 5.5h2.5V7a2.5 2.5 0 0 1-2.5 2.5"></path><path d="M12 13v3"></path><path d="M8.5 20h7l-.7-3.2a1 1 0 0 0-1-.8H10.2a1 1 0 0 0-1 .8Z"></path></svg><span>Турниры</span></a>
     <a class="nav-a" data-page="matches"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="14.5 17.5 3 6 3 3 6 3 17.5 14.5"></polyline><line x1="13" y1="19" x2="19" y2="13"></line><line x1="16" y1="16" x2="20" y2="20"></line><line x1="19" y1="21" x2="21" y2="19"></line><polyline points="14.5 6.5 18 3 21 3 21 6 17.5 9.5"></polyline><line x1="5" y1="14" x2="9" y2="18"></line><line x1="7" y1="17" x2="4" y2="20"></line><line x1="3" y1="19" x2="5" y2="21"></line></svg><span>Матчи</span></a>
+    <a class="nav-a" data-page="rating"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h16"></path><rect x="5" y="12" width="4" height="8"></rect><rect x="10" y="7" width="4" height="13"></rect><rect x="15" y="10" width="4" height="10"></rect></svg><span>Рейтинг</span></a>
     <!-- Превью переноса разделов на nexus-shiyu (скрытая страница, открывается в новой вкладке) -->
     <a class="nav-a" href="nexus-preview.html" target="_blank" style="margin-top:6px;border-top:1px solid var(--border);padding-top:13px;border-radius:0 0 9px 9px"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="14" rx="2"></rect><path d="M8 21h8"></path><path d="M12 18v3"></path><polyline points="7.5 12.5 10 10 12.5 12.5 16.5 8.5"></polyline></svg><span>Превью nexus</span></a>
   </nav>
@@ -225,7 +226,7 @@
 // cache-busting: всегда грузим свежие web/*.js (без необходимости хард-рефреша).
 // document.write сохраняет порядок и синхронность загрузки.
 // predict/synergy/draft-sim — боевые движки: калибровка пар/трио зовёт Synergy.score/compPenalty напрямую (единый источник).
-['web/icons.js','web/core.js','web/phase.js','web/bracket-model.js','web/bracket-engine.js','web/bracket-view.js','web/characters.js','web/signatures.js','web/players.js','web/roster-import.js','web/tournaments.js','web/draft-import.js','web/matches.js','web/predict.js','web/synergy.js','web/draft-sim.js','web/weights.js']
+['web/icons.js','web/core.js','web/phase.js','web/bracket-model.js','web/bracket-engine.js','web/bracket-view.js','web/characters.js','web/signatures.js','web/players.js','web/roster-import.js','web/js/rating.js','web/js/rating-build.js','web/tournaments.js','web/rating-admin.js','web/draft-import.js','web/matches.js','web/predict.js','web/synergy.js','web/draft-sim.js','web/weights.js']
   .forEach(function(s){document.write('<script src="'+s+'?v='+Date.now()+'"><\/script>');});
 </script>
 <script>
