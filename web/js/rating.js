@@ -23,6 +23,9 @@
     FIELD_BETA: 0.10,
     FIELD_SPAN: 150,
 
+    // очки за участие в турнире, разово; нужна хотя бы одна сыгранная встреча
+    PARTICIPATION: 5,
+
     // фиксированные очки за места; категория уже заложена, множители не применяются
     PLACE: {
       fastcap: { 1: 25, 2: 10 },
@@ -32,7 +35,7 @@
 
     TIERS: [
       { name: 'C',  min: -Infinity },
-      { name: 'B',  min: 900  },
+      { name: 'B',  min: 940  },
       { name: 'A',  min: 1100 },
       { name: 'S',  min: 1200 },
       { name: 'S+', min: 1300 }
@@ -132,9 +135,15 @@
     const avg = ids.reduce((s, id) => s + (state.ratings[id] ?? CFG.START), 0) / (ids.length || 1);
     const w = eloWeight(category, avg);
 
+    const played = new Set();
     for (const e of encounters) {
       if (!e.winner_id) continue;
       applyEncounter(state, e.player1_id, e.player2_id, e.winner_id, w);
+      played.add(e.player1_id); played.add(e.player2_id);
+    }
+    // очки за участие: разово за турнир, только тем, кто реально сыграл (техлуз не в счёт)
+    for (const id of played) {
+      state.ratings[id] = (state.ratings[id] ?? CFG.START) + CFG.PARTICIPATION;
     }
     for (const s of (standings || [])) {
       const pts = placePoints(category, s.place);

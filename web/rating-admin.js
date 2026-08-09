@@ -120,6 +120,11 @@ async function pgRating(){
       <div><label>Разброс, очков рейтинга</label>${num('cf-fspan',C.FIELD_SPAN,10)}</div>
     </div>
 
+    <h4 style="margin:18px 0 8px">Очки за участие</h4>
+    <div class="grid2">
+      <div><label>Разово за турнир (если сыграл ≥1 встречу)</label>${num('cf-part',C.PARTICIPATION)}</div>
+    </div>
+
     <h4 style="margin:18px 0 8px">Очки за места</h4>
     <div style="overflow-x:auto"><table style="min-width:420px">
       <thead><tr><th>Место</th><th>Фасткап</th><th>Обычный</th><th>Крупный</th></tr></thead>
@@ -178,6 +183,7 @@ function ratingCfgFromForm(){
   ['fastcap','main','major'].forEach(k=>put(['CATEGORY_W',k],n('cf-w-'+k),D0.CATEGORY_W[k]));
   put(['FIELD_BETA'],n('cf-fbeta'),D0.FIELD_BETA);
   put(['FIELD_SPAN'],n('cf-fspan'),D0.FIELD_SPAN);
+  put(['PARTICIPATION'],n('cf-part'),D0.PARTICIPATION);
   ['fastcap','main','major'].forEach(cat=>[1,2,3,4,5,6].forEach(pl=>{
     const val=n(`cf-pl-${cat}-${pl}`)||0,def=D0.PLACE[cat][pl]||0;
     if(val!==def)((cfg.PLACE||={})[cat]||={})[pl]=val;

@@ -10,9 +10,10 @@ import math, random, statistics, collections
 
 # ---------------------------------------------------------------- конфигурация
 START, SCALE, K = 1000.0, 600.0, 50.0
-BOUND = [900, 1100, 1200, 1300]
+BOUND = [940, 1100, 1200, 1300]
 NAMES = ['C', 'B', 'A', 'S', 'S+']
 GUARD = 40
+PARTICIPATION = 5   # разово за участие в турнире
 CATEGORY_W = {'fastcap': 0.8, 'main': 1.0, 'major': 1.2}
 FIELD_BETA, FIELD_SPAN = 0.10, 150.0
 PLACE = {
@@ -150,6 +151,8 @@ def season(seed):
             return winner
 
         places = (de if rng.random() < 0.7 else se)(field, play)
+        for i in field:
+            R[i] += PARTICIPATION   # в симуляции техлузов нет: играют все
         for pos, pid in enumerate(places, 1):
             R[pid] += PLACE[cname].get(pos, 0)
 
