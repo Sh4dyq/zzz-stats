@@ -1199,7 +1199,7 @@ function pmRunSim(o) {
               if (endRule === 'lap_stage') {
                 // круг игрока: проход Start закрывает его круг (бонус круга — если 4/4); этап завершает только тот, чей круг начат в этом этапе и собран полностью
                 passes++; if (full) fullPasses++;
-                const ends = full && lapOf[pl] === sIdx; lapOf[pl] = sIdx; seen[pl].clear();
+                const ends = full && lapOf[pl] === sIdx; lapOf[pl]++; seen[pl].clear();
                 if (ends) { done = r; winner = pl; lapOf[pl] = sIdx + 1; break; }
                 continue;
               }
@@ -1521,7 +1521,7 @@ function pmPCheck(box) {
     <h4>Количество по типам (факт / цель)</h4>${pmTypeCounts()}`;
 }
 function pmPSim(box) {
-  const o = Object.assign({ players: 6, die: 8, strategy: 'random', trials: 2000, stages: 4, stay: .45, endRule: 'any' }, PM.simOpt || {}), r = PM.sim;
+  const o = Object.assign({ players: 6, die: 8, strategy: 'random', trials: 2000, stages: 4, stay: .45, endRule: 'lap_stage' }, PM.simOpt || {}), r = PM.sim;
   const top = r ? Object.entries(r.land).sort((a, b) => b[1] - a[1]).slice(0, 8) : [];
   const types = r ? Object.entries(r.byType).sort((a, b) => b[1] - a[1]) : [];
   const totalCells = r ? Object.values(r.cellsByRegion).reduce((s, x) => s + x, 0) : 1;
@@ -1530,7 +1530,7 @@ function pmPSim(box) {
     <div class="pm-f"><label>Кубик</label><select id="pm-s-die">${[4, 6, 8, 10, 12].map(n => `<option value="${n}" ${o.die === n ? 'selected' : ''}>d${n}</option>`).join('')}</select></div>
     <div class="pm-f"><label>Этапов</label><input id="pm-s-sg" type="number" min="1" max="6" value="${o.stages}"></div></div>
     <div class="pm-row"><div class="pm-f"><label>Остаются на месте, %</label><input id="pm-s-stay" type="number" min="0" max="100" step="5" value="${Math.round(o.stay * 100)}" title="Доля игроков, которые после этапа не телепортируются на Start"></div>
-    <div class="pm-f"><label>Кто может закончить этап</label><select id="pm-s-end" title="Регионы — этап завершает проход Start только после посещения всех регионов">${[['any', 'Любой, кто прошёл Start'], ['regions_stage', 'Посетил все регионы за этап'], ['regions_keep', 'Посетил все регионы (копится до использования)'], ['lap_any', 'Круги игроков: этап — любой проход Start'], ['lap_full', 'Круги игроков: этап — только полный круг'], ['lap_stage', 'Круги + этап закрывает только круг этого этапа (4/4)']].map(([k, l]) => `<option value="${k}" ${o.endRule === k ? 'selected' : ''}>${l}</option>`).join('')}</select></div></div>
+    <div class="pm-f"><label>Кто может закончить этап</label><select id="pm-s-end" title="Регионы — этап завершает проход Start только после посещения всех регионов">${[['any', 'Любой, кто прошёл Start'], ['regions_stage', 'Посетил все регионы за этап'], ['regions_keep', 'Посетил все регионы (копится до использования)'], ['lap_any', 'Круги игроков: этап — любой проход Start'], ['lap_full', 'Круги игроков: этап — только полный круг'], ['lap_stage', 'Гонка — правило игры: этап закрывает 4/4 круга этого этапа']].map(([k, l]) => `<option value="${k}" ${o.endRule === k ? 'selected' : ''}>${l}</option>`).join('')}</select></div></div>
     <div class="pm-row"><div class="pm-f"><label>Развилки</label><select id="pm-s-st">${[['random', 'Случайно'], ['short', 'Кратчайший к Start'], ['safe', 'Избегать негативных'], ['mix', '50/50 случайно/кратчайший']].map(([k, l]) => `<option value="${k}" ${o.strategy === k ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
     <div class="pm-f"><label>Прогонов</label><input id="pm-s-tr" type="number" min="100" max="20000" step="100" value="${o.trials}"></div></div>
     <button class="btn btn-y" style="width:100%;margin-bottom:12px" onclick="pmSimRun()">Запустить симуляцию</button>
