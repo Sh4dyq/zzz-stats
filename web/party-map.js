@@ -228,7 +228,11 @@ function pmTouch() {
   try { localStorage.setItem('pm_draft_' + (PM.mapId || 'local'), JSON.stringify(PM.data)); } catch (e) { }
   if (PM.opt.autosave) { clearTimeout(PM.saveT); PM.saveT = setTimeout(() => pmSave(true), 1800); }
 }
-function pmSetStatus(s) { PM.status = s; const el = document.getElementById('pm-status'); if (el) el.textContent = s; }
+function pmSetStatus(s) {
+  PM.status = s; const el = document.getElementById('pm-status'), t = document.getElementById('pm-status-t'); if (!el || !t) return;
+  t.textContent = s || ''; el.title = s || '';
+  el.className = 'pm-status' + (/Ошибка/.test(s) ? ' err' : /Сохраняю/.test(s) ? ' saving' : /Изменено/.test(s) ? ' dirty' : '');
+}
 
 /* ---------- хранилище ---------- */
 async function pmLoadList() {
@@ -357,91 +361,222 @@ function pmPicker() {
 }
 
 /* ---------- каркас редактора ---------- */
+const PM_ICO = {
+  select: '<path d="M5 3l14 8-6 2-2 6z"/>', cell: '<circle cx="12" cy="12" r="7"/>', link: '<circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="6" r="2.5"/><path d="M8 16l8-8"/>',
+  zone: '<path d="M4 8l6-4 10 5-3 10-11-2z"/>', marker: '<path d="M12 21s-6-6-6-11a6 6 0 0 1 12 0c0 5-6 11-6 11z"/><circle cx="12" cy="10" r="2"/>',
+  pan: '<path d="M8 13V5a1.5 1.5 0 0 1 3 0v6M11 11V4a1.5 1.5 0 0 1 3 0v7M14 11V6a1.5 1.5 0 0 1 3 0v8a6 6 0 0 1-6 6h-1a5 5 0 0 1-4-2l-3-4a1.5 1.5 0 0 1 2.3-2L8 14"/>',
+  undo: '<path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/>', redo: '<path d="M15 14l5-5-5-5"/><path d="M20 9H10a6 6 0 0 0 0 12h3"/>',
+  fit: '<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>', save: '<path d="M5 3h11l3 3v15H5z"/><path d="M8 3v5h7V3M8 21v-7h8v7"/>',
+  file: '<path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/>', edit: '<path d="M4 20h4L19 9l-4-4L4 16z"/>', tools: '<path d="M14 7a4 4 0 0 0-5 5l-6 6 3 3 6-6a4 4 0 0 0 5-5l-2 2-3-1-1-3z"/>',
+  search: '<circle cx="11" cy="11" r="6"/><path d="M20 20l-4-4"/>', panel: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16"/>',
+  props: '<path d="M4 6h16M4 12h10M4 18h7"/>', types: '<circle cx="7" cy="7" r="3"/><circle cx="17" cy="7" r="3"/><circle cx="7" cy="17" r="3"/><circle cx="17" cy="17" r="3"/>',
+  fields: '<rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 9h8M8 13h8M8 17h5"/>', regions: '<path d="M3 7l6-3 6 3 6-3v13l-6 3-6-3-6 3z"/><path d="M9 4v13M15 7v13"/>',
+  check: '<path d="M5 12l4 4L19 6"/>', sim: '<rect x="4" y="4" width="16" height="16" rx="3"/><circle cx="9" cy="9" r="1.3"/><circle cx="15" cy="15" r="1.3"/><circle cx="15" cy="9" r="1.3"/><circle cx="9" cy="15" r="1.3"/>',
+  view: '<path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>', versions: '<circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>', minus: '<path d="M5 12h14"/>'
+};
+const pmSvg = (k, cls) => `<svg class="${cls || ''}" viewBox="0 0 24 24">${PM_ICO[k] || ''}</svg>`;
+
 function pmShell() {
   const pc = document.getElementById('page-content');
   pc.style.maxWidth = 'none'; pc.style.padding = '0';
-  const tools = [['select', 'V', 'Выбор', '<path d="M5 3l14 8-6 2-2 6z"/>'], ['cell', 'C', 'Клетка', '<circle cx="12" cy="12" r="7"/>'], ['link', 'L', 'Связь', '<circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="6" r="2.5"/><path d="M8 16l8-8"/>'],
-    ['zone', 'Z', 'Зона', '<path d="M4 8l6-4 10 5-3 10-11-2z"/>'], ['marker', 'M', 'Маркер', '<path d="M12 21s-6-6-6-11a6 6 0 0 1 12 0c0 5-6 11-6 11z"/><circle cx="12" cy="10" r="2"/>'], ['pan', 'H', 'Рука', '<path d="M8 13V5a1.5 1.5 0 0 1 3 0v6M11 11V4a1.5 1.5 0 0 1 3 0v7M14 11V6a1.5 1.5 0 0 1 3 0v8a6 6 0 0 1-6 6h-1a5 5 0 0 1-4-2l-3-4a1.5 1.5 0 0 1 2.3-2L8 14"/>']];
+  const area = document.getElementById('admin-area'); if (area) area.style.overflow = 'hidden';
+  const tools = [['select', 'V', 'Выбор'], ['cell', 'C', 'Клетка'], ['link', 'L', 'Связь'], ['zone', 'Z', 'Зона'], ['marker', 'M', 'Маркер'], ['pan', 'H', 'Рука (или Пробел)']];
+  const sideW = Math.max(260, Math.min(560, PM.opt.sideW || 330, (pc.getBoundingClientRect().width || 1200) - 50 - 560));
   html(`<style>
-    .pm-wrap{display:flex;height:calc(100vh - 74px);min-height:520px}
-    .pm-tools{width:52px;border-right:1px solid var(--border);display:flex;flex-direction:column;gap:4px;padding:8px 6px;background:#0d0d10}
-    .pm-tb{width:40px;height:40px;border-radius:9px;border:1px solid transparent;background:none;color:var(--sub);cursor:pointer;display:flex;align-items:center;justify-content:center;position:relative}
-    .pm-tb svg{width:19px;height:19px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
-    .pm-tb:hover{background:var(--panel-2);color:var(--text)} .pm-tb.on{background:rgba(255,31,68,.15);color:#fff;border-color:rgba(255,31,68,.4)}
-    .pm-tb i{position:absolute;right:3px;bottom:1px;font-size:9px;font-style:normal;font-family:'JetBrains Mono',monospace;opacity:.6}
+    .pm-wrap{display:flex;height:600px;min-height:420px;overflow:hidden;font-family:'Rajdhani',sans-serif}
+    .pm-wrap svg.i{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0}
+    .pm-tools{width:50px;flex-shrink:0;border-right:1px solid var(--border);display:flex;flex-direction:column;align-items:center;gap:3px;padding:8px 0;background:#0d0d10;overflow-y:auto;overflow-x:visible}
+    .pm-tools hr{width:26px;border:none;border-top:1px solid var(--border);margin:5px 0}
+    .pm-tb{width:38px;height:38px;flex-shrink:0;border-radius:9px;border:1px solid transparent;background:none;color:var(--sub);cursor:pointer;display:flex;align-items:center;justify-content:center;position:relative;transition:background .12s,color .12s}
+    .pm-tb:hover{background:var(--panel-2);color:var(--text)} .pm-tb.on{background:rgba(255,31,68,.16);color:#fff;border-color:rgba(255,31,68,.45)}
+    .pm-tb i{position:absolute;right:2px;bottom:0;font-size:9px;font-style:normal;font-family:'JetBrains Mono',monospace;opacity:.55}
+    .pm-tip{position:fixed;z-index:70;white-space:nowrap;background:#1c1c22;border:1px solid var(--border);color:var(--text);font-size:12px;padding:4px 8px;border-radius:6px;pointer-events:none;box-shadow:0 6px 18px rgba(0,0,0,.4);display:none;font-family:'Rajdhani';font-weight:600}
     .pm-mid{flex:1;display:flex;flex-direction:column;min-width:0}
-    .pm-top{display:flex;align-items:center;gap:6px;padding:7px 10px;border-bottom:1px solid var(--border);flex-wrap:wrap;background:#0d0d10}
-    .pm-top .btn{padding:6px 11px;font-size:13px} .pm-top select,.pm-top input[type=text],.pm-top input[type=search]{width:auto;padding:6px 9px;font-size:13px}
-    .pm-canvas{flex:1;position:relative;overflow:hidden;background:#09090b}
-    .pm-canvas>svg{width:100%;height:100%;display:block;user-select:none}
-    .pm-side{width:330px;border-left:1px solid var(--border);overflow:auto;background:#0d0d10;padding:12px}
-    .pm-tabs{display:flex;gap:3px;margin-bottom:12px;flex-wrap:wrap}
-    .pm-tab{flex:1;font-size:12px;padding:6px 4px;border-radius:7px;border:1px solid var(--border);background:var(--panel-2);color:var(--sub);cursor:pointer;font-family:'Rajdhani';font-weight:600;min-width:62px}
-    .pm-tab.on{color:#fff;border-color:var(--accent)}
+    .pm-top{display:flex;align-items:center;gap:6px;padding:6px 8px;border-bottom:1px solid var(--border);flex-wrap:nowrap;background:#0d0d10;height:46px;flex-shrink:0;min-width:0}
+    .pm-top>*{flex-shrink:0}
+    .pm-top select,.pm-top input{width:auto;padding:6px 8px;font-size:13px;height:32px}
+    .pm-btn{height:32px;display:inline-flex;align-items:center;gap:6px;padding:0 10px;border-radius:8px;border:1px solid var(--border);background:var(--panel-2);color:var(--text);cursor:pointer;font-family:'Rajdhani';font-weight:600;font-size:13px;white-space:nowrap;transition:background .12s,border-color .12s}
+    .pm-btn:hover{background:var(--panel-3);border-color:#3c3c46}
+    .pm-btn.pri{background:var(--grad);border-color:transparent;color:#fff}
+    .pm-btn.pri:hover{filter:brightness(1.1)}
+    .pm-btn.ic{padding:0;width:32px;justify-content:center}
+    .pm-btn.on{border-color:var(--accent);color:#fff}
+    #pm-mapsel{max-width:190px;min-width:90px;flex-shrink:1;text-overflow:ellipsis}
+    #pm-name{width:150px;min-width:70px;flex-shrink:1}
+    .pm-search{position:relative;flex:1 1 240px;max-width:300px;min-width:110px;display:flex;align-items:center}
+    .pm-search svg{position:absolute;left:8px;width:15px;height:15px;stroke:var(--sub);fill:none;stroke-width:1.8;pointer-events:none}
+    .pm-search input{width:100%!important;padding-left:28px!important}
+    .pm-search span{position:absolute;right:26px;font-size:11px;color:var(--sub);pointer-events:none}
+    .pm-sp{flex:1 1 0;min-width:0}
+    #pm-overlay{max-width:160px;flex-shrink:1;min-width:90px}
+    .pm-status{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--sub);white-space:nowrap;overflow:hidden;max-width:130px;flex-shrink:1;min-width:16px}
+    .pm-status>span{overflow:hidden;text-overflow:ellipsis}
+    .pm-status b{width:8px;height:8px;border-radius:50%;background:#4ade80;flex-shrink:0}
+    .pm-status.dirty b{background:#f5c842}.pm-status.err b{background:#f87171}.pm-status.saving b{background:#38bdf8}
+    .pm-canvas{flex:1;position:relative;overflow:hidden;background:#09090b;min-height:0}
+    .pm-canvas>svg{width:100%;height:100%;display:block;user-select:none;cursor:default}
+    .pm-canvas.t-cell>svg,.pm-canvas.t-zone>svg,.pm-canvas.t-marker>svg{cursor:crosshair}
+    .pm-canvas.t-pan>svg{cursor:grab}.pm-canvas.panning>svg{cursor:grabbing!important}
+    .pm-pal{position:absolute;top:10px;left:50%;transform:translateX(-50%);max-width:calc(100% - 20px);display:none;align-items:center;gap:4px;padding:5px;background:rgba(18,18,22,.95);border:1px solid var(--border);border-radius:11px;box-shadow:0 10px 28px rgba(0,0,0,.45);overflow-x:auto;scrollbar-width:thin;z-index:5}
+    .pm-pal.show{display:flex}
+    .pm-pal button{flex-shrink:0;display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 9px;border-radius:7px;border:1px solid transparent;background:none;color:var(--text);cursor:pointer;font-family:'Rajdhani';font-weight:600;font-size:13px;white-space:nowrap}
+    .pm-pal button:hover{background:var(--panel-3)}.pm-pal button.on{background:rgba(255,31,68,.14);border-color:rgba(255,31,68,.45)}
+    .pm-pal .lbl{font-size:11px;color:var(--sub);padding:0 6px 0 4px;white-space:nowrap;flex-shrink:0}
+    .pm-hint{position:absolute;left:10px;bottom:10px;font-size:11.5px;color:var(--sub);background:rgba(13,13,16,.9);border:1px solid var(--border);border-radius:8px;padding:5px 9px;pointer-events:none;font-family:'JetBrains Mono',monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:calc(100% - 210px);z-index:4}
+    .pm-zoom{position:absolute;right:10px;bottom:10px;display:flex;align-items:center;gap:2px;padding:3px;background:rgba(18,18,22,.95);border:1px solid var(--border);border-radius:9px;z-index:4}
+    .pm-zoom button{width:28px;height:28px;border-radius:6px;border:none;background:none;color:var(--text);cursor:pointer;display:flex;align-items:center;justify-content:center}
+    .pm-zoom button:hover{background:var(--panel-3)} .pm-zoom span{font-family:'JetBrains Mono';font-size:11px;color:var(--sub);width:42px;text-align:center;cursor:pointer}
+    .pm-mm{position:absolute;right:10px;bottom:52px;width:200px;height:140px;background:rgba(13,13,16,.92);border:1px solid var(--border);border-radius:9px;overflow:hidden;cursor:pointer;z-index:4}
+    .pm-mm svg{width:100%;height:100%;display:block}
+    .pm-side{width:${sideW}px;flex-shrink:0;border-left:1px solid var(--border);background:#0d0d10;display:flex;flex-direction:column;position:relative;min-width:0}
+    .pm-side.hidden{display:none}
+    .pm-resize{position:absolute;left:-4px;top:0;bottom:0;width:8px;cursor:ew-resize;z-index:6}
+    .pm-resize:hover,.pm-resize.on{background:linear-gradient(90deg,transparent 3px,rgba(255,31,68,.55) 3px,rgba(255,31,68,.55) 5px,transparent 5px)}
+    .pm-tabs{display:grid;grid-template-columns:repeat(auto-fill,minmax(54px,1fr));gap:3px;padding:8px;border-bottom:1px solid var(--border);flex-shrink:0}
+    .pm-tab{display:flex;flex-direction:column;align-items:center;gap:3px;padding:6px 2px 5px;border-radius:8px;border:1px solid transparent;background:none;color:var(--sub);cursor:pointer;font-family:'Rajdhani';font-weight:600;font-size:11px;line-height:1;min-width:0}
+    .pm-tab span{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .pm-tab:hover{background:var(--panel-2);color:var(--text)}.pm-tab.on{background:rgba(255,31,68,.12);border-color:rgba(255,31,68,.4);color:#fff}
+    #pm-pbody{flex:1;overflow-y:auto;overflow-x:hidden;padding:12px;min-height:0}
+    #pm-pbody h4:first-child{margin-top:0}
+    #pm-pbody input,#pm-pbody select,#pm-pbody textarea{max-width:100%;min-width:0}
     .pm-f{margin-bottom:10px} .pm-f input,.pm-f select,.pm-f textarea{padding:7px 9px;font-size:13px}
-    .pm-row{display:flex;gap:6px;align-items:center} .pm-row>*{flex:1}
-    .pm-chip{display:inline-flex;align-items:center;gap:6px;padding:4px 8px;border-radius:7px;background:var(--panel-2);border:1px solid var(--border);font-size:12px;margin:0 4px 4px 0;cursor:pointer}
+    .pm-f input[type=color]{height:34px;padding:3px}
+    .pm-row{display:flex;gap:6px;align-items:center;min-width:0} .pm-row>*{flex:1;min-width:0}
+    .pm-chip{display:inline-flex;align-items:center;gap:6px;padding:4px 8px;border-radius:7px;background:var(--panel-2);border:1px solid var(--border);font-size:12px;margin:0 4px 4px 0;cursor:pointer;max-width:100%}
     .pm-chip.bad{border-color:#7a4a10}.pm-chip.good{border-color:#14532d}
     .pm-dot{width:11px;height:11px;border-radius:50%;flex-shrink:0}
-    .pm-warn{font-size:12px;padding:6px 8px;border-radius:7px;background:#1d1408;border:1px solid #4a3410;color:#f5c842;margin-bottom:5px;cursor:pointer}
+    .pm-warn{font-size:12px;padding:6px 8px;border-radius:7px;background:#1d1408;border:1px solid #4a3410;color:#f5c842;margin-bottom:5px;cursor:pointer;overflow-wrap:anywhere}
     .pm-ok{font-size:12px;padding:6px 8px;border-radius:7px;background:#052e16;border:1px solid #14532d;color:#4ade80}
-    .pm-hint{position:absolute;left:10px;bottom:8px;font-size:12px;color:var(--sub);background:rgba(13,13,16,.85);border:1px solid var(--border);border-radius:7px;padding:4px 9px;pointer-events:none;font-family:'JetBrains Mono',monospace;max-width:calc(100% - 240px)}
-    .pm-mini{font-size:11px;color:var(--sub)}
+    .pm-mini{font-size:11.5px;color:var(--sub);line-height:1.5}
     .pm-icons{display:flex;flex-wrap:wrap;gap:4px}.pm-icons button{width:32px;height:32px;border-radius:7px;border:1px solid var(--border);background:var(--panel-2);color:#fff;cursor:pointer;font-size:15px}
     .pm-icons button.on{border-color:var(--accent)}
-    .pm-menu{position:relative}.pm-menu>div{position:absolute;top:100%;left:0;z-index:30;background:var(--field-2);border:1px solid var(--border);border-radius:8px;padding:4px;display:none;min-width:260px;box-shadow:0 12px 32px rgba(0,0,0,.5)}
-    .pm-menu.open>div{display:block}.pm-menu>div a{display:block;padding:7px 9px;border-radius:6px;cursor:pointer;font-size:13px;color:var(--text)}.pm-menu>div a:hover{background:var(--panel-3)}
+    .pm-menu{position:relative}.pm-menu>div{position:fixed;z-index:60;background:var(--field-2);border:1px solid var(--border);border-radius:9px;padding:4px;display:none;min-width:250px;max-height:70vh;overflow-y:auto;box-shadow:0 14px 36px rgba(0,0,0,.55)}
+    .pm-menu.open>div{display:block}.pm-menu>div a{display:flex;justify-content:space-between;gap:16px;padding:7px 10px;border-radius:6px;cursor:pointer;font-size:13px;color:var(--text);white-space:nowrap}.pm-menu>div a:hover{background:var(--panel-3)}
+    .pm-menu>div a kbd{font-family:'JetBrains Mono';font-size:10.5px;color:var(--sub)}
     .pm-menu>div hr{border:none;border-top:1px solid var(--border);margin:4px 0}
-    .pm-mm{position:absolute;right:10px;bottom:10px;width:210px;height:150px;background:rgba(13,13,16,.92);border:1px solid var(--border);border-radius:9px;overflow:hidden;cursor:pointer}
-    .pm-mm svg{width:100%;height:100%;display:block}
-    .pm-al{display:grid;grid-template-columns:repeat(5,1fr);gap:4px;margin-bottom:10px}.pm-al button{height:30px;border-radius:7px;border:1px solid var(--border);background:var(--panel-2);color:var(--text);cursor:pointer;font-size:12px}
+    .pm-al{display:grid;grid-template-columns:repeat(5,1fr);gap:4px;margin-bottom:10px}.pm-al button{height:30px;border-radius:7px;border:1px solid var(--border);background:var(--panel-2);color:var(--text);cursor:pointer;font-size:13px;min-width:0}
     .pm-al button:hover{background:var(--panel-3)}
-    .pm-tbl{width:100%;border-collapse:collapse;font-size:12px}.pm-tbl td{padding:4px 5px;border-bottom:1px solid var(--border)}.pm-tbl tr{cursor:pointer}.pm-tbl tr:hover{background:var(--panel-2)}
+    .pm-tbl{width:100%;border-collapse:collapse;font-size:12px;table-layout:fixed}.pm-tbl td{padding:4px 5px;border-bottom:1px solid var(--border);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.pm-tbl tr{cursor:pointer}.pm-tbl tr:hover{background:var(--panel-2)}
     .pm-bar{height:6px;border-radius:3px;background:var(--grad)}
-    .pm-lay{display:grid;grid-template-columns:1fr auto auto;gap:6px;align-items:center;font-size:13px;margin-bottom:6px}
+    .pm-lay{display:grid;grid-template-columns:1fr auto auto;gap:8px;align-items:center;font-size:13px;margin-bottom:6px}
+    #pm-pbody .btn{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:8px 10px;min-width:0}
+    #pm-pbody .row-item{gap:8px;min-width:0}#pm-pbody .row-item>*:first-child{overflow:hidden;min-width:0}#pm-pbody .row-item b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    #pm-pbody .row-item>*:last-child{flex-shrink:0}
+    .pm-top.c1 .lbl{display:none}.pm-top.c1 .pm-btn.m{padding:0;width:32px;justify-content:center}
+    .pm-top.c2 #pm-name{display:none}
+    .pm-top.c3 #pm-status-t{display:none}.pm-top.c3 .pm-status{max-width:16px}
+    .pm-top.c4 #pm-overlay{max-width:100px}.pm-top.c4 .pm-search{min-width:90px}
+    .pm-top.c5 #pm-mapsel{max-width:120px}
+    #pm-pbody .cb-label{white-space:normal;align-items:flex-start;line-height:1.35}
+    #pm-pbody .cb-label input{margin-top:2px}
   </style>
-  <div class="pm-wrap">
-    <div class="pm-tools">${tools.map(([k, key, t, svg]) => `<button class="pm-tb" data-tool="${k}" title="${t} (${key})" onclick="pmTool('${k}')"><svg viewBox="0 0 24 24">${svg}</svg><i>${key}</i></button>`).join('')}
-      <div style="flex:1"></div>
-      <button class="pm-tb" title="Отменить (Ctrl+Z)" onclick="pmUndo()"><svg viewBox="0 0 24 24"><path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></svg></button>
-      <button class="pm-tb" title="Повторить (Ctrl+Y)" onclick="pmRedo()"><svg viewBox="0 0 24 24"><path d="M15 14l5-5-5-5"/><path d="M20 9H10a6 6 0 0 0 0 12h3"/></svg></button>
-      <button class="pm-tb" title="Показать всё (F)" onclick="pmFit()"><svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+  <div class="pm-wrap" id="pm-wrap">
+    <div class="pm-tools">
+      ${tools.map(([k, key, t]) => `<button class="pm-tb" data-tool="${k}" data-tip="${t} · ${key}" onclick="pmTool('${k}')">${pmSvg(k, 'i')}<i>${key}</i></button>`).join('')}
+      <hr>
+      <button class="pm-tb" data-tip="Отменить · Ctrl+Z" onclick="pmUndo()">${pmSvg('undo', 'i')}</button>
+      <button class="pm-tb" data-tip="Повторить · Ctrl+Y" onclick="pmRedo()">${pmSvg('redo', 'i')}</button>
     </div>
     <div class="pm-mid">
-      <div class="pm-top">
-        <select id="pm-mapsel" onchange="pmSwitch(this.value)" title="Карта">${PM.maps.map(m => `<option value="${m.id}" ${m.id === PM.mapId ? 'selected' : ''}>${pmEsc(m.name)}</option>`).join('')}<option value="__new">+ новая карта…</option></select>
-        <input type="text" id="pm-name" value="${pmEsc(PM.name)}" style="width:170px" title="Название карты" onchange="PM.name=this.value;pmTouch()">
-        <button class="btn btn-y" onclick="pmSave()">Сохранить</button>
-        <div class="pm-menu" id="pm-m-file"><button class="btn btn-g" onclick="pmMenu('pm-m-file')">Файл ▾</button><div>
+      <div class="pm-top" id="pm-top">
+        <select id="pm-mapsel" onchange="this.blur();pmSwitch(this.value)" title="Карта">${PM.maps.map(m => `<option value="${m.id}" ${m.id === PM.mapId ? 'selected' : ''}>${pmEsc(m.name)}</option>`).join('')}<option value="__new">+ новая карта…</option></select>
+        <input type="text" id="pm-name" value="${pmEsc(PM.name)}" title="Название карты" onchange="PM.name=this.value;pmTouch()" onkeydown="if(event.key==='Enter')this.blur()">
+        <button class="pm-btn pri m" onclick="pmSave()" data-tip="Сохранить · Ctrl+S">${pmSvg('save', 'i')}<span class="lbl">Сохранить</span></button>
+        <div class="pm-menu" id="pm-m-file"><button class="pm-btn m" onclick="pmMenu('pm-m-file',this)" data-tip="Файл">${pmSvg('file', 'i')}<span class="lbl">Файл</span></button><div>
           <a onclick="pmSaveAs()">Сохранить как копию…</a><a onclick="pmSnapshot()">Сохранить версию…</a><a onclick="pmPicker()">Список карт</a><hr>
           <a onclick="pmExportJSON()">Скачать JSON</a><a onclick="pmImportJSON()">Загрузить JSON…</a>
-          <a onclick="pmExportTSV()">Копировать TSV для листа «Клетки карты»</a><a onclick="pmImportTSV()">Вставить TSV из листа…</a>
+          <a onclick="pmExportTSV()">Копировать TSV для «Клеток карты»</a><a onclick="pmImportTSV()">Вставить TSV из листа…</a>
           <a onclick="pmExportSVG()">Скачать SVG</a><a onclick="pmExportPNG()">Скачать PNG</a><hr>
           <a onclick="pmDeleteMap()" style="color:#f87171">Удалить карту</a></div></div>
-        <div class="pm-menu" id="pm-m-edit"><button class="btn btn-g" onclick="pmMenu('pm-m-edit')">Правка ▾</button><div>
-          <a onclick="pmCopy()">Копировать (Ctrl+C)</a><a onclick="pmCopy(true)">Вырезать (Ctrl+X)</a><a onclick="pmPaste()">Вставить (Ctrl+V)</a><a onclick="pmDuplicate()">Дублировать (Ctrl+D)</a><hr>
-          <a onclick="pmAlign('left')">Выровнять по левому краю</a><a onclick="pmAlign('cx')">Выровнять по центру (вертикаль)</a><a onclick="pmAlign('top')">Выровнять по верху</a><a onclick="pmAlign('cy')">Выровнять по центру (горизонталь)</a>
-          <a onclick="pmAlign('dh')">Распределить по горизонтали</a><a onclick="pmAlign('dv')">Распределить по вертикали</a><a onclick="pmAlign('line')">Выстроить в линию (по крайним)</a><a onclick="pmAlign('circle')">Расставить по кругу</a></div></div>
-        <div class="pm-menu" id="pm-m-tools"><button class="btn btn-g" onclick="pmMenu('pm-m-tools')">Инструменты ▾</button><div>
+        <div class="pm-menu" id="pm-m-edit"><button class="pm-btn m" onclick="pmMenu('pm-m-edit',this)" data-tip="Правка">${pmSvg('edit', 'i')}<span class="lbl">Правка</span></button><div>
+          <a onclick="pmCopy()">Копировать<kbd>Ctrl+C</kbd></a><a onclick="pmCopy(true)">Вырезать<kbd>Ctrl+X</kbd></a><a onclick="pmPaste()">Вставить<kbd>Ctrl+V</kbd></a><a onclick="pmDuplicate()">Дублировать<kbd>Ctrl+D</kbd></a><a onclick="pmDelete()">Удалить<kbd>Del</kbd></a><hr>
+          <a onclick="pmAlign('left')">По левому краю</a><a onclick="pmAlign('cx')">По центру (вертикаль)</a><a onclick="pmAlign('top')">По верху</a><a onclick="pmAlign('cy')">По центру (горизонталь)</a>
+          <a onclick="pmAlign('dh')">Распределить по горизонтали</a><a onclick="pmAlign('dv')">Распределить по вертикали</a><a onclick="pmAlign('line')">Выстроить в линию</a><a onclick="pmAlign('circle')">Расставить по кругу</a></div></div>
+        <div class="pm-menu" id="pm-m-tools"><button class="pm-btn m" onclick="pmMenu('pm-m-tools',this)" data-tip="Инструменты">${pmSvg('tools', 'i')}<span class="lbl">Инструменты</span></button><div>
           <a onclick="pmAutoLayout(false)">Авто-раскладка (сохраняя регионы)</a><a onclick="pmAutoLayout(true)">Авто-раскладка выделенных</a>
           <a onclick="pmHullsCmd()">Перестроить контуры зон по клеткам</a><a onclick="pmAssignRegions()">Назначить регионы по зонам</a>
           <a onclick="pmRenumber()">Перенумеровать Id по регионам</a><a onclick="pmSnapAll()">Выровнять всё по сетке</a><hr>
-          <a onclick="pmPanel('sim')">Симуляция прохода…</a><a onclick="pmPanel('check')">Проверка и метрики…</a></div></div>
-        <input type="search" id="pm-q" placeholder="Поиск: Б07, тип:Событие регион:Вейфей" style="width:240px" value="${pmEsc(PM.filter)}" oninput="pmSearch(this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();pmFindNext(event.shiftKey?-1:1)}if(event.key==='Escape'){this.value='';pmSearch('');this.blur()}">
-        <span class="pm-mini" id="pm-qn"></span>
-        <div style="flex:1"></div>
-        <select id="pm-overlay" onchange="PM.overlay=this.value;pmRender()" title="Наложение">
-          <option value="none">Без наложения</option><option value="dist">Шаги от Start</option><option value="deg">Число связей</option><option value="heat">Тепловая карта (симуляция)</option></select>
-        <span class="pm-mini" id="pm-status">${PM.status}</span>
+          <a onclick="pmPanel('sim')">Симуляция прохода</a><a onclick="pmPanel('check')">Проверка и метрики</a></div></div>
+        <div class="pm-search">${pmSvg('search')}<input type="search" id="pm-q" placeholder="Поиск  ( / )" value="${pmEsc(PM.filter)}" title="Id, текст или фильтры: тип:событие регион:вейфей ключ:значение" oninput="pmSearch(this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();pmFindNext(event.shiftKey?-1:1)}if(event.key==='Escape'){this.value='';pmSearch('');this.blur()}"><span id="pm-qn"></span></div>
+        <div class="pm-sp"></div>
+        <select id="pm-overlay" onchange="this.blur();PM.overlay=this.value;pmRender()" title="Наложение на клетки">
+          <option value="none">Без наложения</option><option value="dist">Шаги от Start</option><option value="deg">Число связей</option><option value="heat">Тепловая карта</option></select>
+        <span class="pm-status" id="pm-status"><b></b><span id="pm-status-t"></span></span>
+        <button class="pm-btn ic ${PM.opt.sideHidden ? '' : 'on'}" id="pm-sidebtn" onclick="pmToggleSide()" data-tip="Панель справа">${pmSvg('panel', 'i')}</button>
       </div>
-      <div class="pm-canvas" id="pm-canvas"><svg id="pm-svg"></svg><div class="pm-hint" id="pm-hint"></div><div class="pm-mm" id="pm-mm" style="display:${PM.opt.minimap ? 'block' : 'none'}"><svg id="pm-mmsvg"></svg></div></div>
+      <div class="pm-canvas" id="pm-canvas"><svg id="pm-svg"></svg>
+        <div class="pm-pal" id="pm-pal"></div>
+        <div class="pm-hint" id="pm-hint"></div>
+        <div class="pm-mm" id="pm-mm"><svg id="pm-mmsvg"></svg></div>
+        <div class="pm-zoom" id="pm-zoom"><button title="Отдалить" onclick="pmZoom(1/1.25)">${pmSvg('minus', 'i')}</button><span id="pm-zl" title="Масштаб 100%" onclick="pmZoomTo(1)">100%</span><button title="Приблизить" onclick="pmZoom(1.25)">${pmSvg('plus', 'i')}</button><button title="Показать всё · F" onclick="pmFit()">${pmSvg('fit', 'i')}</button></div>
+      </div>
     </div>
-    <div class="pm-side" id="pm-side"></div>
-  </div>`);
+    <div class="pm-side ${PM.opt.sideHidden ? 'hidden' : ''}" id="pm-side-wrap"><div class="pm-resize" id="pm-resize" title="Потяни, чтобы изменить ширину"></div><div id="pm-side" style="display:flex;flex-direction:column;height:100%;min-height:0"></div></div>
+  </div><div class="pm-tip" id="pm-tip"></div>`);
   document.getElementById('pm-overlay').value = PM.overlay;
-  pmBind(); pmTool(PM.tool); pmPanel(PM.panel || 'props'); pmRender();
+  pmSizeWrap(); pmFitTop();
+  pmBind(); pmTool(PM.tool); pmPanel(PM.panel || 'props'); pmSetStatus(PM.status); pmRender();
 }
-function pmMenu(id) { document.querySelectorAll('.pm-menu').forEach(m => m.id !== id && m.classList.remove('open')); document.getElementById(id).classList.toggle('open'); }
+/* Верхняя панель всегда в одну строку: при нехватке места прячем подписи, название, текст статуса. */
+function pmFitTop() {
+  const top = document.getElementById('pm-top'); if (!top) return;
+  top.classList.remove('c1', 'c2', 'c3', 'c4', 'c5');
+  for (const c of ['c1', 'c2', 'c3', 'c4', 'c5']) { if (top.scrollWidth <= top.clientWidth + 1) break; top.classList.add(c); }
+}
+/* Высота редактора = до низа окна; без прокрутки страницы. */
+function pmSizeWrap() {
+  const w = document.getElementById('pm-wrap'); if (!w) return;
+  const top = w.getBoundingClientRect().top;
+  w.style.height = Math.max(420, window.innerHeight - Math.max(0, top)) + 'px';
+}
+function pmToggleSide() {
+  PM.opt.sideHidden = !PM.opt.sideHidden; pmSaveOpt();
+  document.getElementById('pm-side-wrap').classList.toggle('hidden', PM.opt.sideHidden);
+  document.getElementById('pm-sidebtn').classList.toggle('on', !PM.opt.sideHidden);
+  if (!PM.opt.sideHidden) pmPanelRefresh(true);
+  pmFitTop(); pmRender();
+}
+function pmZoom(f) {
+  const svg = document.getElementById('pm-svg'); if (!svg) return;
+  const W = svg.clientWidth / 2, H = svg.clientHeight / 2, k = Math.max(.15, Math.min(5, PM.view.k * f));
+  PM.view.x = W - (W - PM.view.x) * k / PM.view.k; PM.view.y = H - (H - PM.view.y) * k / PM.view.k; PM.view.k = k; pmRender();
+}
+function pmZoomTo(k) { pmZoom(k / PM.view.k); }
+/* Всплывающие подсказки у кнопок (fixed — не обрезаются краями панелей). */
+function pmTipBind() {
+  const tip = document.getElementById('pm-tip'), wrap = document.getElementById('pm-wrap'); if (!tip || !wrap) return;
+  wrap.addEventListener('mouseover', e => {
+    const b = e.target.closest && e.target.closest('[data-tip]'); if (!b) { tip.style.display = 'none'; return; }
+    tip.textContent = b.dataset.tip; tip.style.display = 'block';
+    const r = b.getBoundingClientRect(), side = b.closest('.pm-tools');
+    let x = side ? r.right + 8 : r.left + r.width / 2 - tip.offsetWidth / 2, y = side ? r.top + r.height / 2 - tip.offsetHeight / 2 : r.bottom + 6;
+    x = Math.max(6, Math.min(x, window.innerWidth - tip.offsetWidth - 6)); y = Math.max(6, Math.min(y, window.innerHeight - tip.offsetHeight - 6));
+    tip.style.left = x + 'px'; tip.style.top = y + 'px';
+  });
+  wrap.addEventListener('mouseleave', () => tip.style.display = 'none');
+  wrap.addEventListener('mousedown', () => tip.style.display = 'none');
+}
+/* Плавающая палитра над холстом под текущий инструмент. */
+function pmPalette() {
+  const el = document.getElementById('pm-pal'); if (!el || !PM.data) return;
+  let h = '';
+  if (PM.tool === 'cell') h = `<span class="lbl">Тип новой клетки</span>` + PM.data.types.map(t => `<button class="${(PM.newType || 'Событие') === t.key ? 'on' : ''}" onclick="PM.newType='${pmJs(t.key)}';pmPalette()"><span class="pm-dot" style="background:${t.color}"></span>${pmEsc(t.key)}</button>`).join('');
+  if (PM.tool === 'marker') h = `<span class="lbl">Маркер</span>` + PM_ICONS.map(i => `<button class="${(PM.icon || '★') === i ? 'on' : ''}" style="padding:0 8px;font-size:15px" onclick="PM.icon='${i}';pmPalette()">${i}</button>`).join('') + `<input type="color" value="${PM.iconColor || '#38bdf8'}" title="Цвет" style="width:32px;height:28px;padding:2px;flex-shrink:0;border-radius:6px" onchange="PM.iconColor=this.value">`;
+  if (PM.tool === 'link') { const lm = PM.linkMode || 'auto'; h = `<span class="lbl">Новая связь</span>` + [['auto', 'Авто (по кругу)'], ['both', 'В обе стороны ⇄'], ['ab', 'Односторонняя A→B']].map(([k, l]) => `<button class="${lm === k ? 'on' : ''}" onclick="PM.linkMode='${k}';pmPalette()">${l}</button>`).join('') + `<span class="lbl">Повторно по той же паре — сменить режим · Ctrl — цепочка</span>`; }
+  if (PM.tool === 'zone') h = `<span class="lbl">${PM.zoneDraft && PM.zoneDraft.length ? 'Точек: ' + PM.zoneDraft.length : 'Кликай точки контура'}</span><button onclick="pmFinishZone()" ${PM.zoneDraft && PM.zoneDraft.length >= 3 ? '' : 'disabled style="opacity:.4"'}>Готово · Enter</button><button onclick="PM.zoneDraft=null;pmTool('select')">Отмена · Esc</button>`;
+  el.innerHTML = h; el.classList.toggle('show', !!h);
+}
+function pmMenu(id, btn) {
+  document.querySelectorAll('.pm-menu').forEach(m => m.id !== id && m.classList.remove('open'));
+  const m = document.getElementById(id); m.classList.toggle('open');
+  const tip = document.getElementById('pm-tip'); if (tip) tip.style.display = 'none';
+  if (!m.classList.contains('open') || !btn) return;
+  const dd = m.querySelector(':scope>div'), r = btn.getBoundingClientRect();
+  dd.style.top = (r.bottom + 4) + 'px'; dd.style.left = '0px';
+  const w = dd.offsetWidth; dd.style.left = Math.max(8, Math.min(r.left, window.innerWidth - w - 8)) + 'px';
+  dd.style.maxHeight = Math.max(160, window.innerHeight - r.bottom - 16) + 'px';
+}
 document.addEventListener('click', e => {
   if (!e.target.closest) return;
   if (!e.target.closest('.pm-menu') || e.target.closest('.pm-menu>div a')) document.querySelectorAll('.pm-menu.open').forEach(m => m.classList.remove('open'));
@@ -458,12 +593,13 @@ function pmTool(t) {
   const hints = {
     select: 'Клик — выбрать · Shift — добавить · рамка по пустому · Пробел/правая кнопка — двигать холст · колесо — зум · двойной клик по связи — излом',
     cell: 'Клик по пустому — новая клетка выбранного типа (панель «Типы»)',
-    link: 'Клик A, затем B · Shift — односторонняя A→B · Ctrl — цепочка · клик по связи — удалить',
+    link: 'Клик A, затем B · режим связи — в палитре сверху · Shift — односторонняя · клик по связи — удалить',
     zone: 'Клики — точки контура · Enter/двойной клик — завершить · Esc — отмена',
     marker: 'Клик — маркер (по клетке — привязанный к ней)', pan: 'Перетаскивай холст'
   };
-  const h = document.getElementById('pm-hint'); if (h) h.textContent = hints[t] || '';
-  pmRender();
+  const h = document.getElementById('pm-hint'); if (h) { h.textContent = hints[t] || ''; h.title = hints[t] || ''; }
+  const cv = document.getElementById('pm-canvas'); if (cv) cv.className = 'pm-canvas t-' + t;
+  pmPalette(); pmRender();
 }
 
 /* ---------- координаты ---------- */
@@ -585,6 +721,7 @@ function pmRender() {
     const dim = q && !(pmMatch(pmCell(e.a), q) && pmMatch(pmCell(e.b), q));
     s += `<path d="${G.d}" fill="none" stroke="transparent" stroke-width="12" data-edge="${e.id}" style="cursor:pointer" ${pe('edges')}/>`;
     s += `<path d="${G.d}" fill="none" stroke="${inPath ? '#facc15' : on ? '#ff1f44' : e.color || '#6b6b75'}" stroke-width="${inPath || on ? 3 : 1.6}" ${e.dash ? 'stroke-dasharray="6 5"' : ''} opacity="${dim ? .15 : 1}" pointer-events="none"/>`;
+    if (dr.both && !dr.auto) { const [mx, my] = G.mid; s += `<text x="${mx}" y="${my + 4}" text-anchor="middle" font-size="12" fill="#e5e5ea" paint-order="stroke" stroke="#09090b" stroke-width="3" pointer-events="none">⇄</text>`; }
     if (!dr.both && (PM.opt.arrows || !dr.auto)) {
       let ang = G.ang; if (dr.f !== e.a) ang += Math.PI;
       const [mx, my] = G.mid, sz = dr.auto ? 5 : 7, col = dr.auto ? '#8a8a93' : '#e5e5ea';
@@ -626,6 +763,7 @@ function pmRender() {
   s += `</g>`;
   svg.innerHTML = s;
   pmMinimap();
+  const zl = document.getElementById('pm-zl'); if (zl) zl.textContent = Math.round(k * 100) + '%';
   const qn = document.getElementById('pm-qn'); if (qn) qn.textContent = q ? d.cells.filter(c => pmMatch(c, q)).length + ' найдено' : '';
   if (PM.panel === 'props' || PM.panel === 'check') pmPanelRefresh();
 }
@@ -666,11 +804,16 @@ function pmBind() {
   svg.addEventListener('contextmenu', e => e.preventDefault());
   const mm = document.getElementById('pm-mm');
   mm.addEventListener('mousedown', e => { e.stopPropagation(); PM.mmDrag = true; pmMMGo(e); });
+  document.getElementById('pm-resize').addEventListener('mousedown', e => { e.preventDefault(); PM.resizing = true; e.target.classList.add('on'); });
+  pmTipBind();
   if (!PM.keysBound) {
-    window.addEventListener('mousemove', e => { if (PM.mmDrag) return pmMMGo(e); pmMove(e); });
+    window.addEventListener('mousemove', e => {
+      if (PM.resizing) { const w = document.getElementById('pm-side-wrap'); if (w) { const maxW = Math.min(560, w.getBoundingClientRect().right - document.getElementById('pm-wrap').getBoundingClientRect().left - 50 - 560); const nw = Math.max(260, Math.min(maxW, w.getBoundingClientRect().right - e.clientX)); w.style.width = nw + 'px'; PM.opt.sideW = nw; pmFitTop(); pmRender(); } return; }
+      if (PM.mmDrag) return pmMMGo(e); pmMove(e);
+    });
     window.addEventListener('mouseup', e => { PM.mmDrag = false; pmUp(e); });
     window.addEventListener('keydown', pmKey); window.addEventListener('keyup', e => { if (e.code === 'Space') PM.space = false; });
-    window.addEventListener('resize', () => pmRender());
+    window.addEventListener('resize', () => { pmSizeWrap(); pmFitTop(); pmRender(); document.querySelectorAll('.pm-menu.open').forEach(m => m.classList.remove('open')); });
     PM.keysBound = true;
   }
 }
@@ -695,7 +838,7 @@ function pmDown(e) {
   if (e.button === 0 && ld && now - ld.t < 380 && Math.hypot(e.clientX - ld.x, e.clientY - ld.y) < 6) { PM.lastDown = null; PM.drag = null; PM.box = null; return pmDbl(e); }
   PM.lastDown = { t: now, x: e.clientX, y: e.clientY };
   const p = pmPt(e), hit = pmHit(e);
-  if (e.button === 1 || e.button === 2 || PM.space || PM.tool === 'pan') { PM.drag = { pan: true, sx: e.clientX, sy: e.clientY, vx: PM.view.x, vy: PM.view.y }; return; }
+  if (e.button === 1 || e.button === 2 || PM.space || PM.tool === 'pan') { PM.drag = { pan: true, sx: e.clientX, sy: e.clientY, vx: PM.view.x, vy: PM.view.y }; document.getElementById('pm-canvas').classList.add('panning'); return; }
   const t = PM.tool;
   if (t === 'cell') {
     if (hit && hit.kind === 'c') { pmSelect('c:' + hit.id, e.shiftKey); return pmStartMove(p); }
@@ -705,12 +848,12 @@ function pmDown(e) {
     if (hit && hit.kind === 'e') { pmPush(); PM.data.edges = PM.data.edges.filter(x => x.id !== hit.id); return pmRender(); }
     if (hit && hit.kind === 'c') {
       if (!PM.linkFrom) { PM.linkFrom = hit.id; return pmRender(); }
-      if (PM.linkFrom !== hit.id) pmLink(PM.linkFrom, hit.id, e.shiftKey);
+      if (PM.linkFrom !== hit.id) pmLink(PM.linkFrom, hit.id, e.shiftKey ? 'ab' : (PM.linkMode || 'auto'));
       PM.linkFrom = e.ctrlKey ? hit.id : null; return pmRender();
     }
     PM.linkFrom = null; return pmRender();
   }
-  if (t === 'zone') { PM.zoneDraft = PM.zoneDraft || []; PM.zoneDraft.push([pmSnap(p.x), pmSnap(p.y)]); return pmRender(); }
+  if (t === 'zone') { PM.zoneDraft = PM.zoneDraft || []; PM.zoneDraft.push([pmSnap(p.x), pmSnap(p.y)]); pmPalette(); return pmRender(); }
   if (t === 'marker') {
     if (hit && hit.kind === 'm') { pmSelect('m:' + hit.id, e.shiftKey); return pmStartMove(p); }
     pmPush(); const m = { id: pmUid(), x: pmSnap(p.x), y: pmSnap(p.y), icon: PM.icon || '★', color: PM.iconColor || '#38bdf8', size: 22, text: '', rot: 0 };
@@ -732,7 +875,8 @@ function pmDown(e) {
 }
 function pmSelect(key, add) {
   if (add) PM.sel.has(key) ? PM.sel.delete(key) : PM.sel.add(key); else PM.sel = new Set([key]);
-  if (PM.panel !== 'props') pmPanel('props');
+  if (PM.panel !== 'props') pmPanel('props'); else pmPanelRefresh(true);
+  pmRender(); // выделение видно сразу по клику, без перетаскивания
 }
 function pmSelCells() { return [...PM.sel].filter(k => k[0] === 'c').map(k => pmCell(k.slice(2))).filter(Boolean); }
 function pmStartMove(p, pushed) {
@@ -776,6 +920,8 @@ function pmMove(e) {
 }
 function pmUp() {
   const dr = PM.drag; PM.drag = null;
+  const cv = document.getElementById('pm-canvas'); if (cv) cv.classList.remove('panning');
+  if (PM.resizing) { PM.resizing = false; const rz = document.getElementById('pm-resize'); if (rz) rz.classList.remove('on'); pmSaveOpt(); }
   if (!dr || !document.getElementById('pm-svg')) return;
   if (dr.box) {
     const b = PM.box, x0 = Math.min(b.x0, b.x1), x1 = Math.max(b.x0, b.x1), y0 = Math.min(b.y0, b.y1), y1 = Math.max(b.y0, b.y1);
@@ -855,9 +1001,18 @@ function pmNewCell(x, y, src) {
   c.id = pmNextId(region);
   PM.data.cells.push(c); return c;
 }
-function pmLink(a, b, oneway) {
-  if (PM.data.edges.some(e => (e.a === a && e.b === b) || (e.a === b && e.b === a))) return toast('Связь уже есть', 'err');
-  pmPush(); PM.data.edges.push({ id: pmUid(), a, b, mode: oneway ? 'ab' : 'auto', pts: [], curve: 0 });
+/* mode: auto | both | ab. Повторная связь между теми же клетками меняет режим существующей (например, делает её двусторонней). */
+function pmLink(a, b, mode) {
+  mode = mode === true ? 'ab' : mode || 'auto';
+  const ex = PM.data.edges.find(e => (e.a === a && e.b === b) || (e.a === b && e.b === a));
+  if (ex) {
+    const want = mode === 'ab' ? (ex.a === a ? 'ab' : 'ba') : mode;
+    const next = ex.mode === want && want !== 'both' ? 'both' : want;
+    if (ex.mode === next) return toast('Такая связь уже есть');
+    pmPush(); ex.mode = next; PM.sel = new Set(['e:' + ex.id]);
+    return toast(next === 'both' ? 'Связь стала двусторонней' : next === 'auto' ? 'Связь переведена в «Авто»' : 'Направление связи изменено');
+  }
+  pmPush(); PM.data.edges.push({ id: pmUid(), a, b, mode, pts: [], curve: 0 });
 }
 function pmDelete() {
   if (!PM.sel.size) return;
@@ -1098,7 +1253,7 @@ function pmPanel(name) {
   PM.panel = name;
   const side = document.getElementById('pm-side'); if (!side) return;
   const tabs = [['props', 'Свойства'], ['types', 'Типы'], ['fields', 'Поля'], ['regions', 'Зоны'], ['marker', 'Маркер'], ['check', 'Проверка'], ['sim', 'Симуляция'], ['view', 'Вид'], ['versions', 'Версии']];
-  side.innerHTML = `<div class="pm-tabs">${tabs.map(([k, t]) => `<button class="pm-tab ${k === name ? 'on' : ''}" onclick="pmPanel('${k}')">${t}</button>`).join('')}</div><div id="pm-pbody"></div>`;
+  side.innerHTML = `<div class="pm-tabs">${tabs.map(([k, t]) => `<button class="pm-tab ${k === name ? 'on' : ''}" title="${t}" onclick="pmPanel('${k}')">${pmSvg(k, 'i')}<span>${t}</span></button>`).join('')}</div><div id="pm-pbody"></div>`;
   pmPanelRefresh(true);
 }
 function pmPanelRefresh(force) {
@@ -1233,7 +1388,7 @@ function pmPTypes(box) {
       <input value="${pmEsc(t.short)}" style="flex:none;width:40px;padding:6px" title="Значок в кружке" onchange="pmTypeSet(${i},'short',this.value)">
       <input value="${pmEsc(t.key)}" style="padding:6px" onchange="pmTypeRename(${i},this.value)">
       <input type="number" min="0" value="${PM.data.targets[t.key] ?? ''}" placeholder="цель" title="Цель (сколько должно быть)" style="flex:none;width:58px;padding:6px" onchange="pmTarget('${pmJs(t.key)}',this.value)">
-      <button class="icon-btn" title="Для новых клеток" onclick="PM.newType='${pmJs(t.key)}';pmPanelRefresh(true)">✎</button>
+      <button class="icon-btn" title="Для новых клеток" onclick="PM.newType='${pmJs(t.key)}';pmPanelRefresh(true);pmPalette()">✎</button>
       <button class="icon-btn danger" title="Удалить тип" onclick="pmTypeDel(${i})">×</button></div>`).join('')}
     <button class="btn btn-g" style="width:100%;margin-top:6px" onclick="pmTypeAdd()">+ Тип клетки</button>
     <h4>Негативные и позитивные типы (для веток и симуляции)</h4>

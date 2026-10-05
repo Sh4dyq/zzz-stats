@@ -44,7 +44,7 @@ document.querySelectorAll('.nav-a[data-page]').forEach(a=>{
 
 async function go(page){
   localStorage.setItem('zzz_page',page);
-  {const pc=document.getElementById('page-content');if(pc){pc.style.maxWidth='';pc.style.padding='';}}
+  {const pc=document.getElementById('page-content');if(pc){pc.style.maxWidth='';pc.style.padding='';}const ar=document.getElementById('admin-area');if(ar)ar.style.overflow='';}
   document.querySelectorAll('.nav-a[data-page]').forEach(a=>a.classList.toggle('on',a.dataset.page===page));
   document.getElementById('page-title').textContent={dashboard:'Дашборд',tournaments:'Турниры',characters:'Персонажи',signatures:'Амплификаторы',players:'Игроки',matches:'Матчи',weights:'Аналитика',rating:'Рейтинг',partymap:'Карта Party'}[page]||page;
   await refreshData();
