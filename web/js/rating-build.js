@@ -3,7 +3,6 @@
    Формула и тиры — web/js/rating.js, спецификация — docs/rating-system.md. */
 (function (g) {
   'use strict';
-  const Rating = g.Rating;
 
   const norm = s => String(s || '').toLowerCase().replace(/[^a-zа-яё0-9]/gi, '');
 
@@ -71,9 +70,11 @@
 
   /** Полный пересчёт сезона.
    *  Вход: tournaments (с rating_category), players, encounters, cache = [{tournament_id, json}],
-   *        config — патч констант из rating_config, adjustments — ручные правки [{nickname,delta,reason}]
+   *        config — патч констант из rating_config, adjustments — ручные правки [{nickname,delta,reason}],
+   *        engine — движок: Rating (сезонный, по умолчанию) или RatingGlobal
    *  Выход: { rows, season } — rows готовы для записи в player_ratings. */
-  function compute({ tournaments, players, encounters, cache, config, adjustments }) {
+  function compute({ tournaments, players, encounters, cache, config, adjustments, engine }) {
+    const Rating = engine || g.Rating;
     Rating.configure(config || null);
     const nickOf = id => (players.find(p => p.id === id) || {}).nickname || null;
     const dbNick = {}, idOf = {};

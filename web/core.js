@@ -44,10 +44,11 @@ document.querySelectorAll('.nav-a[data-page]').forEach(a=>{
 
 async function go(page){
   localStorage.setItem('zzz_page',page);
+  {const pc=document.getElementById('page-content');if(pc){pc.style.maxWidth='';pc.style.padding='';}}
   document.querySelectorAll('.nav-a[data-page]').forEach(a=>a.classList.toggle('on',a.dataset.page===page));
-  document.getElementById('page-title').textContent={dashboard:'Дашборд',tournaments:'Турниры',characters:'Персонажи',signatures:'Амплификаторы',players:'Игроки',matches:'Матчи',weights:'Аналитика',rating:'Рейтинг'}[page]||page;
+  document.getElementById('page-title').textContent={dashboard:'Дашборд',tournaments:'Турниры',characters:'Персонажи',signatures:'Амплификаторы',players:'Игроки',matches:'Матчи',weights:'Аналитика',rating:'Рейтинг',partymap:'Карта Party'}[page]||page;
   await refreshData();
-  const fn={dashboard:pgDashboard,tournaments:pgTournaments,characters:pgCharacters,signatures:pgSignatures,players:pgPlayers,matches:pgMatches,weights:pgWeights,rating:pgRating}[page];
+  const fn={dashboard:pgDashboard,tournaments:pgTournaments,characters:pgCharacters,signatures:pgSignatures,players:pgPlayers,matches:pgMatches,weights:pgWeights,rating:pgRating,partymap:pgPartyMap}[page];
   if(fn)await fn();
 }
 
