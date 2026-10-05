@@ -485,7 +485,7 @@ function pmShell() {
         <button class="pm-btn pri m" onclick="pmSave()" data-tip="Сохранить · Ctrl+S">${pmSvg('save', 'i')}<span class="lbl">Сохранить</span></button>
         <div class="pm-menu" id="pm-m-file"><button class="pm-btn m" onclick="pmMenu('pm-m-file',this)" data-tip="Файл">${pmSvg('file', 'i')}<span class="lbl">Файл</span></button><div>
           <a onclick="pmSaveAs()">Сохранить как копию…</a><a onclick="pmSnapshot()">Сохранить версию…</a><a onclick="pmPicker()">Список карт</a><hr>
-          <a onclick="pmExportJSON()">Скачать JSON</a><a onclick="pmImportJSON()">Загрузить JSON…</a>
+          <a onclick="pmExportCompact()">Компактный экспорт для чата</a><a onclick="pmExportJSON()">Скачать JSON</a><a onclick="pmImportJSON()">Загрузить JSON…</a>
           <a onclick="pmExportTSV()">Копировать TSV для «Клеток карты»</a><a onclick="pmImportTSV()">Вставить TSV из листа…</a>
           <a onclick="pmExportSVG()">Скачать SVG</a><a onclick="pmExportPNG()">Скачать PNG</a><hr>
           <a onclick="pmDeleteMap()" style="color:#f87171">Удалить карту</a></div></div>
@@ -1158,54 +1158,87 @@ function pmGoView(i) { const v = PM.data.views[i]; if (!v) return; PM.view = { x
 function pmDelView(i) { pmPush(); PM.data.views.splice(i, 1); pmPanelRefresh(true); }
 
 /* ---------- симуляция прохода ----------
-   Все игроки стартуют на Start, ходят по очереди, бросок 1..кубик, шаги по направлению движения.
-   На развилке — стратегия. Этап заканчивается, когда кто-то проходит Start (как в правилах).
-   Считаем: раунды до конца этапа, остановки на клетках (тепловая карта), долю по типам. */
+   Партия из N этапов. Игроки ходят по очереди, бросок 1..кубик, шаги по направлению движения, на развилке — стратегия.
+   Этап заканчивается, когда кто-то проходит Start. Правило «мин. шагов»: проход Start засчитывается как конец этапа,
+   только если игрок прошёл за этап не меньше N шагов (иначе — обычный проход).
+   Между этапами каждый игрок с вероятностью stay остаётся на месте, иначе возвращается на Start.
+   Считаем: раунды по этапам, этапы, закончившиеся слишком быстро, остановки по клеткам/типам/регионам. */
 function pmRunSim(o) {
   const d = PM.data, start = d.cells.find(c => c.type === 'Start');
   if (!start) return { err: 'Нет клетки Start' };
   const adj = pmAdj(), und = {}, toS = pmToStart(adj), neg = new Set(d.flow.neg || []), cellById = Object.fromEntries(d.cells.map(c => [c.uid, c]));
   d.edges.forEach(e => { (und[e.a] = und[e.a] || []).push(e.b); (und[e.b] = und[e.b] || []).push(e.a); });
   if (!(adj[start.uid] || []).length) return { err: 'Из Start нет выхода по направлению движения' };
-  const land = {}, rounds = [], R = Math.random;
+  const stages = Math.max(1, o.stages || 1), stay = Math.max(0, Math.min(1, o.stay || 0)), minSteps = o.minSteps || 0, endRule = o.endRule || 'any';
+  const regNames = [...new Set(d.cells.map(c => c.region).filter(Boolean))], needRegs = regNames.length;
+  const land = {}, rounds = [], byStage = Array.from({ length: stages }, () => []), R = Math.random;
   const pick = (opts, prev) => {
-    let o2 = opts.length > 1 && prev ? opts.filter(v => v !== prev) : opts; if (!o2.length) o2 = opts; // не разворачиваться назад на двусторонних
+    let o2 = opts.length > 1 && prev ? opts.filter(v => v !== prev) : opts; if (!o2.length) o2 = opts;
     if (o2.length === 1) return o2[0];
     const st = o.strategy === 'mix' ? (R() < .5 ? 'short' : 'random') : o.strategy;
     if (st === 'short') { const best = Math.min(...o2.map(v => toS[v] ?? 1e9)); const b = o2.filter(v => (toS[v] ?? 1e9) === best); return b[Math.floor(R() * b.length)]; }
     if (st === 'safe') { const s = o2.filter(v => !neg.has(cellById[v].type)); const pool = s.length ? s : o2; return pool[Math.floor(R() * pool.length)]; }
     return o2[Math.floor(R() * o2.length)];
   };
-  let stuck = 0, totalLand = 0;
+  let stuck = 0, totalLand = 0, quick = 0, winnerStayed = 0, laterStages = 0, passes = 0, fullPasses = 0;
   for (let t = 0; t < o.trials; t++) {
-    const pos = Array(o.players).fill(start.uid), prevs = Array(o.players).fill(null); let done = 0;
-    for (let r = 1; r <= 80 && !done; r++) {
-      for (let pl = 0; pl < o.players && !done; pl++) {
-        let steps = 1 + Math.floor(R() * o.die), u = pos[pl], prev = prevs[pl], left = false;
-        while (steps-- > 0) {
-          let opts = (adj[u] || []);
-          if (!opts.length) { stuck++; opts = (und[u] || []).filter(v => v !== prev); if (!opts.length) break; } // тупик по направлению — идём по любой связи
-          const nx = pick(opts, prev); prev = u; u = nx; left = true;
-          if (u === start.uid) { done = r; break; }
+    const pos = Array(o.players).fill(start.uid), prevs = Array(o.players).fill(null), stayed = Array(o.players).fill(false), seen = Array.from({ length: o.players }, () => new Set()), lapOf = Array(o.players).fill(0), lapB = { n: 0 };
+    for (let sIdx = 0; sIdx < stages; sIdx++) {
+      const walked = Array(o.players).fill(0); let done = 0, winner = -1;
+      if (endRule === 'regions_stage') seen.forEach(x => x.clear());
+      for (let r = 1; r <= 80 && !done; r++) {
+        for (let pl = 0; pl < o.players && !done; pl++) {
+          let steps = 1 + Math.floor(R() * o.die), u = pos[pl], prev = prevs[pl], left = false;
+          while (steps-- > 0) {
+            let opts = (adj[u] || []);
+            if (!opts.length) { stuck++; opts = (und[u] || []).filter(v => v !== prev); if (!opts.length) break; }
+            const nx = pick(opts, prev); prev = u; u = nx; left = true; walked[pl]++;
+            const rg = cellById[u] && cellById[u].region; if (rg) seen[pl].add(rg);
+            if (u === start.uid) {
+              const full = seen[pl].size >= needRegs;
+              if (endRule === 'lap_stage') {
+                // круг игрока: проход Start закрывает его круг (бонус круга — если 4/4); этап завершает только тот, чей круг начат в этом этапе и собран полностью
+                passes++; if (full) fullPasses++;
+                const ends = full && lapOf[pl] === sIdx; lapOf[pl] = sIdx; seen[pl].clear();
+                if (ends) { done = r; winner = pl; lapOf[pl] = sIdx + 1; break; }
+                continue;
+              }
+              if (endRule.startsWith('lap')) { passes++; if (full) fullPasses++; seen[pl].clear(); }
+              if (walked[pl] >= minSteps && (endRule === 'any' || endRule === 'lap_any' || full)) { done = r; winner = pl; seen[pl].clear(); break; }
+            }
+          }
+          pos[pl] = u; prevs[pl] = prev;
+          if (!done && left) { land[u] = (land[u] || 0) + 1; totalLand++; }
         }
-        pos[pl] = u; prevs[pl] = prev;
-        if (!done && left) { land[u] = (land[u] || 0) + 1; totalLand++; }
       }
+      const rr = done || 80; rounds.push(rr); byStage[sIdx].push(rr);
+      if (sIdx > 0) { laterStages++; if (rr <= 2) quick++; if (winner >= 0 && stayed[winner]) winnerStayed++; }
+      // переход этапа: часть игроков остаётся на месте, остальные — на Start
+      for (let pl = 0; pl < o.players; pl++) { stayed[pl] = R() < stay; if (!stayed[pl]) { pos[pl] = start.uid; prevs[pl] = null; if (endRule === 'lap_stage') { lapOf[pl] = sIdx + 1; seen[pl].clear(); } } }
     }
-    rounds.push(done || 80);
   }
   rounds.sort((a, b) => a - b);
   const q = p => rounds[Math.min(rounds.length - 1, Math.floor(rounds.length * p))];
-  const byType = {}; Object.entries(land).forEach(([u, n]) => { const c = cellById[u]; if (c) byType[c.type] = (byType[c.type] || 0) + n; });
+  const byType = {}, byRegion = {}, cellsByRegion = {};
+  d.cells.forEach(c => { if (c.type !== 'Start') cellsByRegion[c.region || '—'] = (cellsByRegion[c.region || '—'] || 0) + 1; });
+  Object.entries(land).forEach(([u, n]) => { const c = cellById[u]; if (!c) return; byType[c.type] = (byType[c.type] || 0) + n; byRegion[c.region || '—'] = (byRegion[c.region || '—'] || 0) + n; });
   Object.keys(land).forEach(u => land[u] /= totalLand || 1);
-  return { avg: rounds.reduce((s, x) => s + x, 0) / rounds.length, p10: q(.1), p50: q(.5), p90: q(.9), land, byType, totalLand, stuck, o };
+  const avg = a => a.reduce((s, x) => s + x, 0) / (a.length || 1);
+  return {
+    avg: avg(rounds), p10: q(.1), p50: q(.5), p90: q(.9), land, byType, byRegion, cellsByRegion, totalLand, stuck, o,
+    stageAvg: byStage.map(avg), quick: laterStages ? quick / laterStages : 0, winnerStayed: laterStages ? winnerStayed / laterStages : 0, fullLaps: passes ? fullPasses / passes : null
+  };
 }
 function pmSimRun() {
-  const o = { players: +document.getElementById('pm-s-pl').value || 6, die: +document.getElementById('pm-s-die').value || 8, strategy: document.getElementById('pm-s-st').value, trials: Math.min(20000, +document.getElementById('pm-s-tr').value || 2000) };
+  const g = id => document.getElementById(id);
+  const o = {
+    players: +g('pm-s-pl').value || 6, die: +g('pm-s-die').value || 8, strategy: g('pm-s-st').value, trials: Math.min(20000, +g('pm-s-tr').value || 2000),
+    stages: Math.max(1, Math.min(6, +g('pm-s-sg').value || 4)), stay: Math.max(0, Math.min(100, +g('pm-s-stay').value || 0)) / 100, endRule: g('pm-s-end').value
+  };
   PM.simOpt = o;
   const r = pmRunSim(o);
   if (r.err) return toast(r.err, 'err');
-  PM.sim = r; PM.overlay = 'heat'; const ov = document.getElementById('pm-overlay'); if (ov) ov.value = 'heat';
+  PM.sim = r; PM.overlay = 'heat'; const ov = g('pm-overlay'); if (ov) ov.value = 'heat';
   pmRender(); pmPanelRefresh(true);
 }
 
@@ -1488,23 +1521,56 @@ function pmPCheck(box) {
     <h4>Количество по типам (факт / цель)</h4>${pmTypeCounts()}`;
 }
 function pmPSim(box) {
-  const o = PM.simOpt || { players: 6, die: 8, strategy: 'random', trials: 2000 }, r = PM.sim;
+  const o = Object.assign({ players: 6, die: 8, strategy: 'random', trials: 2000, stages: 4, stay: .45, endRule: 'any' }, PM.simOpt || {}), r = PM.sim;
   const top = r ? Object.entries(r.land).sort((a, b) => b[1] - a[1]).slice(0, 8) : [];
   const types = r ? Object.entries(r.byType).sort((a, b) => b[1] - a[1]) : [];
+  const totalCells = r ? Object.values(r.cellsByRegion).reduce((s, x) => s + x, 0) : 1;
   box.innerHTML = `<div class="pm-mini" style="margin-bottom:10px">Боты бросают кубик и ходят по направлению движения. Этап заканчивается, когда кто-то проходит Start. Предметы, телепорты и эффекты клеток не учитываются — только геометрия карты.</div>
     <div class="pm-row"><div class="pm-f"><label>Игроков</label><input id="pm-s-pl" type="number" min="1" max="8" value="${o.players}" onchange="document.getElementById('pm-s-die').value=+this.value<=4?6:+this.value<=6?8:10"></div>
-    <div class="pm-f"><label>Кубик</label><select id="pm-s-die">${[4, 6, 8, 10, 12].map(n => `<option value="${n}" ${o.die === n ? 'selected' : ''}>d${n}</option>`).join('')}</select></div></div>
+    <div class="pm-f"><label>Кубик</label><select id="pm-s-die">${[4, 6, 8, 10, 12].map(n => `<option value="${n}" ${o.die === n ? 'selected' : ''}>d${n}</option>`).join('')}</select></div>
+    <div class="pm-f"><label>Этапов</label><input id="pm-s-sg" type="number" min="1" max="6" value="${o.stages}"></div></div>
+    <div class="pm-row"><div class="pm-f"><label>Остаются на месте, %</label><input id="pm-s-stay" type="number" min="0" max="100" step="5" value="${Math.round(o.stay * 100)}" title="Доля игроков, которые после этапа не телепортируются на Start"></div>
+    <div class="pm-f"><label>Кто может закончить этап</label><select id="pm-s-end" title="Регионы — этап завершает проход Start только после посещения всех регионов">${[['any', 'Любой, кто прошёл Start'], ['regions_stage', 'Посетил все регионы за этап'], ['regions_keep', 'Посетил все регионы (копится до использования)'], ['lap_any', 'Круги игроков: этап — любой проход Start'], ['lap_full', 'Круги игроков: этап — только полный круг'], ['lap_stage', 'Круги + этап закрывает только круг этого этапа (4/4)']].map(([k, l]) => `<option value="${k}" ${o.endRule === k ? 'selected' : ''}>${l}</option>`).join('')}</select></div></div>
     <div class="pm-row"><div class="pm-f"><label>Развилки</label><select id="pm-s-st">${[['random', 'Случайно'], ['short', 'Кратчайший к Start'], ['safe', 'Избегать негативных'], ['mix', '50/50 случайно/кратчайший']].map(([k, l]) => `<option value="${k}" ${o.strategy === k ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
     <div class="pm-f"><label>Прогонов</label><input id="pm-s-tr" type="number" min="100" max="20000" step="100" value="${o.trials}"></div></div>
     <button class="btn btn-y" style="width:100%;margin-bottom:12px" onclick="pmSimRun()">Запустить симуляцию</button>
-    ${r ? `<h4 style="margin-top:0">Раундов до конца этапа</h4>
+    ${r ? `<h4 style="margin-top:0">Раундов на этап</h4>
       <div style="font-family:'JetBrains Mono';font-size:22px;color:#fff">${r.avg.toFixed(1)} <span class="pm-mini">в среднем</span></div>
-      <div class="pm-mini">10% быстрых: ≤${r.p10} · медиана: ${r.p50} · 10% долгих: ≥${r.p90}${r.stuck ? ` · <span style="color:#f5c842">тупиков по направлению: ${r.stuck} (там боты шли по любой связи)</span>` : ''}</div>
+      <div class="pm-mini">10% быстрых: ≤${r.p10} · медиана: ${r.p50} · 10% долгих: ≥${r.p90}</div>
+      ${r.stageAvg.length > 1 ? `<div class="pm-mini" style="margin-top:4px">По этапам: ${r.stageAvg.map((x, i) => `${i + 1}-й — ${x.toFixed(1)}`).join(' · ')}</div>
+      <div class="pm-mini" style="margin-top:4px;color:${r.quick > .15 ? '#f5c842' : 'var(--sub)'}">Этапы после первого, закончившиеся за 1–2 раунда: <b>${Math.round(r.quick * 100)}%</b> · закончил оставшийся на месте: <b>${Math.round(r.winnerStayed * 100)}%</b></div>` : ''}
+      ${r.stuck ? `<div class="pm-mini" style="color:#f5c842">Тупиков по направлению: ${r.stuck} (там боты шли по любой связи)</div>` : ''}
+      <h4>Остановки по регионам (доля / доля клеток)</h4>
+      ${Object.entries(r.cellsByRegion).map(([g, n]) => { const sh = (r.byRegion[g] || 0) / (r.totalLand || 1), cs = n / totalCells, ratio = sh / (cs || 1); const reg = pmRegion(g); return `<div style="margin-bottom:5px"><div style="display:flex;justify-content:space-between;font-size:12px"><span><span class="pm-dot" style="display:inline-block;background:${reg ? reg.color : '#888'};margin-right:6px"></span>${pmEsc(g)}</span><span style="color:${ratio < .6 ? '#f5c842' : 'inherit'}">${(sh * 100).toFixed(1)}% / ${(cs * 100).toFixed(0)}%</span></div><div class="pm-bar" style="width:${Math.min(100, sh * 250)}%;background:${reg ? reg.color : '#888'}"></div></div>`; }).join('')}
       <h4>Остановки по типам</h4>
       ${types.map(([t, n]) => `<div style="margin-bottom:5px"><div style="display:flex;justify-content:space-between;font-size:12px"><span><span class="pm-dot" style="display:inline-block;background:${pmType(t).color};margin-right:6px"></span>${pmEsc(t)}</span><span>${(n / r.totalLand * 100).toFixed(1)}%</span></div><div class="pm-bar" style="width:${n / types[0][1] * 100}%;background:${pmType(t).color}"></div></div>`).join('')}
       <h4>Самые посещаемые клетки</h4>
       <table class="pm-tbl">${top.map(([u, p]) => { const c = pmCell(u); return c ? `<tr onclick="PM.sel=new Set(['c:${u}']);pmCenterOn(${c.x},${c.y})"><td>${pmEsc(c.id)}</td><td>${pmEsc(c.type)}</td><td style="text-align:right">${(p * 100).toFixed(1)}%</td></tr>` : ''; }).join('')}</table>
       <div class="pm-mini" style="margin-top:6px">На холсте включено наложение «Тепловая карта»: число в клетке — % остановок.</div>` : ''}`;
+}
+/* Компактный экспорт: одна строка на клетку — удобно отправить в чат для анализа (в 10–15 раз меньше JSON). */
+function pmCompact() {
+  const d = PM.data, dirs = pmDirs(), out = {};
+  d.edges.forEach(e => {
+    const r = dirs[e.id], a = pmCell(e.a), b = pmCell(e.b); if (!a || !b) return;
+    if (r.both) { (out[e.a] = out[e.a] || []).push(b.id + '↔'); (out[e.b] = out[e.b] || []).push(a.id + '↔'); }
+    else { (out[r.f] = out[r.f] || []).push(pmCell(r.t).id); }
+  });
+  const ord = d.cells.slice().sort((a, b) => (a.type === 'Start' ? -1 : b.type === 'Start' ? 1 : 0) || a.id.localeCompare(b.id, 'ru', { numeric: true }));
+  const lines = [`# ${PM.name} · клеток ${d.cells.length} · связей ${d.edges.length} · выход из Start: ${(d.flow.exits || []).map(u => (pmCell(u) || {}).id).join(',')} · направление по кругу: ${d.flow.on ? 'вкл' : 'выкл'}`,
+    '# id|тип|регион|x,y|куда можно пойти (↔ — в обе стороны)|прочее'];
+  ord.forEach(c => {
+    const extra = [c.label && 'подпись=' + c.label, c.gimmick && 'гиммик=' + c.gimmick, c.variants && c.type === 'Гибрид' && 'варианты=' + c.variants, c.anomaly && 'аномалия', c.note && 'заметка=' + c.note,
+      ...Object.entries(c.props || {}).filter(([, v]) => v !== '' && v != null).map(([k, v]) => k + '=' + v)].filter(Boolean).join('; ').replace(/[\n|]/g, ' ');
+    lines.push([c.id, c.type, c.region || '—', c.x + ',' + c.y, (out[c.uid] || []).join(' '), extra].join('|'));
+  });
+  if (d.markers.length) lines.push('# маркеры: ' + d.markers.map(m => (m.icon || '') + (m.text ? ' ' + m.text : '') + '@' + (m.cell ? (pmCell(m.cell) || {}).id : m.x + ',' + m.y)).join('; '));
+  return lines.join('\n');
+}
+async function pmExportCompact() {
+  const t = pmCompact();
+  try { await navigator.clipboard.writeText(t); toast('Компактная карта скопирована (' + t.split('\n').length + ' строк) — вставь в чат'); }
+  catch (e) { pmDownload((PM.name || 'map') + '.txt', new Blob([t], { type: 'text/plain' })); }
 }
 function pmPView(box) {
   const o = PM.opt, cb = (k, t) => `<label class="cb-label" style="margin-bottom:8px"><input type="checkbox" ${o[k] ? 'checked' : ''} onchange="PM.opt.${k}=this.checked;pmSaveOpt();pmRender()"> ${t}</label>`;
