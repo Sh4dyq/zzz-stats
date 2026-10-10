@@ -40,15 +40,25 @@
     const box = $('#prompt'); if (!box || MP.busy) return;
     if (!list || !list.length) { if (box.dataset.mpWait) { box.innerHTML = ''; delete box.dataset.mpWait; } return; }
     box.dataset.mpWait = '1'; box.className = 'card prompt';
-    box.innerHTML = `<h3>Ждём…</h3><p class="muted">${list.map(w => NP.App.esc(w.player === null || w.player === undefined ? 'Ведущий' : nameOf(w.player)) + ' ' + (KIND[w.kind] || '')).join('<br>')}</p>`;
+    const esc = NP.App.esc;
+    // открытый выбор (событие, эффект региона) видят все: заголовок и варианты, без кнопок
+    const pub = w => w.pub ? `<div class="mp-pub"><b>${esc(w.pub.title)}</b><ul>${w.pub.options.map(o => `<li>${esc(o.label)}${o.hint ? ` <span class="muted">— ${esc(o.hint)}</span>` : ''}</li>`).join('')}</ul></div>` : '';
+    box.innerHTML = `<h3>Ждём…</h3><p class="muted">${list.map(w => esc(w.player === null || w.player === undefined ? 'Ведущий' : nameOf(w.player)) + ' ' + (KIND[w.kind] || '')).join('<br>')}</p>${list.map(pub).join('')}`;
+  }
+
+  // чужая карточка: окном, если экран свободен, иначе всплывающим уведомлением
+  function showOther(spec) {
+    if (!MP.busy && $('#modal').classList.contains('hidden')) NP.App.notice(spec);
+    else NP.App.toast(`<b>${NP.App.esc(spec.title)}</b><br>«${NP.App.esc(spec.name)}» — ${NP.App.esc(spec.text)}`, '', 8000);
   }
 
   // ---------- хост ----------
   function hostIO(g, base) {
     let localWait = null, timer = 0;
     const pushState = () => { if (timer) return; timer = setTimeout(() => { timer = 0; const S = Object.assign({}, g.S, { log: g.S.log.slice(-LOG_TAIL) }); send({ t: 'state', S, seats: MP.seats, hostCid: MP.hostCid, wait: waits() }); if (!MP.busy) showWaiting(waits().filter(w => ownerOf(w.player) !== cid)); }, 120); };
-    const waits = () => Object.values(MP.pending).map(p => ({ player: p.spec.player, kind: p.kind })).concat(localWait ? [localWait] : []);
-    const local = (kind, fn, spec) => { localWait = { player: spec.player, kind }; MP.busy = true; pushState(); return fn(spec).then(v => { localWait = null; MP.busy = false; pushState(); return v; }); };
+    const pubOf = spec => spec.public ? { title: spec.title, options: spec.options.filter(o => !o.disabled).map(o => ({ label: o.label, hint: o.hint || '' })) } : undefined;
+    const waits = () => Object.values(MP.pending).map(p => ({ player: p.spec.player, kind: p.kind, pub: pubOf(p.spec) })).concat(localWait ? [localWait] : []);
+    const local = (kind, fn, spec) => { localWait = { player: spec.player, kind, pub: pubOf(spec) }; MP.busy = true; pushState(); return fn(spec).then(v => { localWait = null; MP.busy = false; pushState(); return v; }); };
     const remote = (kind, spec) => new Promise(res => {
       const id = rid(), to = ownerOf(spec.player);
       MP.pending[id] = { to, kind, spec, res: v => { delete MP.pending[id]; pushState(); res(v); } };
@@ -60,7 +70,12 @@
       wait: spec => ownerOf(spec.player) === cid ? local('wait', base.wait, spec) : remote('wait', spec),
       notice: spec => { // глобальные события и итоги событий видят все; ждём только «хозяина» карточки
         send({ t: 'show', spec, except: ownerOf(spec.player) });
-        return ownerOf(spec.player) === cid ? local('notice', base.notice, spec) : remote('notice', spec);
+        if (ownerOf(spec.player) === cid) return local('notice', base.notice, spec);
+        showOther(spec); return remote('notice', spec); // хост тоже видит чужую карточку
+      },
+      announce: spec => { // карточка для всех без ожидания (активация региона)
+        send({ t: 'show', spec, except: ownerOf(spec.player) });
+        if (ownerOf(spec.player) !== cid) showOther(spec);
       },
       fight: spec => {
         const seats = spec.kind === 'duels' ? [...new Set(spec.pairs.flat())] : spec.players;
@@ -143,7 +158,7 @@
         NP.App.renderFight(m.spec, v => done('fres', v), { mine: mySeats() });
       }
     } else if (m.t === 'close') { if (cur && cur.rid === m.rid) { NP.App.closeModal(); cur = null; MP.busy = false; } }
-    else if (m.t === 'show') { if (m.except !== cid && !cur) NP.App.notice(m.spec); }
+    else if (m.t === 'show') { if (m.except !== cid) showOther(m.spec); }
     else if (m.t === 'over') { NP.App.view(m.S); NP.App.gameOver(m.S); }
   }
   async function join(name, room) {

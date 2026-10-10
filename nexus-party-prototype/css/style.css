@@ -396,3 +396,38 @@ select:focus-visible, input:focus-visible { outline: none; border-color: var(--a
 .mp-seats .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; }
 .fight-wait { margin-top: 8px; }
 @media (max-width: 600px) { .mp-card { margin: 14px 16px 0; } }
+
+/* --- правки после плейтеста Р1 --- */
+/* всплывающие уведомления: очки, предметы, броски, Казино, Гача, регионы */
+#toasts { position: fixed; right: 14px; bottom: 14px; z-index: 60; display: flex; flex-direction: column; gap: 6px; max-width: min(380px, calc(100vw - 28px)); pointer-events: none; }
+.toast { pointer-events: auto; cursor: pointer; background: var(--panel2); border: 1px solid var(--line2); border-left: 4px solid var(--pc, var(--gold)); border-radius: var(--radius-s); padding: 8px 12px; box-shadow: var(--shadow); font-size: 13px; animation: toastIn .25s ease-out; transition: opacity .4s, transform .4s; }
+.toast.out { opacity: 0; transform: translateX(20px); }
+@keyframes toastIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+/* подсказка клетки при наведении */
+.cell-tip { position: absolute; z-index: 20; max-width: 280px; pointer-events: none; background: rgba(17, 17, 20, .96); border: 1px solid var(--line2); border-radius: var(--radius-s); padding: 8px 10px; font-size: 12.5px; box-shadow: var(--shadow); }
+.cell-tip .ct-h { font-size: 14px; margin-bottom: 3px; }
+.cell-tip .ct-d { color: var(--text); }
+.cell-tip .ct-m { color: var(--muted); margin-top: 3px; }
+.cell-tip .ct-anom { color: var(--anom); }
+/* путь хода и показ фишки */
+.move-path { fill: none; stroke: var(--gold); stroke-width: 7; stroke-linecap: round; stroke-linejoin: round; opacity: .85; filter: drop-shadow(0 0 6px rgba(245, 200, 66, .6)); }
+.move-dot { fill: var(--gold); }
+.focus-ring { fill: none; stroke: var(--gold); stroke-width: 4; animation: focusPulse .6s ease-in-out 3; }
+@keyframes focusPulse { 50% { stroke-width: 9; opacity: .4; } }
+.edge.both { stroke-dasharray: none; stroke: #55627f; }
+.edge-tick { stroke: none; fill: none; }
+#players .pl { cursor: pointer; }
+/* бонус за модификаторы галочками */
+.fight-row { grid-template-columns: minmax(0, 1fr) 120px; }
+.fight-row .mod-checks, .fight-row .bonus { grid-column: 1 / -1; }
+.mod-checks { display: flex; flex-wrap: wrap; gap: 6px; }
+.mod-cb { display: inline-flex; align-items: center; gap: 6px; padding: 4px 8px; border: 1px solid var(--line2); border-radius: var(--radius-s); background: var(--panel2); font-size: 12px; cursor: pointer; }
+.mod-cb:has(input:checked) { border-color: var(--ok); background: rgba(70, 211, 105, .12); }
+.mod-cb b { color: var(--gold); }
+/* открытый выбор у ожидающих игроков */
+.mp-pub { margin-top: 8px; padding: 8px 10px; border: 1px solid var(--line2); border-radius: var(--radius-s); background: var(--panel2); }
+.mp-pub ul { margin: 6px 0 0; padding-left: 18px; }
+/* клетки в памятке */
+.rules-cells { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 8px; margin: 10px 0; }
+.rc-row { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; }
+.rc-row .lg-c { flex: none; display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; color: #111; font-weight: 800; font-size: 12px; }

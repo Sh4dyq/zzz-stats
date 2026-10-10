@@ -3,7 +3,7 @@
   const NP = window.NP, $ = s => document.querySelector(s);
   const MODE = document.body.dataset.mode === 'demo' ? 'demo' : 'full';
   const SAVE_KEY = MODE === 'demo' ? 'np_demo_save_v1' : 'np_proto_save_v1';
-  let game = null, ui = { pickCells: null, onPick: null }, raf = 0;
+  let game = null, ui = { pickCells: null, onPick: null }, raf = 0, seenT = null;
   const mode = MODE;
   const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const P = i => game.S.players[i];
@@ -12,6 +12,7 @@
 
   // ---------- лобби ----------
   function lobby() {
+    seenT = null;
     $('#lobby').classList.remove('hidden'); $('#game').classList.add('hidden');
     const opt = (sel, vals, def, fmt) => { $(sel).innerHTML = vals.map(v => `<option value="${v}" ${v === def ? 'selected' : ''}>${fmt ? fmt(v) : v}</option>`).join(''); };
     opt('#cfgPlayers', [2, 3, 4, 5, 6, 7, 8], 4);
@@ -53,7 +54,7 @@
   // ---------- запуск ----------
   function play(S, wrapIO) { // wrapIO — обёртка мультиплеера (хост), иначе игра за одним экраном
     $('#lobby').classList.add('hidden'); $('#game').classList.remove('hidden'); closeModal();
-    const g = new NP.Game(null, S); game = g;
+    const g = new NP.Game(null, S); game = g; seenT = null;
     g.io = wrapIO ? wrapIO(g, makeIO(g)) : makeIO(g);
     store.set(S);
     update();
@@ -68,11 +69,28 @@
       fight: spec => new Promise(res => { if (live()) renderFight(spec, res); }),
       eventCard: spec => new Promise(res => { if (live()) renderEvent(spec, res); }),
       notice: spec => new Promise(res => { if (!live()) return; const box = openModal('notice'); box.innerHTML = `<div class="notice-banner"><span class="notice-ic" aria-hidden="true">${spec.icon || '🌐'}</span><div><div class="ev-kind">${esc(spec.title)}</div><h2>${esc(spec.name)}</h2></div></div><p class="notice-text">${esc(spec.text)}</p><div class="row end"><button class="btn primary" id="ntOk">Дальше</button></div>`; $('#ntOk').focus(); $('#ntOk').onclick = () => { closeModal(); res(); }; }),
+      announce: spec => live() && toast(`<b>${esc(spec.title)}</b><br>«${esc(spec.name)}» — ${esc(spec.text)}`, spec.player !== undefined && spec.player !== null ? P(spec.player).color : '', 8000),
       log: () => live() && update(),
       update: () => live() && update(),
       save: S => live() && store.set(S),
       gameOver: S => { if (live()) { store.set(S); renderGameOver(S); } }
     };
+  }
+
+  // ---------- уведомления ----------
+  // Всплывают у всех: строки журнала с пометкой n (очки, предметы, броски, Казино, Гача, регионы…) и карточки announce.
+  function toast(html, color, ms) {
+    let box = $('#toasts'); if (!box) { box = document.createElement('div'); box.id = 'toasts'; box.setAttribute('aria-live', 'polite'); document.body.appendChild(box); }
+    const t = document.createElement('div'); t.className = 'toast'; if (color) t.style.setProperty('--pc', color); t.innerHTML = html;
+    t.onclick = () => t.remove();
+    box.appendChild(t); while (box.children.length > 6) box.firstChild.remove();
+    setTimeout(() => { t.classList.add('out'); setTimeout(() => t.remove(), 400); }, ms || 5000);
+  }
+  function toastLog(S) {
+    const last = S.log.length ? S.log[S.log.length - 1].t : -1;
+    if (seenT === null || last < seenT) { seenT = last; return; } // первая отрисовка или новая партия — без всплывашек
+    for (const l of S.log) if (l.t > seenT && l.n) toast(esc(l.m), l.p !== null && S.players[l.p] ? S.players[l.p].color : '');
+    seenT = last;
   }
 
   // ---------- отрисовка ----------
@@ -81,12 +99,14 @@
     if (!game) return;
     const S = game.S;
     NP.Board.render($('#board'), S, ui);
+    toastLog(S);
     const L = game.leader();
     const gx = S.gfx && NP.GLOBALS.find(e => e.id === S.gfx.id);
     const pips = Array.from({ length: S.cfg.stages }, (_, k) => `<i class="${k + 1 < S.stage ? 'done' : k + 1 === S.stage ? 'now' : ''}"></i>`).join('');
     $('#stageBar').innerHTML = `<div class="sb-row">${S.cfg.mode === 'demo' ? '<span class="sb-tag">Демо</span>' : ''}<span class="sb-item sb-stage"><span class="sb-l">Этап</span><b>${S.stage}</b><span class="muted">/${S.cfg.stages}</span><span class="pips" aria-hidden="true">${pips}</span></span><span class="sb-item"><span class="sb-l">Раунд</span><b>${S.round}</b></span><span class="sb-item"><span class="sb-l">Кубик</span><b>d${S.cfg.die}</b></span><span class="sb-item"><span class="sb-l">Порог</span><b>${S.cfg.threshold || '—'}</b></span></div>` +
       (gx ? `<div class="sb-global ${game.gActive(gx.id) ? '' : 'past'}" title="${esc(gx.text)}"><span aria-hidden="true">🌐</span><span><b>${esc(gx.name)}</b>${game.gActive(gx.id) ? '' : ' <span class="muted">(прошло)</span>'}<small>${esc(gx.text)}</small></span></div>` : '');
-    $('#players').innerHTML = S.order.map(i => {
+    const byPts = S.order.slice().sort((a, b) => S.players[b].pts - S.players[a].pts || S.order.indexOf(a) - S.order.indexOf(b));
+    $('#players').innerHTML = byPts.map(i => {
       const p = S.players[i], st = p.st, sts = [];
       const s = (ic, cls, tip, n) => sts.push(`<span class="st ${cls}" title="${esc(tip)}" aria-label="${esc(tip)}">${ic}${n ? `<i>${n}</i>` : ''}</span>`);
       if (st.stun) s('💫', 'neg', 'Оглушение: пропускает следующий бросок');
@@ -106,9 +126,9 @@
       const marks = ['Ш', 'Б', 'В', 'Р'].map(r => { const on = p.marks.includes(r); return `<span class="mk ${on ? 'on' : ''}" style="--rc:${NP.REGIONS[r].color}" title="${esc(NP.REGIONS[r].name)}: ${on ? 'отметка есть' : 'нет отметки'}">${r}</span>`; }).join('');
       const items = p.items.map(it => { const I = NP.ITEMS[it.key], rar = NP.RARITY[I.rarity] ? NP.RARITY[I.rarity].name : ''; return `<span class="chip it r-${I.rarity} ${it.anom ? 'anom' : ''}" title="${esc(I.name + ' · ' + rar + (it.anom ? ' · ✦ аномальный' : '') + '\n' + (it.anom ? 'Аномальный эффект: ' + I.anom : I.text))}">${it.anom ? '<b class="anom-mk">✦</b>' : ''}${esc(I.name)}</span>`; }).join('');
       const cur = S.cur === i && !S.over;
-      return `<div class="pl ${cur ? 'cur' : ''}" style="--pc:${p.color}">
+      return `<div class="pl ${cur ? 'cur' : ''}" style="--pc:${p.color}" data-p="${i}" title="Нажми, чтобы показать фишку на поле">
         <div class="pl-h"><span class="pl-av" aria-hidden="true">${esc((p.name || '?').trim().charAt(0).toUpperCase())}</span><span class="pl-name"><b>${esc(p.name)}</b>${p === L && p.pts ? ' <span class="crown" title="Лидер">♛</span>' : ''}${cur ? ' <span class="pl-turn">ходит</span>' : ''}</span><span class="pts">${p.pts}<small>очк.</small></span></div>
-        <div class="pl-meta"><span class="pl-pos" title="Клетка">◉ ${esc(p.pos)}</span><span title="Круг">круг ${p.lap}</span><span class="marks" aria-label="Отметки регионов">${marks}</span></div>
+        <div class="pl-meta"><span class="pl-pos" title="Клетка">◉ ${esc(game.cellName(p.pos))}</span><span title="Очерёдность хода в раунде">ход ${S.order.indexOf(i) + 1}</span><span title="Круг">круг ${p.lap}</span><span class="marks" aria-label="Отметки регионов">${marks}</span></div>
         <div class="pl-src" title="Источники очков">бои ${p.src.zzz}+${p.src.mod} · поле ${p.src.board}</div>
         ${items || sts.length ? `<div class="items">${items}${sts.length ? `<span class="sts">${sts.join('')}</span>` : ''}</div>` : ''}</div>`;
     }).join('');
@@ -123,9 +143,9 @@
   function head(spec) { return spec.player !== null && spec.player !== undefined && P(spec.player) ? `<div class="who" style="--pc:${P(spec.player).color}"><span class="who-dot"></span>Решает ${pname(spec.player)}</div>` : ''; }
   function renderChoice(spec, res) {
     const box = $('#prompt'), opts = spec.options.filter(o => !o.disabled);
-    const done = v => { ui.pickCells = null; ui.onPick = null; $('#boardHint').classList.add('hidden'); box.innerHTML = ''; box.className = 'card prompt'; update(); res(v); };
+    const done = v => { ui.pickCells = null; ui.onPick = null; ui.paths = null; $('#boardHint').classList.add('hidden'); box.innerHTML = ''; box.className = 'card prompt'; update(); res(v); };
     const isCell = spec.kind === 'cell';
-    if (isCell) { ui.pickCells = spec.cells; ui.onPick = id => done(id); $('#boardHint').innerHTML = '<span class="hint-dot"></span>Выбери подсвеченную клетку на поле'; $('#boardHint').classList.remove('hidden'); update(); }
+    if (isCell) { ui.pickCells = spec.cells; ui.paths = spec.paths || null; ui.from = spec.from; ui.onPick = id => done(id); $('#boardHint').innerHTML = '<span class="hint-dot"></span>Выбери подсвеченную клетку на поле'; $('#boardHint').classList.remove('hidden'); update(); }
     const many = opts.length > 8 || isCell;
     box.className = 'card prompt' + (spec.secret ? ' secret' : '');
     box.innerHTML = head(spec) + `<h3>${esc(spec.title)}</h3>` + (isCell ? '<p class="prompt-sub">Нажми клетку на поле или выбери из списка:</p>' : '') + `<div class="${many ? 'grid-opts' : 'opts'}">` +
@@ -163,10 +183,16 @@
     const vals = {}, bonus = {}, got = new Set();
     const top = (kind, sub) => `<div class="m-kicker"><span class="kick-ic" aria-hidden="true">⚔</span>${kind}</div><h2>${esc(spec.title)}</h2>${sub || ''}`;
     const inp = e => `<input class="res-in" ${canEdit(e.seat) ? '' : 'disabled'} type="text" inputmode="${e.metric === 'time' ? 'text' : 'numeric'}" placeholder="${e.metric === 'time' ? 'м:сс' : 'счёт'}" value="${esc(fmtVal(e.metric, vals[e.key]))}" data-r="${e.key}" aria-label="Результат ${esc(P(e.seat).name)}">`;
-    const bonusRow = i => `<label class="bonus" title="Бонусные очки за выполненные модификаторы"><span>бонус</span><input ${canEdit(i) ? '' : 'disabled'} type="number" min="0" max="20" value="${bonus[i] || 0}" data-b="${i}" aria-label="Бонус ${esc(P(i).name)}"></label>`;
+    // бонус за модификаторы: галочка у каждого выполненного, очки суммируются сами
+    const modsOf = i => [...(spec.mods || []), ...((spec.extra && spec.extra[i]) || [])];
+    const chk = {}; // chk[i][k] — выполнен ли k-й модификатор у игрока i
+    const bonusRow = i => { const ms = modsOf(i); if (!ms.length) return '';
+      if (!canEdit(i)) return `<span class="bonus muted" title="Бонус за модификаторы">бонус ${bonus[i] || 0}</span>`;
+      return `<div class="mod-checks" role="group" aria-label="Выполненные модификаторы ${esc(P(i).name)}">${ms.map((m, k) => `<label class="mod-cb" title="${esc(m.cond)}"><input type="checkbox" data-mb="${i}" data-mk="${k}" ${chk[i] && chk[i][k] ? 'checked' : ''}><span>${esc(m.name)}</span><b>+${m.pts}</b></label>`).join('')}</div>`; };
     const extraInfo = i => [(spec.extra && spec.extra[i]) ? 'доп. мод: ' + spec.extra[i].map(m => m.name + ' (+' + m.pts + ')').join(', ') : '', (spec.bans && spec.bans[i]) ? 'запрет агентов: ' + spec.bans[i] : ''].filter(Boolean).join(' · ');
     const xi = i => { const t = extraInfo(i); return t ? `<small>${esc(t)}</small>` : ''; };
-    const read = () => { box.querySelectorAll('input[data-b]:not([disabled])').forEach(x => { bonus[x.dataset.b] = +x.value || 0; }); box.querySelectorAll('input[data-r]:not([disabled])').forEach(x => { vals[x.dataset.r] = parseVal(metricOf(x.dataset.r), x.value); }); };
+    const read = () => { box.querySelectorAll('input[data-mb]').forEach(x => { const i = x.dataset.mb; (chk[i] = chk[i] || [])[+x.dataset.mk] = x.checked; });
+      for (const i in chk) if (canEdit(i)) bonus[i] = modsOf(i).reduce((sum, m, k) => sum + (chk[i][k] ? +m.pts || 0 : 0), 0); box.querySelectorAll('input[data-r]:not([disabled])').forEach(x => { vals[x.dataset.r] = parseVal(metricOf(x.dataset.r), x.value); }); };
     const remote = [...new Set(entries.map(e => e.seat))].filter(i => !canEdit(i));
     const waitLine = () => opt.host && remote.length ? `<p class="muted fight-wait">${remote.map(i => (got.has(i) ? '✓ ' : '⏳ ') + esc(P(i).name)).join(' · ')}</p>` : '';
     const actions = () => waitLine() + `<div class="row end m-actions"><button class="btn ghost" id="fRand" title="${mineOnly ? 'Заполнить свой результат случайно' : 'Симуляция: заполнить пустые результаты за всех'}">${mineOnly ? 'Случайно' : 'Заполнить за всех'}</button><button class="btn primary" id="fOk">${mineOnly ? 'Отправить' : 'Записать'}</button></div>`;
@@ -175,10 +201,10 @@
         spec.pairs.map((pr, k) => `<div class="duel-block"><p class="fight-mode">Режим: <b>${esc(NP.modeName(spec.modes[k]))}</b> <span class="muted">${metricHint(spec.metrics[k])}</span></p><div class="duel">${pr.map(i => `<div class="duel-side"><span class="pbtn static">${pBtnLabel(i)}</span>${inp(entries.find(e => e.key === k + '_' + i))}</div>`).join('<span class="vs">vs</span>')}</div></div>`).join('');
       const head = (kind, note) => top(kind, `<p class="fight-mode">Режим: <b>${esc(NP.modeName(spec.mode))}</b> <span class="muted">${metricHint(spec.metric)}</span>${spec.mult > 1 ? ' <span class="mult">очки ×' + spec.mult + '</span>' : ''}</p>`) + modsHtml(spec.mods) + `<p class="muted">${note}</p>`;
       const row = (e, tag) => `<div class="fight-row"><span class="pbtn static">${pBtnLabel(e.seat, tag || '')}${xi(e.seat)}</span>${inp(e)}${bonusRow(e.seat)}</div>`;
-      if (spec.kind === 'hunt') return head('Охота', `Режим выбрал лидер ${pname(spec.leader)}. Каждый вводит свой результат. Кто обошёл лидера, получает +2 (охотник +3). Лидер получает +1 за каждого, кто его не обошёл. Справа — бонус за модификаторы.`) +
+      if (spec.kind === 'hunt') return head('Охота', `Режим выбрал лидер ${pname(spec.leader)}. Каждый вводит свой результат. Кто обошёл лидера, получает +2 (охотник +3). Лидер получает +1 за каждого, кто его не обошёл. Отметь галочками выполненные модификаторы — бонус посчитается сам.`) +
         `<div class="fight-list">${entries.map(e => row(e, e.seat === spec.leader ? ' <em>лидер</em>' : e.seat === spec.stepper ? ' <em>охотник</em>' : '')).join('')}</div>`;
       const sc = game.scale(spec.players.length);
-      return head('Общий бой', `Каждый вводит свой результат — места и очки (${sc.map(x => '+' + x * (spec.mult || 1)).join(' / ')}) игра посчитает сама. Справа — бонус за модификаторы.`) + `<div class="fight-list">${entries.map(e => row(e)).join('')}</div>`;
+      return head('Общий бой', `Каждый вводит свой результат — места и очки (${sc.map(x => '+' + x * (spec.mult || 1)).join(' / ')}) игра посчитает сама. Отметь галочками выполненные модификаторы — бонус посчитается сам.`) + `<div class="fight-list">${entries.map(e => row(e)).join('')}</div>`;
     };
     const output = only => { // only — набор мест для отправки (клиент), иначе все
       const pick = e => !only || only.includes(e.seat);
@@ -278,14 +304,16 @@
   }
 
   function openRules() {
-    const box = openModal('rules');
+    const box = openModal('rules'), c = game ? game.S.cfg : NP.DEFAULTS, passive = new Set(NP.PASSIVE || []);
     box.innerHTML = `<div class="m-kicker">Как играть</div><h2>Памятка</h2>
-      <p><b>Ход:</b> предмет до броска → бросок → предмет после броска (Шулерский кубик, Калькулятор) → движение (поле подсвечивает, куда можно дойти, — выбери клетку) → эффект клетки.</p>
-      <p><b>Этап</b> завершает тот, кто проходит Start с отметками всех 4 регионов текущего круга: ему +2, игроку на последнем месте +1. Затем бой перехода, а в конце партии — Grand Challenge. На новом этапе каждый втёмную выбирает: вернуться на Start (+1 очко и предмет) или остаться.</p>
-      <p><b>Бои</b> с клеток играются в конце раунда: все общие бои — одним боем (модификаторы суммируются), затем дуэли. Охота — сразу. Каждый вводит свой результат, места игра считает сама.</p>
-      <p><b>Не своим ходом</b> срабатывают только пассивные клетки: Start, Очки, Сундук, Опасность, Жнец, Телепорт, Событие (только случайное), ловушки.</p>
-      <div class="legend">${Object.entries(NP.TYPES).map(([k, v]) => `<span class="lg"><span class="lg-c" style="background:${v.color}">${esc(v.icon)}</span>${esc(k)}</span>`).join('')}</div>
-      <p class="muted">Пунктирное кольцо — аномальная клетка, ◐ — гибрид (тип меняется каждый этап), ⚠ — ловушка, ♥ — гарант Гачи, 🏪 — открытое заведение, ☁ — шторм, 🚚 — грузовик, 🔒 — Тайник закрыт. Цвет обводки клетки — регион или владелец Жнеца.</p>
+      <p><b>Ход:</b> предмет до броска → бросок → предмет после броска (Шулерский кубик, Калькулятор) → движение (поле подсвечивает, куда можно дойти; наведи на клетку — увидишь путь) → эффект клетки.</p>
+      <p><b>Регионы:</b> первый вход в каждый регион на круге даёт отметку и +${c.regionPoint || 0} очко. Проход Start со всеми 4 отметками — ещё +${c.lapPoint || 0}. Первый, кто так пройдёт Start, завершает этап: ему +${c.speedBonus}, игроку на последнем месте +${c.speedLast}.</p>
+      <p><b>Новый этап:</b> бой перехода, а в конце партии — Grand Challenge. Остальные втёмную выбирают: вернуться на Start (+1 очко и предмет, новый круг) или остаться (круг продолжается до прохода Start). Кто завершил этап или стоит на Start, уже на новом круге — его не спрашивают.</p>
+      <p><b>Бои</b> с клеток играются в конце раунда: все общие бои — одним боем (модификаторы суммируются), затем дуэли. Охота — сразу. Каждый вводит свой результат, места игра считает сама; выполненные модификаторы отмечаются галочками.</p>
+      <p><b>Своим ходом</b> (кубиком) срабатывает любая клетка. <b>Не своим ходом</b> (Ролики, Пинок, телепорт, событие, крюк) — только пассивные ●: Start, Очки, Сундук, Опасность, Жнец, Телепорт (случайно), Событие (только случайное), ловушки.</p>
+      <p><b>Горячая картошка:</b> бомба взрывается в конце 2-го хода владельца (−3 очка, 3 клетки назад). Передать её может только владелец в свой ход, пройдя или встав на клетку с соперником; таймер при передаче не сбрасывается.</p>
+      <div class="rules-cells">${Object.entries(NP.TYPES).map(([k, v]) => `<div class="rc-row"><span class="lg-c" style="background:${v.color}">${esc(v.icon)}</span><div><b>${esc(k)}</b>${passive.has(k) ? ' <span class="lg-p" title="срабатывает и не своим ходом">●</span>' : ''}<br><span class="muted">${esc(NP.cellDesc(k, c))}</span></div></div>`).join('')}</div>
+      <p class="muted">Пунктирное кольцо — аномальная клетка, ◐ — гибрид (тип меняется каждый этап), ⚠ — ловушка, ♥ — гарант Гачи, 🏪 — открытое заведение, ☁ — шторм, 🚚 — грузовик, 🔒 — Тайник закрыт. Цвет обводки клетки — регион или владелец Жнеца. Нажми на игрока слева — поле покажет его фишку.</p>
       <div class="row end m-actions"><button class="btn primary" id="rOk">Понятно</button></div>`;
     $('#rOk').onclick = closeModal;
   }
@@ -301,6 +329,7 @@
   }
 
   // ---------- кнопки ----------
+  $('#players').addEventListener('click', e => { const d = e.target.closest('.pl'); if (d && game && game.S.players[+d.dataset.p]) NP.Board.focus($('#board'), game.S.players[+d.dataset.p].pos); });
   $('#btnStart').onclick = startNew;
   $('#btnResume').onclick = () => { const S = store.get(); if (S) play(S); };
   $('#btnNew').onclick = () => { if (!game || game.S.over || confirm('Начать новую партию? Текущая сохранится, пока не начнётся новая.')) { game = null; closeModal(); lobby(); } };
@@ -311,7 +340,7 @@
 
   // Доступ для мультиплеера (js/net/mp.js): хост запускает движок, гость только показывает состояние.
   NP.App = {
-    mode, buildCfg, play, renderChoice, renderWait, renderFight, openModal, closeModal, update, esc, lobby,
+    mode, buildCfg, play, renderChoice, renderWait, renderFight, openModal, closeModal, update, esc, lobby, toast,
     get game() { return game; },
     view(S) { // гость: показать состояние без движка
       $('#lobby').classList.add('hidden'); $('#game').classList.remove('hidden');

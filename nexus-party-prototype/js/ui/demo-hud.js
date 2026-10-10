@@ -24,7 +24,7 @@
   // коды клеток (Ш01, Б12…) игрокам не показываем: заменяем на «тип · регион». Тип берём с поля, он может меняться (Гибрид).
   const CODE = /(^|[^А-ЯЁа-яё\w])([ШБВР]\d\d)(?![\d\w])/g;
   const typeLabel = t => (NP.TYPE_LABEL && NP.TYPE_LABEL[t]) || (t === 'Start' ? 'Старт' : t);
-  const cellType = id => { const t = document.querySelector(`#board .cell[data-id="${id}"] title`); return t ? t.textContent.split(' · ')[0] : typeLabel((NP.GRAPH.CELL[id] || {}).type) || id; };
+  const cellType = id => { const g = document.querySelector(`#board .cell[data-id="${id}"]`); return g && g.dataset.type ? g.dataset.type : typeLabel((NP.GRAPH.CELL[id] || {}).type) || id; };
   const cellName = id => { const c = NP.GRAPH.CELL[id], r = c && NP.REGIONS[c.region]; return cellType(id) + (r ? ' · ' + r.name : ''); };
   const decode = txt => txt.replace(CODE, (m, pre, id) => pre + (NP.GRAPH.CELL[id] ? cellType(id) : id)).replace(/ [RL]-\d+(?= «)/g, '');
 
@@ -37,7 +37,7 @@
       const m = /^([ШБВР]\d\d|S) · /.exec(b.firstChild && b.firstChild.nodeType === 3 ? b.firstChild.nodeValue : '');
       if (!m) return;
       b.dataset.cell = m[1]; b.firstChild.nodeValue = cellName(m[1]);
-      const hl = on => { const g = document.querySelector(`#board .cell[data-id="${m[1]}"]`); if (g) g.classList.toggle('hl', on); };
+      const hl = on => { const g = document.querySelector(`#board .cell[data-id="${m[1]}"]`); if (g) g.classList.toggle('hl', on); if (NP.Board.showPath) NP.Board.showPath($('#board'), on ? m[1] : null); };
       b.addEventListener('mouseenter', () => hl(true)); b.addEventListener('mouseleave', () => hl(false));
       b.addEventListener('focus', () => hl(true)); b.addEventListener('blur', () => hl(false));
     });

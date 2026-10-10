@@ -57,7 +57,14 @@
     shuffle(a) { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(this.r() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
     wpick(list) { const t = list.reduce((s, x) => s + x[1], 0); let x = this.r() * t; for (const e of list) { if ((x -= e[1]) < 0) return e; } return list[list.length - 1]; }
     get P() { return this.S.players; }
-    log(m, p) { this.S.log.push({ t: this.S.log.length, m, p: p ? p.i : null, st: this.S.stage, rd: this.S.round }); if (this.io && this.io.log) this.io.log(m); }
+    log(m, p, n) { this.S.log.push(Object.assign({ t: this.S.log.length, m, p: p ? p.i : null, st: this.S.stage, rd: this.S.round }, n ? { n: 1 } : {})); if (this.io && this.io.log) this.io.log(m); }
+    note(m, p) { this.log(m, p, true); } // строка журнала + всплывающее уведомление у всех
+    announce(spec) { if (this.io && this.io.announce) this.io.announce(spec); } // карточка для всех, без ожидания
+    async rollFor(p, d, what) { // бросок, который игрок делает сам и видят все
+      await this.io.wait?.({ player: p.i, kind: 'roll', title: what + ': бросить d' + d });
+      if (this.S.over) throw new GameOver();
+      const r = this.roll(d); this.note('🎲 ' + p.name + ' — ' + what + ': d' + d + ' = ' + r + '.', p); return r;
+    }
     upd() { if (this.io && this.io.update) this.io.update(); }
     leader() { return this.P.reduce((a, b) => (b.pts > a.pts ? b : a)); }
     others(p) { return this.P.filter(q => q !== p); }
@@ -107,7 +114,7 @@
     }
     giveItem(p, key, anom) {
       if (p.items.length >= this.S.cfg.slots) { this.log(p.name + ': инвентарь полон, «' + NP.ITEMS[key].name + '» сгорает.', p); return false; }
-      p.items.push({ key, anom: !!anom }); this.log(p.name + ' получает предмет «' + NP.ITEMS[key].name + '»' + (anom ? ' ✦ аномальный' : '') + '.', p); return true;
+      p.items.push({ key, anom: !!anom }); this.note('▣ ' + p.name + ' получает предмет «' + NP.ITEMS[key].name + '»' + (anom ? ' ✦ аномальный' : '') + '.', p); return true;
     }
     giveRandom(p, rar, quiet, anom) { const k = this.randomItemKey(rar); if (quiet) { if (p.items.length < this.S.cfg.slots) p.items.push({ key: k, anom: !!anom }); return; } this.giveItem(p, k, anom); }
     async giveChoice(p, n) { // выбор 1 из n случайных предметов
@@ -231,7 +238,7 @@
       if (this.fx('Б') === 'E-Б3' && reg === 'Б') { r += 2; note.push('Инферно-кросс +2'); }
       if (st.dice.length) { const m = st.dice.shift(); r += m; note.push((m > 0 ? 'Золотой кубик +' : 'Ржавый кубик −') + Math.abs(m)); }
       r = Math.max(1, r);
-      this.log(p.name + ' бросает: ' + note.join(', ') + '.', p);
+      this.note('🎲 ' + p.name + ' бросает: ' + note.join(', ') + '.', p);
       if (canPost) r = await this.postItem(p, r, d);
       return Math.max(1, r);
     }
@@ -253,7 +260,7 @@
       if (n <= 0) return;
       const ends = this.paths(p.pos, p.prev, n), ids = Object.keys(ends);
       if (!ids.length) return;
-      const to = await this.choose(p, 'Ход на ' + n + ' кл.: выбери клетку', this.cellOpts(ids), { kind: 'cell', cells: ids, always: true }); // выбор показывается всегда, даже без развилки
+      const to = await this.choose(p, 'Ход на ' + n + ' кл.: выбери клетку', this.cellOpts(ids), { kind: 'cell', cells: ids, always: true, from: p.pos, paths: Object.fromEntries(ids.map(x => [x, ends[x][0]])) }); // выбор показывается всегда; путь подсвечивается на поле
       const path = ends[to][0];
       for (let k = 0; k < path.length; k++) await this.step(p, path[k], own, k === path.length - 1);
     }
@@ -261,14 +268,14 @@
       p.prev = p.pos; p.trail.push(p.pos); if (p.trail.length > 40) p.trail.shift();
       p.pos = to;
       this.enter(p, to);
+      if (this.S.cur === p.i) this.bombPass(p); // бомбу передаёт только её владелец в свой ход
       if (to === 'S') await this.passStart(p);
       if (this.S.shop === to && !last) await this.shopHit(p); // проход через заведение
-      this.bombPass(p);
       this.upd();
     }
     enter(p, id) { // вход в клетку: отметка региона и учёт активации
       const reg = regionOf(id); if (!reg) return;
-      if (!p.marks.includes(reg)) p.marks.push(reg);
+      if (!p.marks.includes(reg)) { p.marks.push(reg); const v = this.S.cfg.regionPoint || 0; if (v) { this.note('🗺 ' + p.name + ': новый регион ' + NP.REGIONS[reg].name + ' (' + p.marks.length + '/4), +' + v + '.', p); this.add(p, v); } }
       if (p.turnRegions && !p.turnRegions.includes(reg)) p.turnRegions.push(reg);
       if (this.fx('Б') === 'E-Б5' && reg === 'Б' && regionOf(p.prev) !== 'Б' && this.S.regionBy['Б'] !== p.i && this.S.regionBy['Б'] !== undefined) {
         const o = this.P[this.S.regionBy['Б']]; const v = this.steal(p, o, 1); if (v) this.log(p.name + ' платит пошлину Мотор-лиги игроку ' + o.name + '.', p);
@@ -278,6 +285,7 @@
       const S = this.S;
       this.giveRandom(p);
       if (p.marks.length === 4) {
+        const v = S.cfg.lapPoint || 0; if (v) { this.note('🏁 ' + p.name + ' проходит Start со всеми 4 регионами: +' + v + '.', p); this.add(p, v); }
         if (p.lap === S.stage && S.stagePending === null) { S.stagePending = p.i; this.log(p.name + ' проходит Start с 4/4 и завершает этап ' + S.stage + '!', p); p.lap = S.stage + 1; }
         else { this.log(p.name + ' проходит Start с 4/4 старого круга и начинает сбор заново.', p); p.lap = S.stage; }
         p.marks = [];
@@ -288,18 +296,18 @@
         const back = p.pos === 'S' ? [] : IN[p.pos].filter(x => x !== 'S'); // назад через Start нельзя
         if (!back.length) break;
         const to = this.pick(back); // назад — случайно по входящим связям
-        p.prev = null; p.pos = to; this.enter(p, to); this.bombPass(p);
+        p.prev = null; p.pos = to; this.enter(p, to);
       }
       this.log(p.name + ': назад на ' + n + ' кл. → ' + this.cellName(p.pos) + '.', p);
       this.upd();
     }
     async forceMove(p, n) { this.log(p.name + ' сдвигается вперёд на ' + n + ' кл.', p); await this.move(p, n, false); await this.land(p, false); }
-    async teleportTo(p, id) { p.prev = null; p.trail = []; p.pos = id; this.enter(p, id); this.bombPass(p); this.log(p.name + ' перемещается на ' + this.cellName(id) + '.', p); this.upd(); }
+    async teleportTo(p, id) { p.prev = null; p.trail = []; p.pos = id; this.enter(p, id); if (this.S.cur === p.i) this.bombPass(p); this.log(p.name + ' перемещается на ' + this.cellName(id) + '.', p); this.upd(); }
     tpRange(roll) { return Math.max(1, Math.floor(roll * 1.5)); } // радиус телепорта: 1,5× броска (было 2×, −25%)
     rangeCells(from, r) {
       // телепорт не может ни встать на Start, ни пройти через него
-      const f = bfs(from, x => OUT[x].filter(y => y !== 'S'), r).cells, b = from === 'S' ? [] : bfs(from, x => IN[x].filter(y => y !== 'S'), r).cells;
-      return [...new Set([...f, ...b])].filter(x => x !== 'S' && x !== from);
+      // расстояние по связям в любую сторону: можно попасть и на соседнюю ветку развилки
+      return bfs(from, x => [...ADJ[x]].filter(y => y !== 'S'), r).cells.filter(x => x !== 'S' && x !== from);
     }
 
     // ---------- клетки ----------
@@ -309,7 +317,7 @@
       // ловушка, шторм, Жнец — пассивные
       if (c.trap !== null && c.trap !== p.i) {
         const owner = this.P[c.trap]; c.trap = null;
-        this.log(p.name + ' попадает в ловушку ' + owner.name + '!', p);
+        this.note('⚠ ' + p.name + ' попадает в ловушку ' + owner.name + '!', p);
         await this.hit(p, owner, q => this.event(q, 'Rneg'), 'Ловушка');
       }
       if ((S.mines = S.mines || []).includes(id)) { S.mines.splice(S.mines.indexOf(id), 1); this.log(p.name + ' наступает на мину Сынов Калидона!', p); await this.hit(p, null, q => { this.add(q, -2); this.status(q, 'stun'); }, 'Мина'); }
@@ -317,7 +325,7 @@
       if (this.gActive('G-06') && reg === S.gReg) { this.log('Каверна: клетка работает как случайное событие.', p); await this.event(p, 'R'); return; }
       if (S.storm.includes(id)) await this.hit(p, null, q => { this.add(q, -1); this.status(q, 'silence', 1); }, 'Эфирный шторм');
       const ro = S.reaperZone[id];
-      if (ro !== undefined && ro !== p.i) await this.hit(p, this.P[ro], q => { const v = this.steal(q, this.P[ro], S.cfg.reaper); this.log('Жнец ' + this.P[ro].name + ' забирает ' + v + ' очк. у ' + q.name + '.', q); }, 'Жнец');
+      if (ro !== undefined && ro !== p.i) await this.hit(p, this.P[ro], q => { const v = this.steal(q, this.P[ro], S.cfg.reaper); this.note('☠ Жнец ' + this.P[ro].name + ' забирает ' + v + ' очк. у ' + q.name + '.', q); }, 'Жнец');
       // бонусы остановки от эффектов регионов
       if (reg === 'Ш' && this.fx('Ш') === 'E-Ш3') this.add(p, 1);
       if (reg === 'Б' && this.fx('Б') === 'E-Б4') this.add(p, 1);
@@ -326,10 +334,10 @@
       if (!own && !NP.PASSIVE.includes(t)) return;
       const bw = reg === 'Б' && this.fx('Б') === 'E-Б6' ? 2 : 1;
       switch (t) {
-        case 'Очки': this.log(p.name + ': +' + S.cfg.pointsCell * m * bw + ' (Очки).', p); this.add(p, S.cfg.pointsCell * m * bw); break;
+        case 'Очки': this.note('➕ ' + p.name + ': клетка Очки, +' + S.cfg.pointsCell * m * bw + '.', p); this.add(p, S.cfg.pointsCell * m * bw); break;
         case 'Опасность':
           await this.hit(p, null, async q => {
-            this.add(q, -S.cfg.danger * m * bw); this.log(q.name + ': Опасность −' + S.cfg.danger * m * bw + '.', q);
+            this.add(q, -S.cfg.danger * m * bw); this.note('⚠ ' + q.name + ': Опасность, −' + S.cfg.danger * m * bw + '.', q);
             if (reg === 'В' && this.fx('В') === 'E-В3') { await this.teleportTo(q, this.pick(IDS.filter(x => regionOf(x) === 'В'))); await this.land(q, false); }
             else await this.moveBack(q, 1);
           }, 'Опасность'); break;
@@ -369,11 +377,14 @@
       if (a) for (const q of this.others(p)) if (regionOf(q.pos) === regionOf(id)) this.steal(q, p, S.cfg.reaper);
     }
     async teleportCell(p, a, own) {
-      const S = this.S, r = S.lastRoll || this.roll(this.die(p)), R = this.tpRange(r), cand = this.rangeCells(p.pos, R);
+      const S = this.S, r = own && S.lastRoll ? S.lastRoll : this.roll(this.die(p)), R = this.tpRange(r);
+      const cand = this.rangeCells(p.pos, R).filter(x => S.cells[x].type !== 'Телепорт'); // без цепочек телепортов
       if (!cand.length) return;
       let to;
-      if (a) { to = this.r() < 0.17 ? this.pick(IDS.filter(x => S.cells[x].type === 'Телепорт' && x !== p.pos)) : this.pick(cand); }
-      else to = await this.choose(p, 'Телепорт: выбери клетку (до ' + R + ' вперёд или назад)', this.cellOpts(cand), { kind: 'cell', cells: cand });
+      if (a) to = this.r() < 0.17 ? this.pick(IDS.filter(x => S.cells[x].type === 'Телепорт' && x !== p.pos)) : this.pick(cand);
+      else if (!own) to = this.pick(cand); // не своим ходом — случайный перенос (пассивная клетка)
+      else to = await this.choose(p, 'Телепорт: выбери клетку (до ' + R + ' кл. по связям в любую сторону)', this.cellOpts(cand), { kind: 'cell', cells: cand, always: true });
+      this.note('⇄ ' + p.name + ': телепорт ' + (a ? '(аномальный) ' : !own ? '(случайно) ' : '') + '→ ' + this.cellName(to) + '.', p);
       await this.teleportTo(p, to);
       if (this.r() < S.cfg.teleportTrap) { this.log('Сбой телепорта: случайное событие!', p); await this.event(p, 'R'); }
       await this.land(p, false);
@@ -388,9 +399,9 @@
       if (!bet) return;
       const d = this.die(p), lose = Math.floor(d / 2) + 1;
       let r = this.roll(d); if (reg === 'Ш' && this.fx('Ш') === 'E-Ш5') r = Math.max(r, this.roll(d));
-      if (r <= lose) { this.add(p, -bet); this.log(p.name + ' — Казино: ' + r + ', проигрыш −' + bet + '.', p); }
-      else if (r < d) { this.add(p, bet); this.log(p.name + ' — Казино: ' + r + ', выигрыш +' + bet + '.', p); }
-      else { const k = d >= 10 ? 4 : 3; this.add(p, bet * k); this.log(p.name + ' — Казино: ДЖЕКПОТ ' + r + ', +' + bet * k + '!', p); }
+      if (r <= lose) { this.add(p, -bet); this.note('🎰 ' + p.name + ' — Казино: ' + r + ', проигрыш −' + bet + '.', p); }
+      else if (r < d) { this.add(p, bet); this.note('🎰 ' + p.name + ' — Казино: ' + r + ', выигрыш +' + bet + '.', p); }
+      else { const k = d >= 10 ? 4 : 3; this.add(p, bet * k); this.note('🎰 ' + p.name + ' — Казино: ДЖЕКПОТ ' + r + ', +' + bet * k + '!', p); }
     }
     async gacha(p, a, id, reg) { // одна попытка за визит; гарант на следующем визите до конца этапа
       const c = this.S.cells[id], cost = Math.max(1, NP.GACHA_COST - (this.gActive('G-13') ? 1 : 0));
@@ -400,8 +411,8 @@
       this.add(p, -cost);
       const d = this.die(p); let r = this.roll(d); if (reg === 'Ш' && this.fx('Ш') === 'E-Ш5') r = Math.max(r, this.roll(d));
       const win = c.pity || r > d / 2;
-      if (win) { this.log(p.name + ' — Гача: ' + (c.pity ? 'гарант' : r) + ', предмет!', p); c.pity = false; this.giveRandom(p, null, false, a && this.r() < 0.5); }
-      else { c.pity = true; this.log(p.name + ' — Гача: ' + r + ', пусто. Клетка заряжена гарантом.', p); }
+      if (win) { this.note('🎁 ' + p.name + ' — Гача: ' + (c.pity ? 'гарант' : r) + ', предмет!', p); c.pity = false; this.giveRandom(p, null, false, a && this.r() < 0.5); }
+      else { c.pity = true; this.note('🎁 ' + p.name + ' — Гача: ' + r + ', пусто. Клетка заряжена гарантом.', p); }
     }
     async pawn(p, a) {
       for (; ;) {
@@ -439,9 +450,11 @@
       for (const reg of p.turnRegions || []) {
         if (reg === 'Ш' || S.regionFx[reg] || p.lap !== S.stage) continue;
         const pool = this.shuffle(this.regionPool(reg)).slice(0, 2);
-        const id = await this.choose(p, 'Ты первым в регионе ' + NP.REGIONS[reg].name + ': выбери его эффект до конца этапа', pool.map(e => ({ label: e.name, value: e.id, hint: e.text })), { always: true });
+        const id = await this.choose(p, p.name + ' первым в регионе ' + NP.REGIONS[reg].name + ': выбор эффекта до конца этапа', pool.map(e => ({ label: e.name, value: e.id, hint: e.text })), { always: true, kind: 'region', public: true });
         S.regionFx[reg] = id; S.regionBy[reg] = p.i;
-        this.log(p.name + ' активирует ' + NP.REGIONS[reg].name + ': «' + this.fxName(id) + '».', p);
+        const fx = NP.REGION_FX.find(e => e.id === id);
+        this.note('◆ ' + p.name + ' активирует ' + NP.REGIONS[reg].name + ': «' + this.fxName(id) + '».', p);
+        this.announce({ player: p.i, title: 'Регион активирован · ' + NP.REGIONS[reg].name + ' · ' + p.name, name: this.fxName(id), text: (fx ? fx.text : '') + ' Действует до конца этапа.', icon: '◆' });
       }
     }
 
@@ -449,15 +462,15 @@
     async event(p, kind) { return NP.Events.play(this, p, kind); }
 
     // ---------- бомба ----------
-    bombPass(p) {
-      if (!p.st.bomb) { const c = this.P.find(q => q !== p && q.st.bomb && q.pos === p.pos); if (c) { p.st.bomb = { turns: c.st.bomb.turns + 1 }; c.st.bomb = null; this.log('Бомба переходит от ' + c.name + ' к ' + p.name + '!', p); } return; }
+    bombPass(p) { // бомбу передаёт только её владелец в свой ход, проходя или вставая на клетку с соперником; таймер не сбрасывается
+      if (!p.st.bomb) return;
       const q = this.P.find(x => x !== p && x.pos === p.pos && !x.st.bomb);
-      if (q) { q.st.bomb = { turns: p.st.bomb.turns + 1 }; p.st.bomb = null; this.log('Бомба переходит от ' + p.name + ' к ' + q.name + '!', q); }
+      if (q) { q.st.bomb = { turns: p.st.bomb.turns }; p.st.bomb = null; this.note('💣 ' + p.name + ' передаёт бомбу игроку ' + q.name + ' (до взрыва ходов ' + q.name + ': ' + q.st.bomb.turns + ').', q); }
     }
     async tickBomb(p) {
       if (!p.st.bomb) return;
-      if (--p.st.bomb.turns > 0) return;
-      p.st.bomb = null; this.log('БУМ! Бомба взрывается у ' + p.name + '.', p);
+      if (--p.st.bomb.turns > 0) { this.note('💣 У ' + p.name + ' бомба: до взрыва ' + p.st.bomb.turns + ' ход(а).', p); return; }
+      p.st.bomb = null; this.note('💥 БУМ! Бомба взрывается у ' + p.name + ': −3 очка и 3 клетки назад.', p);
       await this.hit(p, null, async q => { this.add(q, -3); await this.moveBack(q, 3); }, 'Горячая картошка');
     }
 
@@ -507,7 +520,7 @@
       const opp = this.others(p);
       switch (k) {
         case 'item_rollex': p.st.rollex = anom ? 2 : 1; break;
-        case 'item_move': { const r = this.roll(this.die(p)), n = Math.floor(r * (anom ? 2.5 : 1.5)); this.log('Ролики: ' + r + ' → ' + n + ' кл.', p); await this.move(p, n, false); await this.land(p, false); break; }
+        case 'item_move': { const r = await this.rollFor(p, this.die(p), 'Ролики'), n = Math.floor(r * (anom ? 2.5 : 1.5)); this.note('🛼 ' + p.name + ' — Ролики: ' + r + ' × ' + (anom ? '2,5' : '1,5') + ' = ' + n + ' кл. вперёд.', p); await this.move(p, n, false); await this.land(p, false); break; }
         case 'item_shield': p.st.shield = anom ? 2 : 1; break;
         case 'item_mirror': p.st.mirror = anom ? 2 : 1; break;
         case 'item_steal': {
@@ -524,7 +537,7 @@
         }
         case 'item_kick': {
           const t = await this.pickTarget(p, 'Кого пнуть?', opp); if (!t) break;
-          const n = this.roll(this.die(p)) + (anom ? this.roll(this.die(p)) : 0);
+          const n = await this.rollFor(p, this.die(p), 'Пинок') + (anom ? await this.rollFor(p, this.die(p), 'Пинок, второй кубик') : 0);
           await this.hit(t, p, async q => { await this.moveBack(q, n); await this.land(q, false); }, 'Пинок'); break;
         }
         case 'item_diffs': this.add(p, anom ? 2 : 1); break;
@@ -551,7 +564,7 @@
         case 'item_pocket_rift': {
           let cand;
           if (anom) { const reg = regionOf(p.pos) || 'Ш', order = ['Ш', 'Б', 'В', 'Р'], i = order.indexOf(reg); const regs = [reg, order[(i + 1) % 4], order[(i + 3) % 4]]; cand = IDS.filter(x => regs.includes(regionOf(x)) && x !== p.pos); }
-          else { const r = this.roll(this.die(p)); this.log('Разлом: бросок ' + r + ', радиус ' + this.tpRange(r) + '.', p); cand = this.rangeCells(p.pos, this.tpRange(r)); }
+          else { const r = await this.rollFor(p, this.die(p), 'Карманный разлом'); this.log('Разлом: радиус ' + this.tpRange(r) + '.', p); cand = this.rangeCells(p.pos, this.tpRange(r)); }
           const to = await this.choose(p, 'Куда переместиться?', this.cellOpts(cand), { kind: 'cell', cells: cand, always: true });
           await this.teleportTo(p, to); await this.land(p, false); break;
         }
@@ -580,7 +593,7 @@
           break;
         }
         case 'item_hook': {
-          const r = this.roll(this.die(p)) * (anom ? 3 : 1); const near = bfs(p.pos, x => ADJ[x], r).cells;
+          const r = (await this.rollFor(p, this.die(p), 'Мясной крюк')) * (anom ? 3 : 1); const near = bfs(p.pos, x => ADJ[x], r).cells;
           this.log('Крюк: радиус ' + r + '.', p);
           const t = await this.pickTarget(p, 'Кого притянуть?', opp.filter(q => near.includes(q.pos))); if (!t) break;
           await this.hit(t, p, async q => { await this.teleportTo(q, q === t ? p.pos : t.pos); await this.land(q, false); }, 'Мясной крюк'); break;
@@ -597,7 +610,7 @@
         }
         case 'item_hot_potato': {
           const near = [p.pos, ...ADJ[p.pos]]; const t = await this.pickTarget(p, 'Кому подложить бомбу?', opp.filter(q => anom || near.includes(q.pos)));
-          if (t) await this.hit(t, p, q => { q.st.bomb = { turns: 2 }; this.log('Бомба у ' + q.name + '!', q); }, 'Горячая картошка'); break;
+          if (t) await this.hit(t, p, q => { q.st.bomb = { turns: 2 }; this.note('💣 Бомба у ' + q.name + '! Взорвётся в конце его 2-го хода, если не передать.', q); }, 'Горячая картошка'); break;
         }
         case 'item_doppelganger': { const last = S.lastItem; if (last) await this.useItem(p, { key: last, anom: true }, true); break; }
       }
@@ -621,9 +634,9 @@
       if (!res.order) res.order = this.rankBy(mode, res.results || {}, this.P.map(p => p.i));
       const sc = this.scale(res.order.length);
       res.order.forEach((i, k) => this.add(this.P[i], sc[k] * (opts.mult || 1), 'zzz'));
-      for (const i in res.bonus || {}) this.add(this.P[i], +res.bonus[i] || 0, 'mod');
+      for (const i in res.bonus || {}) if (+res.bonus[i]) { this.add(this.P[i], +res.bonus[i], 'mod'); this.note('✓ ' + this.P[i].name + ': модификаторы +' + res.bonus[i] + '.', this.P[i]); }
       if (this.S.nfOwner !== undefined) { this.log('Колесо Нотфлайта: ' + this.P[this.S.nfOwner].name + ' +1 за каждого выполнившего доп. модификатор (внести в бонусах/через ведущего).'); delete this.S.nfOwner; }
-      this.log(title + ' (' + NP.modeName(mode) + '): ' + res.order.map((i, k) => this.P[i].name + ' +' + sc[k] * (opts.mult || 1)).join(', ') + '.');
+      this.note('⚔ ' + title + ' (' + NP.modeName(mode) + '): ' + res.order.map((i, k) => this.P[i].name + ' +' + sc[k] * (opts.mult || 1)).join(', ') + '.');
       if (!opts.noBets && this.S.bets.length) {
         for (const [a, b] of this.S.bets) { const ia = res.order.indexOf(a), ib = res.order.indexOf(b); const w = ia < ib ? a : b, l = w === a ? b : a; const v = this.steal(this.P[l], this.P[w], 3); this.log('Пари: ' + this.P[w].name + ' забирает ' + v + ' у ' + this.P[l].name + '.'); }
         this.S.bets = [];
@@ -640,7 +653,7 @@
       pairs.forEach(([a, b], k) => {
         const w = res.winners[k], l = w === a ? b : a, [bw, bl] = bonusOf(a, b);
         this.add(this.P[w], (base[0] + bw + (v4 ? 1 : 0)) * mult, 'zzz'); this.add(this.P[l], (base[1] - bl) * mult, 'zzz');
-        this.log('Дуэль: ' + this.P[w].name + ' побеждает ' + this.P[l].name + '.');
+        this.note('⚔ Дуэль: ' + this.P[w].name + ' побеждает ' + this.P[l].name + '.', this.P[w]);
       });
       if (oddBonus !== undefined) { this.add(this.P[oddBonus], 1); this.log(this.P[oddBonus].name + ' без пары: +1.'); }
       this.upd();
@@ -667,7 +680,7 @@
         else beaten++;
       }
       this.add(L, beaten, 'zzz');
-      for (const i in res.bonus || {}) this.add(this.P[i], +res.bonus[i] || 0, 'mod');
+      for (const i in res.bonus || {}) if (+res.bonus[i]) { this.add(this.P[i], +res.bonus[i], 'mod'); this.note('✓ ' + this.P[i].name + ': модификаторы +' + res.bonus[i] + '.', this.P[i]); }
       if (this.S.nfOwner !== undefined) { this.log('Колесо Нотфлайта: ' + this.P[this.S.nfOwner].name + ' +1 за каждого выполнившего доп. модификатор (внести в бонусах/через ведущего).'); delete this.S.nfOwner; }
       if (a && (res.beat || []).includes(p.i)) { const x = p.pos; await this.teleportTo(p, L.pos); await this.teleportTo(L, x); }
       this.upd();
@@ -711,7 +724,7 @@
     async stageEnd() {
       const S = this.S, c = S.cfg, fin = this.P[S.stagePending];
       if (S.queue.length) { this.log('Бои из очереди играются до конца этапа.'); await this.resolveQueue(); }
-      this.add(fin, c.speedBonus); this.log(fin.name + ': бонус за скорость +' + c.speedBonus + '.', fin);
+      this.add(fin, c.speedBonus); this.note('🏁 ' + fin.name + ' завершает этап: бонус за скорость +' + c.speedBonus + '.', fin);
       const last = this.P.reduce((a, b) => (b.pts < a.pts ? b : a)); this.add(last, c.speedLast); this.log(last.name + ' (последнее место): +' + c.speedLast + '.', last);
       if (S.stage >= c.stages || c.gcEveryStage) await this.grandChallenge();
       if (S.stage >= c.stages) { this.finish('gc'); throw new GameOver(); }
@@ -719,6 +732,7 @@
       for (const p of this.P) { p.st.rollex = 0; p.st.badDay = false; } S.gfx = null; // эффекты «до конца этапа»
       S.stage++;
       for (const p of this.P) {
+        if (p === fin || p.pos === 'S' || p.lap >= S.stage) { if (p.lap < S.stage) { p.lap = S.stage; p.marks = []; } continue; } // уже прошёл Start — новый круг начат, телепорт не нужен
         const v = await this.choose(p, 'Этап ' + S.stage + ': вернуться на Start (+1 очко и предмет, новый круг) или остаться?', [{ label: 'На Start (+1 очко и предмет)', value: 'tp' }, { label: 'Остаться: ' + this.cellName(p.pos), value: 'stay' }], { always: true, secret: true });
         if (v === 'tp') { p.pos = 'S'; p.prev = null; p.trail = []; p.lap = S.stage; p.marks = []; this.add(p, 1); this.giveRandom(p); }
       }

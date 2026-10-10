@@ -51,11 +51,19 @@
       const attrs = { d: `M${x1},${y1} L${mx},${my} L${x2},${y2}`, class: 'edge' + (both ? ' both' : '') };
       if (!both) attrs['marker-mid'] = 'url(#npArr)';
       el('path', attrs, gEdge);
+      if (both) { // двусторонняя связь: шевроны в обе стороны
+        const at = t => [x1 + (x2 - x1) * t, y1 + (y2 - y1) * t];
+        const [ax, ay] = at(0.5), [bx, by] = at(0.68), [cx, cy] = at(0.32);
+        el('path', { d: `M${ax},${ay} L${bx},${by}`, class: 'edge-tick', 'marker-end': 'url(#npArr)' }, gEdge);
+        el('path', { d: `M${ax},${ay} L${cx},${cy}`, class: 'edge-tick', 'marker-end': 'url(#npArr)' }, gEdge);
+      }
     }
+    const gPath = el('g', { class: 'path-layer' }, svg);
     const gCell = el('g', { class: 'cells-layer' }, svg);
     const gTok = el('g', { class: 'tokens-layer' }, svg);
-    svg._np = { gCell, gTok, tokens: {} };
+    svg._np = { gCell, gTok, gPath, tokens: {} };
     panZoom(svg);
+    tooltip(svg);
     return svg._np;
   }
 
@@ -93,15 +101,63 @@
         el('circle', { cx: bx, cy: by, r: 8.5, class: 'badge-bg', stroke: b[1] }, g);
         const t = el('text', { x: bx, y: by + 0.5, class: 'badge', fill: b[1] }, g); t.textContent = b[0];
       });
-      const title = el('title', {}, g);
-      title.textContent = typeLabel(type) + (st && st.anom ? ' (аномальная клетка)' : '') + (c.region ? ' · ' + NP.REGIONS[c.region].name : '') + badges.map(b => ' · ' + b[2]).join('');
+      g.dataset.type = typeLabel(type); g.dataset.badges = badges.map(b => b[0] + ' ' + b[2]).join(' · '); // подсказка — своя (tooltip), без системного title
       if (canPick) {
         g.setAttribute('tabindex', '0'); g.setAttribute('role', 'button'); g.setAttribute('aria-label', 'Выбрать клетку ' + typeLabel(type) + (c.region ? ', ' + NP.REGIONS[c.region].name : ''));
         g.addEventListener('click', () => { if (!svg._pz || !svg._pz.dragged) ui.onPick(c.id); });
+        g.addEventListener('mouseenter', () => showPath(svg, c.id)); g.addEventListener('mouseleave', () => showPath(svg, null));
         g.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); ui.onPick(c.id); } });
       }
     }
+    svg._ui = ui; svg._S = S;
+    if (!ui.paths) L.gPath.innerHTML = '';
     renderTokens(L, S, C);
+  }
+
+  // Путь до выбранной клетки при ходе: подсвеченная линия по клеткам маршрута.
+  function showPath(svg, id) {
+    const L = svg._np, ui = svg._ui; if (!L) return;
+    L.gPath.innerHTML = '';
+    if (!id || !ui || !ui.paths || !ui.paths[id]) return;
+    const C = NP.GRAPH.CELL, pts = [ui.from, ...ui.paths[id]].map(x => C[x]).filter(Boolean);
+    el('polyline', { points: pts.map(c => c.x + ',' + c.y).join(' '), class: 'move-path' }, L.gPath);
+    pts.slice(1, -1).forEach(c => el('circle', { cx: c.x, cy: c.y, r: 6, class: 'move-dot' }, L.gPath));
+  }
+
+  // Подсказка при наведении на клетку: тип, регион и что делает клетка.
+  function tooltip(svg) {
+    const wrap = svg.parentNode; if (!wrap) return;
+    let tip = wrap.querySelector('.cell-tip');
+    if (!tip) { tip = document.createElement('div'); tip.className = 'cell-tip hidden'; wrap.appendChild(tip); }
+    const esc = s => String(s ?? '').replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
+    svg.addEventListener('mousemove', e => {
+      const g = e.target.closest && e.target.closest('.cell'), S = svg._S;
+      if (!g || !S || (svg._pz && svg._pz.dragged)) { tip.classList.add('hidden'); return; }
+      const id = g.dataset.id, st = S.cells[id], c = NP.GRAPH.CELL[id], type = st ? st.type : (c.type || 'Start');
+      const reg = NP.REGIONS[c.region], fx = reg && NP.REGION_FX && NP.REGION_FX.find(x => x.id === S.regionFx[c.region]);
+      const here = S.players.filter(p => p.pos === id).map(p => `<b style="color:${p.color}">${esc(p.name)}</b>`).join(', ');
+      tip.innerHTML = `<div class="ct-h"><b>${esc(typeLabel(type))}</b>${st && st.hybrid ? ' ◐ гибрид' : ''}${(st && st.anom) ? ' <span class="ct-anom">✦ аномальная</span>' : ''}${reg ? ` <span class="ct-reg" style="color:${reg.color}">· ${esc(reg.name)}</span>` : ''}</div>` +
+        `<div class="ct-d">${esc(NP.cellDesc ? NP.cellDesc(type, S.cfg) : '')}</div>` +
+        ((NP.PASSIVE || []).includes(type) ? '<div class="ct-m">● срабатывает и не своим ходом</div>' : '<div class="ct-m">○ только своим ходом (кубиком)</div>') +
+        (fx ? `<div class="ct-m">Регион: «${esc(fx.name)}»</div>` : '') + (here ? `<div class="ct-m">Здесь: ${here}</div>` : '') +
+        (g.dataset.badges ? '<div class="ct-m">' + esc(g.dataset.badges) + '</div>' : '');
+      const r = wrap.getBoundingClientRect();
+      let x = e.clientX - r.left + 14, y = e.clientY - r.top + 14;
+      tip.classList.remove('hidden');
+      if (x + tip.offsetWidth > r.width) x = e.clientX - r.left - tip.offsetWidth - 10;
+      if (y + tip.offsetHeight > r.height) y = e.clientY - r.top - tip.offsetHeight - 10;
+      tip.style.left = Math.max(4, x) + 'px'; tip.style.top = Math.max(4, y) + 'px';
+    });
+    svg.addEventListener('mouseleave', () => tip.classList.add('hidden'));
+  }
+
+  // Показать клетку (фишку игрока): приблизить поле к ней и мигнуть кольцом.
+  function focus(svg, id) {
+    const c = NP.GRAPH.CELL[id]; if (!c || !svg._pz) return;
+    svg._pz.center(c.x, c.y);
+    const L = svg._np; if (!L) return;
+    const ring = el('circle', { cx: c.x, cy: c.y, r: R + 14, class: 'focus-ring' }, L.gPath);
+    setTimeout(() => ring.remove(), 1800);
   }
 
   // Фишки: при нескольких на клетке раскладываются дугой/кругом вокруг неё, чтобы не перекрываться.
@@ -146,6 +202,7 @@
     const base = viewBox(), MAX = 4;
     let vb = base.slice();
     const pz = svg._pz = { dragged: false };
+    pz.center = (x, y) => { const w = Math.min(vb[2], base[2] / 2), h = vb[3] * w / vb[2]; vb = [x - w / 2, y - h / 2, w, h]; apply(); };
     const apply = () => {
       const k = base[2] / vb[2];
       // поле не уезжает за край больше чем на половину экрана
@@ -195,5 +252,5 @@
       wrap.appendChild(box);
     }
   }
-  NP.Board = { render };
+  NP.Board = { render, focus, showPath };
 })();

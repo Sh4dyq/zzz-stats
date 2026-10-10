@@ -114,7 +114,7 @@
     { id: 'D-01', name: 'Потерянный кошелёк', sign: '±', w: 6, desc: 'На тротуаре лежит пухлый кошелёк.', opts: [
       { label: 'Забрать себе', text: '+3 очка, но d6: 1–3 — тебя заметили: Оглушение', fx: [{ pts: 3 }, { roll: { die: 6, lo: [{ st: 'stun' }], hi: [] } }] },
       { label: 'Вернуть владельцу', text: '+1 очко и Щит', fx: [{ pts: 1 }, { st: 'shield' }] }] },
-    { id: 'D-02', name: 'Уличный торговец', sign: '+', w: 6, desc: 'Торговец с Шестой улицы предлагает товар из-под прилавка.', opts: [
+    { id: 'D-02', name: 'Уличный торговец', region: 'Ш', sign: '+', w: 6, desc: 'Торговец с Шестой улицы предлагает товар из-под прилавка.', opts: [
       { label: 'Купить за 2 очка', text: 'редкий предмет', need: { pts: 2 }, fx: [{ cost: 2 }, { item: 'rare' }] },
       { label: 'Пройти мимо', text: 'ничего', fx: [] }] },
     { id: 'D-03', name: 'Банбу-курьер', sign: '+', w: 6, desc: 'Банбу перепутал адрес и отдаёт посылку тебе.', opts: [
@@ -122,7 +122,7 @@
     { id: 'D-04', name: 'Попутный ветер', sign: '+', w: 5, desc: 'Попутка предлагает подвезти.', opts: [
       { label: 'Ехать', text: 'вперёд на 3 клетки', fx: [{ fwd: 3 }] },
       { label: 'Остаться', text: '+1 очко', fx: [{ pts: 1 }] }] },
-    { id: 'D-05', name: 'Ставка на гонку', sign: '±', w: 6, desc: 'Байкеры Блэйзвуда принимают ставки.', opts: [
+    { id: 'D-05', name: 'Ставка на гонку', region: 'Б', sign: '±', w: 6, desc: 'Байкеры Блэйзвуда принимают ставки.', opts: [
       { label: 'Поставить 2 очка', text: 'd6: 4–6 — +5 очков, 1–3 — ставка сгорает', need: { pts: 2 }, fx: [{ cost: 2 }, { roll: { die: 6, lo: [], hi: [{ pts: 5 }] } }] },
       { label: 'Не ставить', text: 'ничего', fx: [] }] },
     { id: 'D-06', name: 'Счастливая монетка', sign: '+', w: 5, desc: 'Монетка падает орлом три раза подряд.', opts: [
@@ -145,7 +145,25 @@
       { label: 'Смириться', text: 'Ржавый кубик (−2 к следующему броску)', fx: [{ st: 'rusty' }] }] },
     { id: 'D-14', name: 'Налоговая проверка', sign: '−', w: 4, desc: 'Налоговый инспектор просит показать декларацию.', opts: [
       { label: 'Заплатить', text: '−2 очка', fx: [{ pts: -2 }] },
-      { label: 'Спорить', text: 'd6: 1–3 — −4 очка, 4–6 — ничего', fx: [{ roll: { die: 6, lo: [{ pts: -4 }], hi: [] } }] }] }
+      { label: 'Спорить', text: 'd6: 1–3 — −4 очка, 4–6 — ничего', fx: [{ roll: { die: 6, lo: [{ pts: -4 }], hi: [] } }] }] },
+    // события регионов (region): выпадают только на клетке «Событие» своего региона
+    { id: 'D-15', name: 'Ночь в видеопрокате', region: 'Ш', sign: '+', w: 5, desc: 'В видеопрокате на Шестой улице крутят новинку.', opts: [
+      { label: 'Остаться на сеанс', text: '+2 очка', fx: [{ pts: 2 }] },
+      { label: 'Взять кассету с собой', text: 'случайный предмет', fx: [{ item: null }] }] },
+    { id: 'D-16', name: 'Пит-стоп', region: 'Б', sign: '+', w: 5, desc: 'Байкерам Блэйзвуда нужны лишние руки в гараже.', opts: [
+      { label: 'Помочь с ремонтом', text: '+1 очко и Золотой кубик', fx: [{ pts: 1 }, { st: 'golden' }] },
+      { label: 'Угнать запчасти', text: 'редкий предмет, но d6: 1–3 — Оглушение', fx: [{ item: 'rare' }, { roll: { die: 6, lo: [{ st: 'stun' }], hi: [] } }] }] },
+    { id: 'D-17', name: 'Чайная церемония', region: 'В', sign: '+', w: 5, desc: 'Хозяйка чайной на Вайфэе приглашает путников к столу.', opts: [
+      { label: 'Выпить чаю', text: 'Щит', fx: [{ st: 'shield' }] },
+      { label: 'Купить чай в дорогу за 1 очко', text: 'случайный предмет', need: { pts: 1 }, fx: [{ cost: 1 }, { item: null }] }] },
+    { id: 'D-18', name: 'Горная тропа', region: 'В', sign: '±', w: 5, desc: 'Короткая тропа через перевал затянута туманом.', opts: [
+      { label: 'Срезать по тропе', text: 'вперёд на 3 клетки, но d6: 1–2 — Оглушение', fx: [{ roll: { die: 6, lo: [], hi: [] }, stunOn: 2 }, { fwd: 3 }] },
+      { label: 'Идти в обход', text: '+1 очко', fx: [{ pts: 1 }] }] },
+    { id: 'D-19', name: 'Эфирный всплеск', region: 'Р', sign: '−', w: 5, desc: 'Над Розкелифером сгущается эфир.', opts: [
+      { label: 'Переждать', text: '−1 очко', fx: [{ pts: -1 }] },
+      { label: 'Прорваться', text: 'd6: 4–6 — +3 очка, 1–3 — −3 очка', fx: [{ roll: { die: 6, lo: [{ pts: -3 }], hi: [{ pts: 3 }] } }] }] },
+    { id: 'D-20', name: 'Находка в руинах', region: 'Р', sign: '+', w: 5, desc: 'Среди обломков блестит что-то ценное.', opts: [
+      { label: 'Обыскать руины', text: 'редкий предмет', fx: [{ item: 'rare' }] }] }
   ];
 
   async function applyFx(g, p, list, res, ev) {
@@ -175,21 +193,24 @@
   }
 
   async function playDemo(g, p, kind) {
-    let pool = NP.DEMO_EVENTS;
+    // событие региона — из пула региона клетки (нет своих — общее); случайное — только из общих
+    const reg = NP.GRAPH.regionOf(p.pos), own = NP.DEMO_EVENTS.filter(e => e.region && e.region === reg);
+    let pool = kind === 'L' && own.length ? own : NP.DEMO_EVENTS.filter(e => !e.region);
     if (kind === 'Rneg') pool = pool.filter(e => e.sign === '−');
     else if (g.fx('В') === 'E-В2' && NP.GRAPH.regionOf(p.pos) === 'В') pool = pool.filter(e => e.sign === '+');
+    if (!pool.length) pool = NP.DEMO_EVENTS.filter(e => !e.region && e.sign === '+');
     const S = g.S, used = S.deck.D || (S.deck.D = []);
     let left = pool.filter(e => !used.includes(e.id)); if (!left.length) { used.length = 0; left = pool; }
     const ev = g.wpick(left.map(e => [e, e.w]))[0]; used.push(ev.id);
-    g.log(p.name + ': событие «' + ev.name + '».', p);
+    g.log(p.name + ': ' + (ev.region ? 'событие региона ' + NP.REGIONS[ev.region].name : 'событие') + ' «' + ev.name + '».', p);
     const ok = o => !o.need || (!o.need.pts || p.pts >= o.need.pts);
-    const ch = await g.choose(p, '📜 ' + ev.name + ' — ' + ev.desc, ev.opts.map((o, i) => ({ label: o.label, value: i, hint: o.text, disabled: !ok(o) })), { always: true, kind: 'event' });
+    const ch = await g.choose(p, '📜 ' + ev.name + ' — ' + ev.desc, ev.opts.map((o, i) => ({ label: o.label, value: i, hint: o.text, disabled: !ok(o) })), { always: true, kind: 'event', public: true });
     const o = ev.opts[ch] || ev.opts.find(ok) || ev.opts[0], res = [];
     g.log(p.name + ' выбирает: ' + o.label + '.', p);
     await applyFx(g, p, o.fx, res, ev);
     if (!res.length) res.push('Ничего не произошло.');
     g.upd();
-    if (g.io.notice) await g.io.notice({ player: p.i, title: 'Событие · ' + o.label, name: ev.name, text: res.join(' '), icon: '📜' });
+    if (g.io.notice) await g.io.notice({ player: p.i, title: (ev.region ? 'Событие региона · ' + NP.REGIONS[ev.region].name : 'Событие') + ' · ' + p.name + ' · ' + o.label, name: ev.name, text: res.join(' '), icon: ev.region ? '◆' : '📜' });
   }
 
   async function play(g, p, kind) {
