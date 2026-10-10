@@ -160,6 +160,7 @@
     const link = location.href.split('#')[0] + '#room=' + MP.room + (/local/.test(location.hash) ? '&local' : '');
     box.innerHTML = `<p>Комната <b class="mp-code">${MP.room}</b>${MP.net && MP.net.kind === 'local' ? ' <span class="muted">(локально: вкладки этого браузера)</span>' : ''}</p>
       <p class="muted">Ссылка для друзей: <input class="mp-link" readonly value="${NP.App.esc(link)}" onclick="this.select()"></p>
+      <p><b>Игроки в лобби: ${MP.seats.length}</b>${MP.seats.length ? '' : ' <span class="muted">— пока никого, отправь ссылку друзьям</span>'}</p>
       <ol class="mp-seats">${MP.seats.map((s, i) => `<li><span class="swatch" style="background:${NP.PLAYER_COLORS[i]}"></span>${NP.App.esc(s.name)}${s.cid === cid ? ' <em>(ты)</em>' : ''}${s.own ? ' <em>хост</em>' : ''}</li>`).join('')}</ol>` +
       (spectating() ? `<p class="muted">Ведущий${MP.role === 'host' ? ' (ты)' : ''} только ведёт партию и не играет.</p>` : '') +
       (MP.role === 'host' ? `<label class="check"><input type="checkbox" id="mpSpectate" ${spectating() ? 'checked' : ''}> Только вести партию (хост не играет)</label><div class="row"><button class="btn ghost" id="mpAddLocal">+ Игрок на этом экране</button><button class="btn primary" id="mpStart" ${MP.seats.length < 2 ? 'disabled' : ''}>Начать онлайн-партию</button></div>`
