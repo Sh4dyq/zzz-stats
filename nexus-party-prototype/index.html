@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Nexus Party — прототип</title>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Saira+Condensed:wght@600;700;800;900&display=swap">
+  <meta name="theme-color" content="#07090d">
+</head>
+<body>
+  <header class="top">
+    <div class="brand"><img class="logo-img" src="img/nexus-logo.png" alt=""><span class="brand-t">NEXUS <b>PARTY</b></span><span class="tag">прототип</span></div>
+    <div class="top-actions">
+      <button class="btn ghost" id="btnGM" title="Ручные правки: очки, предметы, позиции, статусы">Ведущий</button>
+      <button class="btn ghost" id="btnRules">Памятка</button>
+      <button class="btn ghost" id="btnExport">Сохранить файл</button>
+      <label class="btn ghost">Загрузить файл<input type="file" id="fileImport" accept=".json" hidden></label>
+      <button class="btn ghost" id="btnNew">Новая партия</button>
+    </div>
+  </header>
+
+  <section id="lobby" class="lobby hidden">
+    <div class="card lobby-card">
+      <div class="hero">
+        <div class="hero-kicker">Новая партия · Нью-Эриду</div>
+        <img class="hero-logo" src="img/nexus-logo.png" alt="Nexus"><h1 class="hero-title">NEXUS <b>PARTY</b></h1>
+        <p class="hero-lead">Игра за одним экраном: игроки ходят по очереди. Бои ZZZ играются в самой игре, сюда вводятся только места.</p>
+        <p class="mode-note" id="modeNote"></p>
+      </div>
+      <h3 class="sec-h">Настройки</h3>
+      <div class="grid2" id="fullCfg">
+        <label>Игроков<select id="cfgPlayers"></select></label>
+        <label>Этапов<select id="cfgStages"></select></label>
+        <label>Порог досрочной победы<select id="cfgThreshold"></select></label>
+        <label>Шанс аномалии<select id="cfgAnom"><option value="0.05">5%</option><option value="0.1" selected>10%</option><option value="0.15">15%</option><option value="0.2">20%</option></select></label>
+        <label>Доля событий региона<select id="cfgShare"></select></label>
+        <label>Автоохота при отрыве<select id="cfgHunt"></select></label>
+        <label>Переход между этапами<select id="cfgTrans"><option value="fight" selected>Случайный общий бой</option><option value="gc">Grand Challenge каждый этап</option><option value="none">Нет боя</option></select></label>
+        <label>Бой с клетки<select id="cfgCellFights"><option value="roundEnd" selected>В конце раунда (не сгорают)</option><option value="now">Сразу</option></select></label>
+        <label>Сид (0 — случайный)<input id="cfgSeed" type="number" value="0"></label>
+      </div>
+      <div class="checks">
+        <label class="check"><input type="checkbox" id="cfgGlobal" checked> Глобальные события</label>
+        <label class="check"><input type="checkbox" id="cfgDeck"> События без повторов (колода)</label>
+      </div>
+      <h3 class="sec-h">Игроки</h3>
+      <div id="names" class="names"></div>
+      <div class="row lobby-actions"><button class="btn primary big" id="btnStart">Начать партию</button><button class="btn ghost" id="btnResume">Продолжить сохранённую</button></div>
+    </div>
+  </section>
+
+  <main id="game" class="game hidden">
+    <div class="board-wrap"><svg id="board"></svg><div id="boardHint" class="board-hint hidden" role="status" aria-live="polite"></div></div>
+    <aside class="side">
+      <div id="stageBar" class="card stage-bar"></div>
+      <div id="prompt" class="card prompt" aria-live="polite"></div>
+      <div id="players" class="players"></div>
+      <div id="regions" class="card regions"></div>
+      <div class="card log-card"><div class="card-head log-head">Журнал</div><div id="log" class="log"></div></div>
+    </aside>
+  </main>
+
+  <div id="modal" class="modal hidden"><div class="modal-box card" id="modalBox" role="dialog" aria-modal="true"></div></div>
+
+  <script src="js/data/map.js"></script>
+  <script src="js/data/rules.js"></script>
+  <script src="js/data/events.js"></script>
+  <script src="js/engine/game.js"></script>
+  <script src="js/engine/events.js"></script>
+  <script src="js/engine/globals.js"></script>
+  <script src="js/ui/board.js"></script>
+  <script src="js/ui/app.js"></script>
+</body>
+</html>

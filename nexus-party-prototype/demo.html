@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Nexus Party — демо</title>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/demo.css?v=4">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Saira+Condensed:wght@600;700;800;900&display=swap">
+  <meta name="theme-color" content="#07090d">
+</head>
+<body data-mode="demo">
+  <header class="top">
+    <div class="brand"><img class="logo-img" src="img/nexus-logo.png" alt=""><span class="brand-t">NEXUS <b>PARTY</b></span><span class="tag">демо</span></div>
+    <div class="top-actions">
+      <button class="btn ghost" id="btnRules" title="Правила хода и легенда клеток">Памятка</button>
+      <button class="btn ghost" id="btnGM" title="Ручные правки: очки, предметы, статусы, позиции фишек">Ведущий</button>
+      <button class="btn ghost" id="btnNew">Новая партия</button>
+    </div>
+  </header>
+
+  <section id="lobby" class="lobby hidden">
+    <div class="card lobby-card">
+      <div class="hero">
+        <div class="hero-kicker">Демо-версия · Нью-Эриду</div>
+        <img class="hero-logo" src="img/nexus-logo.png" alt="Nexus"><h1 class="hero-title">NEXUS <b>PARTY</b></h1>
+        <p class="hero-lead">Пати-игра по мотивам Zenless Zone Zero для 2–8 игроков — за одним экраном или онлайн. Бросайте кубик, выбирайте путь через Нью-Эриду и его окрестности, тяните события и копите предметы. Бои проходят в самой ZZZ: каждый вводит свой таймер или счёт, а места и очки игра считает сама.</p>
+        <ul class="features">
+          <li><span class="f-ic" aria-hidden="true">🎲</span><b>Ход за ходом</b><span>кубик, развилки и 15 типов клеток</span></li>
+          <li><span class="f-ic" aria-hidden="true">🃏</span><b>События и предметы</b><span>эффекты регионов, аномалии, ловушки</span></li>
+          <li><span class="f-ic" aria-hidden="true">⚔</span><b>Бои ZZZ</b><span>результат — в пару нажатий</span></li>
+        </ul>
+        <p class="mode-note" id="modeNote"></p>
+      </div>
+      <h3 class="sec-h">Партия</h3>
+      <div class="grid2" id="fullCfg">
+        <label>Игроков<select id="cfgPlayers"></select></label>
+        <label>Этапов<select id="cfgStages"></select></label>
+        <label>Порог досрочной победы<select id="cfgThreshold"></select></label>
+        <label>Шанс аномалии<select id="cfgAnom"><option value="0.05">5%</option><option value="0.1" selected>10%</option><option value="0.15">15%</option><option value="0.2">20%</option></select></label>
+        <label>Доля событий региона<select id="cfgShare"></select></label>
+        <label>Автоохота при отрыве<select id="cfgHunt"></select></label>
+        <label>Переход между этапами<select id="cfgTrans"><option value="fight" selected>Случайный общий бой</option><option value="gc">Grand Challenge каждый этап</option><option value="none">Нет боя</option></select></label>
+        <label>Бой с клетки<select id="cfgCellFights"><option value="roundEnd" selected>В конце раунда (не сгорают)</option><option value="now">Сразу</option></select></label>
+        <label>Сид (0 — случайный)<input id="cfgSeed" type="number" value="0"></label>
+      </div>
+      <div class="checks">
+        <label class="check"><input type="checkbox" id="cfgGlobal" checked> Глобальные события</label>
+        <label class="check"><input type="checkbox" id="cfgDeck"> События без повторов (колода)</label>
+      </div>
+      <h3 class="sec-h">Игроки</h3>
+      <div id="names" class="names"></div>
+      <div class="row lobby-actions"><button class="btn primary big" id="btnStart">Начать партию</button><button class="btn ghost" id="btnResume">Продолжить партию</button></div>
+    </div>
+  </section>
+
+  <!-- Стол: игроки слева, поле в центре с панелью действий под ним, справочная информация справа.
+       Id контейнеров те же, что ждёт js/ui/app.js; раскладку задаёт css/demo.css. -->
+  <main id="game" class="game demo-table hidden">
+    <div class="center">
+    <section class="hud" aria-label="Состояние партии">
+      <div id="turnChip" class="turn-chip" aria-live="polite"></div>
+      <div id="stageBar" class="stage-bar"></div>
+    </section>
+
+    <div class="board-wrap">
+      <svg id="board"></svg>
+      <div id="boardHint" class="board-hint hidden" role="status" aria-live="polite"></div>
+      <div id="turnSplash" class="turn-splash" aria-hidden="true"></div>
+    </div>
+
+    <section class="dock" id="dock" aria-label="Действие">
+      <div id="prompt" class="card prompt" aria-live="polite"></div>
+      <div class="dock-idle"><span class="idle-dot"></span>Ждём: бой, событие или решение ведущего</div>
+    </section>
+    </div>
+
+    <div class="side-stack">
+      <aside class="rail" aria-label="Игроки">
+        <div class="pane-head">Игроки <span>порядок хода</span></div>
+        <div id="players" class="players"></div>
+      </aside>
+      <aside class="info" aria-label="Справка">
+        <details class="card legend-card" id="legendCard">
+          <summary class="pane-head">Клетки <span>легенда</span></summary>
+          <div id="legend" class="legend-list"></div>
+        </details>
+        <div id="regions" class="card regions"></div>
+        <div class="card log-card"><div class="card-head log-head">Журнал</div><div id="log" class="log"></div></div>
+      </aside>
+    </div>
+  </main>
+
+  <div id="modal" class="modal hidden"><div class="modal-box card" id="modalBox" role="dialog" aria-modal="true"></div></div>
+
+  <script src="js/data/map.js"></script>
+  <script src="js/data/rules.js"></script>
+  <script src="js/data/events.js"></script>
+  <script src="js/engine/game.js"></script>
+  <script src="js/engine/events.js"></script>
+  <script src="js/engine/globals.js"></script>
+  <script src="js/ui/board.js"></script>
+  <script src="js/ui/app.js"></script>
+  <script src="js/ui/demo-hud.js?v=4"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+  <script src="js/net/mp.js"></script>
+</body>
+</html>

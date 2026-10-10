@@ -1,0 +1,131 @@
+/* Раскладка стола для demo.html. Подключается после style.css и переопределяет только раскладку игры.
+   Зоны: игроки (слева) · полоса состояния, поле и панель действия (центр) · легенда, регионы, журнал (справа). */
+.demo-table { --rail-w: 252px; --info-w: 296px; --turn: var(--accent); --dock-c: var(--turn); }
+
+/* Сетка в одну строку: у каждой колонки своя высота и свой скролл, поле занимает всё, что осталось в центре. */
+.game.demo-table {
+  display: grid; height: calc(100vh - var(--top-h)); height: calc(100dvh - var(--top-h));
+  grid-template-columns: var(--rail-w) minmax(0, 1fr) var(--info-w);
+  grid-template-rows: minmax(0, 1fr);
+  grid-template-areas: "rail center info";
+}
+.demo-table .side-stack { display: contents; }
+.demo-table .center { grid-area: center; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.demo-table .hud, .demo-table .dock { flex: none; }
+.demo-table .board-wrap { flex: 1 1 auto; }
+.demo-table .rail { grid-area: rail; }
+.demo-table .info { grid-area: info; }
+
+.pane-head { display: flex; align-items: baseline; gap: 8px; font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+.pane-head span { font-weight: 500; letter-spacing: .04em; text-transform: none; color: var(--dim); }
+
+/* ---------- полоса состояния над полем ---------- */
+.hud { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--line); background: var(--bg2); min-width: 0; }
+.turn-chip { flex: none; display: flex; align-items: center; gap: 9px; padding: 4px 14px 4px 6px; border-radius: 999px; background: color-mix(in srgb, var(--turn) 16%, var(--panel)); border: 1px solid color-mix(in srgb, var(--turn) 60%, transparent); transition: background .3s, border-color .3s; }
+.turn-chip:empty { display: none; }
+.turn-chip .tc-av { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: var(--turn); color: #0b0d12; font-weight: 800; box-shadow: 0 0 12px color-mix(in srgb, var(--turn) 60%, transparent); }
+.turn-chip .tc-l { font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); line-height: 1; }
+.turn-chip .tc-n { font-family: var(--f-display); font-size: 17px; font-weight: 800; line-height: 1.05; max-width: 16ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hud .stage-bar { flex: 1; min-width: 0; display: flex; flex-direction: row; align-items: center; gap: 8px; flex-wrap: wrap; padding: 0; background: none; border: 0; }
+.hud .sb-row { flex-wrap: nowrap; }
+.hud .sb-global { flex: 1 1 260px; min-width: 0; padding: 4px 10px; }
+.hud .sb-global small { -webkit-line-clamp: 1; }
+
+/* ---------- поле ---------- */
+.demo-table .board-wrap { min-height: 0; }
+.turn-splash { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none; opacity: 0; }
+.turn-splash.show { animation: splash 1.3s ease-out forwards; }
+.turn-splash b { font-family: var(--f-display); font-weight: 900; font-size: clamp(30px, 5vw, 58px); letter-spacing: .04em; text-transform: uppercase; color: #fff;
+  padding: 6px 34px; transform: skewX(-10deg); background: linear-gradient(95deg, var(--turn), color-mix(in srgb, var(--turn) 55%, #000)); box-shadow: 0 10px 40px rgba(0, 0, 0, .55), 0 0 0 2px rgba(255, 255, 255, .08); }
+.turn-splash small { display: block; font-family: var(--f-ui); font-size: 13px; font-weight: 700; letter-spacing: .2em; color: rgba(255, 255, 255, .8); text-align: center; }
+@keyframes splash { 0% { opacity: 0; transform: scale(.92); } 15% { opacity: 1; transform: scale(1); } 75% { opacity: 1; } 100% { opacity: 0; } }
+
+/* коды клеток и позиции игрокам не нужны: фишка видна на поле */
+.demo-table .pl-pos, .modal .ev-id { display: none; }
+.cell .cid { font-size: 9px; }
+.cell.hl circle.body { stroke: var(--dock-c, var(--accent)); stroke-width: 5; }
+
+/* ---------- панель действия под полем ---------- */
+.dock { position: relative; padding: 10px 12px 12px; border-top: 1px solid var(--line); background: linear-gradient(180deg, var(--bg2), var(--bg)); max-height: 42vh; overflow-y: auto; }
+.dock::before { content: ""; position: absolute; left: 0; right: 0; top: -1px; height: 2px; background: var(--dock-c); box-shadow: 0 0 14px var(--dock-c); transition: background .3s; }
+.dock .prompt { max-width: 980px; margin: 0 auto; padding: 10px 14px 12px; border-color: color-mix(in srgb, var(--dock-c) 55%, transparent); box-shadow: 0 0 26px color-mix(in srgb, var(--dock-c) 12%, transparent); }
+.dock .prompt::before { background: var(--dock-c); }
+.dock .prompt.secret { border-color: rgba(232, 121, 249, .6); }
+.dock .prompt h3 { font-size: 17px; margin-bottom: 10px; }
+.dock .who { font-size: 13px; }
+.dock .prompt .opts { flex-direction: row; flex-wrap: wrap; counter-reset: opt; }
+.dock .prompt .opts .btn { flex: 1 1 180px; min-height: 46px; max-width: 360px; }
+.dock .prompt .opts .btn.primary { flex: 0 1 380px; margin: 0 auto; min-height: 54px; font-size: 18px; font-family: var(--f-display); letter-spacing: .06em; text-transform: uppercase;
+  background: linear-gradient(95deg, var(--dock-c), color-mix(in srgb, var(--dock-c) 60%, #000)); border-color: var(--dock-c); color: #fff; text-shadow: 0 1px 2px rgba(0, 0, 0, .5); }
+.dock .prompt .opts .btn.primary:hover:not(:disabled) { box-shadow: 0 0 22px color-mix(in srgb, var(--dock-c) 50%, transparent); filter: brightness(1.1); }
+.dock .prompt .grid-opts .btn { min-height: 36px; }
+/* номер варианта = клавиша быстрого выбора (обрабатывает demo-hud.js) */
+.dock .prompt .opts .btn.opt:nth-child(-n+9) { position: relative; padding-left: 38px; }
+.dock .prompt .opts .btn.opt:nth-child(-n+9)::before { counter-increment: opt; content: counter(opt); position: absolute; left: 10px; top: 10px; display: grid; place-items: center; width: 20px; height: 20px;
+  border-radius: 5px; border: 1px solid var(--line2); background: var(--bg); color: var(--muted); font-size: 11px; font-weight: 700; }
+.dock .prompt .opts .btn.opt:hover::before { border-color: var(--dock-c); color: var(--text); }
+.dock-idle { display: none; align-items: center; justify-content: center; gap: 8px; min-height: 46px; color: var(--muted); font-size: 13px; }
+.dock:has(#prompt:empty) .dock-idle { display: flex; }
+.idle-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--dock-c); animation: pulse 1.2s ease-in-out infinite; }
+
+/* ---------- игроки слева ---------- */
+.rail { display: flex; flex-direction: column; gap: 8px; padding: 12px 10px; border-right: 1px solid var(--line); background: var(--bg2); overflow-y: auto; min-height: 0; }
+.rail .players { gap: 6px; }
+.rail .pl { padding: 8px 10px; border-radius: 10px; transition: transform .25s, background .2s, box-shadow .2s; }
+.rail .pl.cur { margin-left: 4px; box-shadow: 0 0 0 1px var(--pc) inset, 0 0 22px color-mix(in srgb, var(--pc) 22%, transparent); }
+.rail .pl-turn { background: var(--pc); color: #0b0d12; }
+.rail .pts { font-size: 24px; color: var(--text); }
+.rail .pl.cur .pts { color: var(--pc); }
+.rail .pl-meta { gap: 8px; margin-top: 5px; }
+.rail .pl-src { display: none; }
+.rail .pl:hover .pl-src, .rail .pl.cur .pl-src { display: block; }
+.rail .items { margin-top: 6px; }
+
+/* ---------- справка справа ---------- */
+.info { display: flex; flex-direction: column; gap: 10px; padding: 12px; border-left: 1px solid var(--line); background: var(--bg2); min-height: 0; overflow: hidden; }
+.info > .card { flex: none; }
+.legend-card { padding: 10px 12px; }
+.legend-card summary { cursor: pointer; list-style: none; }
+.legend-card summary::-webkit-details-marker { display: none; }
+.legend-card summary::after { content: "▾"; margin-left: auto; color: var(--dim); transition: transform .2s; }
+.legend-card:not([open]) summary::after { transform: rotate(-90deg); }
+.legend-list { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 8px; margin-top: 8px; font-size: 12px; }
+.lg-row { display: flex; align-items: center; gap: 6px; min-width: 0; white-space: nowrap; }
+.lg-row .lg-c { flex: none; display: grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; color: #0b0d12; font-size: 10px; font-weight: 800; }
+.lg-row .lg-n { overflow: hidden; text-overflow: ellipsis; }
+.lg-row .lg-p { color: var(--gold); font-size: 10px; }
+.legend-foot { grid-column: 1 / -1; color: var(--dim); font-size: 11px; margin-top: 2px; }
+.info .log-card { flex: 1 1 auto; min-height: 140px; display: flex; flex-direction: column; }
+.info .log { flex: 1; max-height: none; }
+
+/* ---------- ноутбук: справка уходит под игроков в правую колонку ---------- */
+@media (max-width: 1280px) {
+  .game.demo-table { grid-template-columns: minmax(0, 1fr) 300px; grid-template-areas: "center side"; }
+  .demo-table .side-stack { display: flex; flex-direction: column; grid-area: side; min-height: 0; overflow-y: auto; border-left: 1px solid var(--line); background: var(--bg2); }
+  .demo-table .rail, .demo-table .info { border: 0; overflow: visible; }
+  .demo-table .rail { padding-bottom: 0; }
+  .info .log-card { min-height: 220px; }
+  .rail .pl.cur { margin-left: 0; }
+}
+
+/* ---------- планшет и телефон: всё в столбик, действие прилипает к низу экрана ---------- */
+@media (max-width: 900px) {
+  .game.demo-table { display: flex; flex-direction: column; height: auto; }
+  .demo-table .side-stack { border: 0; overflow: visible; }
+  .demo-table .hud { flex-wrap: wrap; }
+  .demo-table .board-wrap { flex: none; height: 58vh; min-height: 300px; }
+  .demo-table .dock { position: sticky; bottom: 0; z-index: 15; max-height: 50vh; }
+  .rail .players { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+  .info .log { max-height: 280px; }
+  .dock .prompt .opts .btn.opt:nth-child(-n+9) { padding-left: 12px; }
+  .dock .prompt .opts .btn.opt:nth-child(-n+9)::before { display: none; }
+}
+@media (max-width: 560px) {
+  .hud .sb-row { flex-wrap: wrap; }
+  .demo-table .board-wrap { height: 48vh; }
+  .dock .prompt .opts .btn { flex-basis: 100%; max-width: none; }
+  .legend-list { grid-template-columns: 1fr 1fr; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .turn-splash.show { animation: none; opacity: 0; }
+}
