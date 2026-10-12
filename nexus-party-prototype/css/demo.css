@@ -66,7 +66,7 @@
 .dock .prompt .opts .btn.opt:hover::before { border-color: var(--dock-c); color: var(--text); }
 .dock-idle { display: none; align-items: center; justify-content: center; gap: 8px; min-height: 46px; color: var(--muted); font-size: 13px; }
 .dock:has(#prompt:empty) .dock-idle { display: flex; }
-.idle-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--dock-c); animation: pulse 1.2s ease-in-out infinite; }
+.idle-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--dock-c); animation: pulse 1.2s ease-in-out 4; }
 
 /* ---------- игроки слева ---------- */
 .rail { display: flex; flex-direction: column; gap: 8px; padding: 12px 10px; border-right: 1px solid var(--line); background: var(--bg2); overflow-y: auto; min-height: 0; }

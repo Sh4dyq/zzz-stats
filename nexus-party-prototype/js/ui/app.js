@@ -45,9 +45,9 @@
       stages: +$('#cfgStages').value, threshold: +$('#cfgThreshold').value, anomaly: +$('#cfgAnom').value, regionShare: +$('#cfgShare').value / 100,
       autoHunt: +$('#cfgHunt').value, eventDeck: $('#cfgDeck').checked, seed: +$('#cfgSeed').value || 0,
       transitionFight: tr === 'gc' ? 'none' : tr, gcEveryStage: tr === 'gc',
-      cellFights: $('#cfgCellFights').value, globalEvents: $('#cfgGlobal').checked, mode
+      cellFights: $('#cfgCellFights').value, globalEvents: $('#cfgGlobal').checked, stageTeleport: $('#cfgStageTp') ? $('#cfgStageTp').checked : true, mode
     };
-    if (mode === 'demo') Object.assign(cfg, { threshold: NP.DEFAULTS.threshold, anomaly: NP.DEFAULTS.anomaly, regionShare: NP.DEFAULTS.regionShare, autoHunt: NP.DEFAULTS.autoHunt, eventDeck: true, transitionFight: 'fight', gcEveryStage: false, cellFights: 'roundEnd', globalEvents: true, seed: 0 });
+    if (mode === 'demo') Object.assign(cfg, { threshold: NP.DEFAULTS.threshold, anomaly: NP.DEFAULTS.anomaly, regionShare: NP.DEFAULTS.regionShare, autoHunt: NP.DEFAULTS.autoHunt, eventDeck: true, transitionFight: 'fight', gcEveryStage: false, cellFights: 'roundEnd', globalEvents: true, stageTeleport: false, seed: 0 });
     return cfg;
   }
 
@@ -69,7 +69,7 @@
       fight: spec => new Promise(res => { if (live()) renderFight(spec, res); }),
       eventCard: spec => new Promise(res => { if (live()) renderEvent(spec, res); }),
       notice: spec => new Promise(res => { if (!live()) return; const box = openModal('notice'); box.innerHTML = `<div class="notice-banner"><span class="notice-ic" aria-hidden="true">${spec.icon || '🌐'}</span><div><div class="ev-kind">${esc(spec.title)}</div><h2>${esc(spec.name)}</h2></div></div><p class="notice-text">${esc(spec.text)}</p><div class="row end"><button class="btn primary" id="ntOk">Дальше</button></div>`; $('#ntOk').focus(); $('#ntOk').onclick = () => { closeModal(); res(); }; }),
-      announce: spec => live() && toast(`<b>${esc(spec.title)}</b><br>«${esc(spec.name)}» — ${esc(spec.text)}`, spec.player !== undefined && spec.player !== null ? P(spec.player).color : '', 8000),
+      announce: spec => live() && toast(`<b>${esc(spec.title)}</b><br>«${esc(spec.name)}» — ${esc(spec.text)}`, spec.player !== undefined && spec.player !== null ? P(spec.player).color : '', 8000, true),
       log: () => live() && update(),
       update: () => live() && update(),
       save: S => live() && store.set(S),
@@ -79,9 +79,10 @@
 
   // ---------- уведомления ----------
   // Всплывают у всех: строки журнала с пометкой n (очки, предметы, броски, Казино, Гача, регионы…) и карточки announce.
-  function toast(html, color, ms) {
-    let box = $('#toasts'); if (!box) { box = document.createElement('div'); box.id = 'toasts'; box.setAttribute('aria-live', 'polite'); document.body.appendChild(box); }
-    const t = document.createElement('div'); t.className = 'toast'; if (color) t.style.setProperty('--pc', color); t.innerHTML = html;
+  function toast(html, color, ms, big) { // big — важное, по центру экрана
+    const id = big ? 'toastsBig' : 'toasts';
+    let box = $('#' + id); if (!box) { box = document.createElement('div'); box.id = id; box.setAttribute('aria-live', 'polite'); document.body.appendChild(box); }
+    const t = document.createElement('div'); t.className = 'toast' + (big ? ' big' : ''); if (color) t.style.setProperty('--pc', color); t.innerHTML = html;
     t.onclick = () => t.remove();
     box.appendChild(t); while (box.children.length > 6) box.firstChild.remove();
     setTimeout(() => { t.classList.add('out'); setTimeout(() => t.remove(), 400); }, ms || 5000);
@@ -89,9 +90,46 @@
   function toastLog(S) {
     const last = S.log.length ? S.log[S.log.length - 1].t : -1;
     if (seenT === null || last < seenT) { seenT = last; return; } // первая отрисовка или новая партия — без всплывашек
-    for (const l of S.log) if (l.t > seenT && l.n) toast(esc(l.m), l.p !== null && S.players[l.p] ? S.players[l.p].color : '');
+    for (const l of S.log) if (l.t > seenT && l.n) toast(esc(l.m), l.p !== null && S.players[l.p] ? S.players[l.p].color : '', l.n === 2 ? 6000 : 5000, l.n === 2);
     seenT = last;
   }
+
+  // ---------- подсказки при наведении (предметы, статусы, журнал) ----------
+  const WHEN = { pre: 'до броска', post: 'после броска', passive: 'действует сам' };
+  function itemTip(key, anom) {
+    const I = NP.ITEMS[key]; if (!I) return '';
+    return I.name + ' · ' + (NP.RARITY[I.rarity] ? NP.RARITY[I.rarity].name : '') + ' · ' + (WHEN[I.when] || '') + '\n' + I.text + (I.anom ? '\n✦ Аномальный: ' + I.anom : '') + (anom ? '\n(этот предмет аномальный)' : '');
+  }
+  let tipDict = null;
+  function logTip(m) { // объяснение строки журнала: предметы, события, эффекты регионов, глобальные события, клетки
+    if (!tipDict) {
+      tipDict = {};
+      for (const k in NP.ITEMS) tipDict[NP.ITEMS[k].name] = itemTip(k);
+      for (const e of NP.DEMO_EVENTS || []) tipDict[e.name] = e.name + ': ' + e.desc + '\n' + e.opts.map(o => '• ' + o.label + ' — ' + o.text).join('\n');
+      for (const e of [...((NP.EVENTS || {}).L || []), ...((NP.EVENTS || {}).R || [])]) if (!tipDict[e.name]) tipDict[e.name] = e.name + ': ' + (e.desc || '');
+      for (const e of NP.REGION_FX || []) tipDict[e.name] = 'Эффект региона «' + e.name + '»: ' + e.text;
+      for (const e of NP.GLOBALS || []) tipDict[e.name] = 'Глобальное событие «' + e.name + '»: ' + e.text;
+    }
+    const out = [];
+    for (const q of m.matchAll(/«([^»]+)»/g)) if (tipDict[q[1]] && !out.includes(tipDict[q[1]])) out.push(tipDict[q[1]]);
+    for (const t in NP.TYPES) { const lab = (NP.TYPE_LABEL || {})[t] || t; if (m.includes(lab + ' · ') || m.includes('клетка ' + lab)) out.push(lab + ': ' + NP.cellDesc(t, game && game.S.cfg)); }
+    return out.join('\n\n');
+  }
+  function tipLayer() {
+    if ($('#tip')) return;
+    const tip = document.createElement('div'); tip.id = 'tip'; tip.className = 'tip hidden'; document.body.appendChild(tip);
+    document.addEventListener('mouseover', e => {
+      const t = e.target.closest && e.target.closest('[data-tip]');
+      if (!t || !t.dataset.tip) { tip.classList.add('hidden'); return; }
+      tip.textContent = t.dataset.tip; tip.classList.remove('hidden');
+      const r = t.getBoundingClientRect(), w = tip.offsetWidth, h = tip.offsetHeight;
+      let x = r.left, y = r.bottom + 6;
+      if (x + w > innerWidth - 8) x = innerWidth - w - 8;
+      if (y + h > innerHeight - 8) y = r.top - h - 6;
+      tip.style.left = Math.max(8, x) + 'px'; tip.style.top = Math.max(8, y) + 'px';
+    });
+  }
+  tipLayer();
 
   // ---------- отрисовка ----------
   function update() { if (raf) return; raf = requestAnimationFrame(() => { raf = 0; draw(); }); }
@@ -108,7 +146,7 @@
     const byPts = S.order.slice().sort((a, b) => S.players[b].pts - S.players[a].pts || S.order.indexOf(a) - S.order.indexOf(b));
     $('#players').innerHTML = byPts.map(i => {
       const p = S.players[i], st = p.st, sts = [];
-      const s = (ic, cls, tip, n) => sts.push(`<span class="st ${cls}" title="${esc(tip)}" aria-label="${esc(tip)}">${ic}${n ? `<i>${n}</i>` : ''}</span>`);
+      const s = (ic, cls, tip, n) => sts.push(`<span class="st ${cls}" data-tip="${esc(tip)}" aria-label="${esc(tip)}">${ic}${n ? `<i>${n}</i>` : ''}</span>`);
       if (st.stun) s('💫', 'neg', 'Оглушение: пропускает следующий бросок');
       if (st.silence) s('🔇', 'neg', 'Запрет предметов');
       if (st.battery) s('🔋', 'neg', 'Разряженная батарейка: следующий бросок — меньший из двух', st.battery > 1 ? st.battery : '');
@@ -124,7 +162,7 @@
       if (st.contract) s('📜', 'pos', 'Контракт: условие на следующий бой');
       for (const d of st.dice) s('🎲', d > 0 ? 'pos gold' : 'neg rust', d > 0 ? 'Золотой кубик' : 'Ржавый кубик');
       const marks = ['Ш', 'Б', 'В', 'Р'].map(r => { const on = p.marks.includes(r); return `<span class="mk ${on ? 'on' : ''}" style="--rc:${NP.REGIONS[r].color}" title="${esc(NP.REGIONS[r].name)}: ${on ? 'отметка есть' : 'нет отметки'}">${r}</span>`; }).join('');
-      const items = p.items.map(it => { const I = NP.ITEMS[it.key], rar = NP.RARITY[I.rarity] ? NP.RARITY[I.rarity].name : ''; return `<span class="chip it r-${I.rarity} ${it.anom ? 'anom' : ''}" title="${esc(I.name + ' · ' + rar + (it.anom ? ' · ✦ аномальный' : '') + '\n' + (it.anom ? 'Аномальный эффект: ' + I.anom : I.text))}">${it.anom ? '<b class="anom-mk">✦</b>' : ''}${esc(I.name)}</span>`; }).join('');
+      const items = p.items.map(it => { const I = NP.ITEMS[it.key], rar = NP.RARITY[I.rarity] ? NP.RARITY[I.rarity].name : ''; return `<span class="chip it r-${I.rarity} ${it.anom ? 'anom' : ''}" data-tip="${esc(itemTip(it.key, it.anom))}">${it.anom ? '<b class="anom-mk">✦</b>' : ''}${esc(I.name)}</span>`; }).join('');
       const cur = S.cur === i && !S.over;
       return `<div class="pl ${cur ? 'cur' : ''}" style="--pc:${p.color}" data-p="${i}" title="Нажми, чтобы показать фишку на поле">
         <div class="pl-h"><span class="pl-av" aria-hidden="true">${esc((p.name || '?').trim().charAt(0).toUpperCase())}</span><span class="pl-name"><b>${esc(p.name)}</b>${p === L && p.pts ? ' <span class="crown" title="Лидер">♛</span>' : ''}${cur ? ' <span class="pl-turn">ходит</span>' : ''}</span><span class="pts">${p.pts}<small>очк.</small></span></div>
@@ -136,20 +174,20 @@
       const id = S.regionFx[r], fx = NP.REGION_FX.find(e => e.id === id);
       return `<div class="r" style="--rc:${NP.REGIONS[r].color}"><b>${NP.REGIONS[r].name}</b><span title="${esc(fx ? fx.text : '')}">${fx ? esc(fx.name) + (S.regionBy[r] !== undefined ? ' · ' + esc(P(S.regionBy[r]).name) : '') : '<span class="muted">не активен</span>'}</span></div>`;
     }).join('');
-    $('#log').innerHTML = S.log.slice(-250).reverse().map(l => `<div class="${l.m.startsWith('—') ? 'round' : ''}">${l.p !== null && S.players[l.p] ? `<span class="ld" style="background:${S.players[l.p].color}"></span>` : ''}${esc(l.m)}</div>`).join('');
+    $('#log').innerHTML = S.log.slice(-150).reverse().map(l => `<div class="${l.m.startsWith('—') ? 'round' : ''}"${logTip(l.m) ? ` data-tip="${esc(logTip(l.m))}"` : ''}>${l.p !== null && S.players[l.p] ? `<span class="ld" style="background:${S.players[l.p].color}"></span>` : ''}${esc(l.m)}</div>`).join('');
   }
 
   // ---------- выбор ----------
   function head(spec) { return spec.player !== null && spec.player !== undefined && P(spec.player) ? `<div class="who" style="--pc:${P(spec.player).color}"><span class="who-dot"></span>Решает ${pname(spec.player)}</div>` : ''; }
   function renderChoice(spec, res) {
-    const box = $('#prompt'), opts = spec.options.filter(o => !o.disabled);
+    const box = $('#prompt'), opts = spec.showDisabled ? spec.options : spec.options.filter(o => !o.disabled);
     const done = v => { ui.pickCells = null; ui.onPick = null; ui.paths = null; $('#boardHint').classList.add('hidden'); box.innerHTML = ''; box.className = 'card prompt'; update(); res(v); };
     const isCell = spec.kind === 'cell';
     if (isCell) { ui.pickCells = spec.cells; ui.paths = spec.paths || null; ui.from = spec.from; ui.onPick = id => done(id); $('#boardHint').innerHTML = '<span class="hint-dot"></span>Выбери подсвеченную клетку на поле'; $('#boardHint').classList.remove('hidden'); update(); }
     const many = opts.length > 8 || isCell;
     box.className = 'card prompt' + (spec.secret ? ' secret' : '');
     box.innerHTML = head(spec) + `<h3>${esc(spec.title)}</h3>` + (isCell ? '<p class="prompt-sub">Нажми клетку на поле или выбери из списка:</p>' : '') + `<div class="${many ? 'grid-opts' : 'opts'}">` +
-      opts.map((o, k) => `<button class="btn ${many ? 'small' : 'opt'}" data-k="${k}">${esc(o.label)}${o.hint && !many ? `<small>${esc(o.hint)}</small>` : ''}</button>`).join('') + '</div>' +
+      opts.map((o, k) => `<button class="btn ${many ? 'small' : 'opt'}" data-k="${k}" ${o.disabled ? 'disabled' : ''} ${o.item ? `data-tip="${esc(itemTip(o.item, o.anom))}"` : ''}>${esc(o.label)}${o.hint && !many ? `<small>${esc(o.hint)}</small>` : ''}</button>`).join('') + '</div>' +
       (spec.secret ? '<p class="secret-note">🙈 Выбор втёмную: остальные отворачиваются.</p>' : '');
     box.querySelectorAll('button[data-k]').forEach(b => b.onclick = () => done(opts[+b.dataset.k].value));
     box.scrollIntoView({ block: 'nearest' });
@@ -197,14 +235,14 @@
     const waitLine = () => opt.host && remote.length ? `<p class="muted fight-wait">${remote.map(i => (got.has(i) ? '✓ ' : '⏳ ') + esc(P(i).name)).join(' · ')}</p>` : '';
     const actions = () => waitLine() + `<div class="row end m-actions"><button class="btn ghost" id="fRand" title="${mineOnly ? 'Заполнить свой результат случайно' : 'Симуляция: заполнить пустые результаты за всех'}">${mineOnly ? 'Случайно' : 'Заполнить за всех'}</button><button class="btn primary" id="fOk">${mineOnly ? 'Отправить' : 'Записать'}</button></div>`;
     const body = () => {
-      if (duel) return top('Дуэли') + `<p class="muted">Каждый вводит свой результат — победителя пары игра определит сама${spec.mult > 1 ? ' (очки ×' + spec.mult + ')' : ''}.</p>` +
-        spec.pairs.map((pr, k) => `<div class="duel-block"><p class="fight-mode">Режим: <b>${esc(NP.modeName(spec.modes[k]))}</b> <span class="muted">${metricHint(spec.metrics[k])}</span></p><div class="duel">${pr.map(i => `<div class="duel-side"><span class="pbtn static">${pBtnLabel(i)}</span>${inp(entries.find(e => e.key === k + '_' + i))}</div>`).join('<span class="vs">vs</span>')}</div></div>`).join('');
-      const head = (kind, note) => top(kind, `<p class="fight-mode">Режим: <b>${esc(NP.modeName(spec.mode))}</b> <span class="muted">${metricHint(spec.metric)}</span>${spec.mult > 1 ? ' <span class="mult">очки ×' + spec.mult + '</span>' : ''}</p>`) + modsHtml(spec.mods) + `<p class="muted">${note}</p>`;
+      if (duel) return top('Пары 1 на 1') + `<p class="muted">Каждая пара играет свой бой 1 на 1. Каждый вводит свой результат — победителя пары игра определит сама${spec.mult > 1 ? ' (очки ×' + spec.mult + ')' : ''}.</p>` +
+        spec.pairs.map((pr, k) => `<div class="duel-block"><p class="fight-mode">Режим: <b>${esc(NP.modeName(spec.modes[k]))}</b>${spec.subs && spec.subs[k] ? ` · <b class="sub-roll">${esc(spec.subs[k])}</b>` : ''} <span class="muted">${metricHint(spec.metrics[k])}</span>${spec.notes && spec.notes[k] ? `<br><span class="muted">${esc(spec.notes[k])}</span>` : ''}</p><div class="duel">${pr.map(i => `<div class="duel-side"><span class="pbtn static">${pBtnLabel(i)}</span>${inp(entries.find(e => e.key === k + '_' + i))}</div>`).join('<span class="vs">vs</span>')}</div></div>`).join('');
+      const head = (kind, note) => top(kind, `<p class="fight-mode">Режим: <b>${esc(NP.modeName(spec.mode))}</b>${spec.sub ? ` · <b class="sub-roll">${esc(spec.sub)}</b>` : ''} <span class="muted">${metricHint(spec.metric)}</span>${spec.mult > 1 ? ' <span class="mult">очки ×' + spec.mult + '</span>' : ''}${spec.note ? `<br><span class="muted">${esc(spec.note)}</span>` : ''}</p>`) + modsHtml(spec.mods) + `<p class="muted">${note}</p>`;
       const row = (e, tag) => `<div class="fight-row"><span class="pbtn static">${pBtnLabel(e.seat, tag || '')}${xi(e.seat)}</span>${inp(e)}${bonusRow(e.seat)}</div>`;
-      if (spec.kind === 'hunt') return head('Охота', `Режим выбрал лидер ${pname(spec.leader)}. Каждый вводит свой результат. Кто обошёл лидера, получает +2 (охотник +3). Лидер получает +1 за каждого, кто его не обошёл. Отметь галочками выполненные модификаторы — бонус посчитается сам.`) +
+      if (spec.kind === 'hunt') return head('Охота · все против лидера', `Режим выбрал лидер ${pname(spec.leader)}. Каждый вводит свой результат. Кто обошёл лидера, получает +2 (охотник +3). Лидер получает +1 за каждого, кто его не обошёл. Отметь галочками выполненные модификаторы — бонус посчитается сам.`) +
         `<div class="fight-list">${entries.map(e => row(e, e.seat === spec.leader ? ' <em>лидер</em>' : e.seat === spec.stepper ? ' <em>охотник</em>' : '')).join('')}</div>`;
       const sc = game.scale(spec.players.length);
-      return head('Общий бой', `Каждый вводит свой результат — места и очки (${sc.map(x => '+' + x * (spec.mult || 1)).join(' / ')}) игра посчитает сама. Отметь галочками выполненные модификаторы — бонус посчитается сам.`) + `<div class="fight-list">${entries.map(e => row(e)).join('')}</div>`;
+      return head('Общий бой · все игроки', `Все играют один и тот же бой. Каждый вводит свой результат — места и очки (${sc.map(x => '+' + x * (spec.mult || 1)).join(' / ')}) игра посчитает сама. Отметь галочками выполненные модификаторы — бонус посчитается сам.`) + `<div class="fight-list">${entries.map(e => row(e)).join('')}</div>`;
     };
     const output = only => { // only — набор мест для отправки (клиент), иначе все
       const pick = e => !only || only.includes(e.seat);
@@ -308,11 +346,11 @@
     box.innerHTML = `<div class="m-kicker">Как играть</div><h2>Памятка</h2>
       <p><b>Ход:</b> предмет до броска → бросок → предмет после броска (Шулерский кубик, Калькулятор) → движение (поле подсвечивает, куда можно дойти; наведи на клетку — увидишь путь) → эффект клетки.</p>
       <p><b>Регионы:</b> первый вход в каждый регион на круге даёт отметку и +${c.regionPoint || 0} очко. Проход Start со всеми 4 отметками — ещё +${c.lapPoint || 0}. Первый, кто так пройдёт Start, завершает этап: ему +${c.speedBonus}, игроку на последнем месте +${c.speedLast}.</p>
-      <p><b>Новый этап:</b> бой перехода, а в конце партии — Grand Challenge. Остальные втёмную выбирают: вернуться на Start (+1 очко и предмет, новый круг) или остаться (круг продолжается до прохода Start). Кто завершил этап или стоит на Start, уже на новом круге — его не спрашивают.</p>
-      <p><b>Бои</b> с клеток играются в конце раунда: все общие бои — одним боем (модификаторы суммируются), затем дуэли. Охота — сразу. Каждый вводит свой результат, места игра считает сама; выполненные модификаторы отмечаются галочками.</p>
+      <p><b>Новый этап:</b> бой перехода, а в конце партии — Grand Challenge. ${c.stageTeleport === false ? 'Все остаются на своих клетках; новый круг начинается после прохода Start.' : 'Втёмную каждый выбирает: вернуться на Start (+1 очко и предмет, новый круг) или остаться (круг продолжается до прохода Start). Кто завершил этап или стоит на Start, уже на новом круге — его не спрашивают.'}</p>
+      <p><b>Бои</b> с клеток играются в конце раунда: все общие бои (все игроки сразу) — одним боем, модификаторы суммируются; затем перестрелки (пары 1 на 1). Охота (все против лидера) — сразу. Каждый вводит свой результат, места игра считает сама; выполненные модификаторы отмечаются галочками.</p>
       <p><b>Своим ходом</b> (кубиком) срабатывает любая клетка. <b>Не своим ходом</b> (Ролики, Пинок, телепорт, событие, крюк) — только пассивные ●: Start, Очки, Сундук, Опасность, Жнец, Телепорт (случайно), Событие (только случайное), ловушки.</p>
       <p><b>Горячая картошка:</b> бомба взрывается в конце 2-го хода владельца (−3 очка, 3 клетки назад). Передать её может только владелец в свой ход, пройдя или встав на клетку с соперником; таймер при передаче не сбрасывается.</p>
-      <div class="rules-cells">${Object.entries(NP.TYPES).map(([k, v]) => `<div class="rc-row"><span class="lg-c" style="background:${v.color}">${esc(v.icon)}</span><div><b>${esc(k)}</b>${passive.has(k) ? ' <span class="lg-p" title="срабатывает и не своим ходом">●</span>' : ''}<br><span class="muted">${esc(NP.cellDesc(k, c))}</span></div></div>`).join('')}</div>
+      <div class="rules-cells">${Object.entries(NP.TYPES).map(([k, v]) => `<div class="rc-row"><span class="lg-c" style="background:${v.color}">${esc(v.icon)}</span><div><b>${esc((NP.TYPE_LABEL || {})[k] || k)}</b>${passive.has(k) ? ' <span class="lg-p" title="срабатывает и не своим ходом">●</span>' : ''}<br><span class="muted">${esc(NP.cellShort(k, c))}</span>${NP.cellAnom(k) && NP.cellAnom(k) !== '—' ? `<br><span class="rc-anom">✦ Аномалия: ${esc(NP.cellAnom(k))}</span>` : ''}</div></div>`).join('')}</div>
       <p class="muted">Пунктирное кольцо — аномальная клетка, ◐ — гибрид (тип меняется каждый этап), ⚠ — ловушка, ♥ — гарант Гачи, 🏪 — открытое заведение, ☁ — шторм, 🚚 — грузовик, 🔒 — Тайник закрыт. Цвет обводки клетки — регион или владелец Жнеца. Нажми на игрока слева — поле покажет его фишку.</p>
       <div class="row end m-actions"><button class="btn primary" id="rOk">Понятно</button></div>`;
     $('#rOk').onclick = closeModal;

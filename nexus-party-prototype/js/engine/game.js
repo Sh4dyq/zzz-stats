@@ -57,8 +57,8 @@
     shuffle(a) { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(this.r() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
     wpick(list) { const t = list.reduce((s, x) => s + x[1], 0); let x = this.r() * t; for (const e of list) { if ((x -= e[1]) < 0) return e; } return list[list.length - 1]; }
     get P() { return this.S.players; }
-    log(m, p, n) { this.S.log.push(Object.assign({ t: this.S.log.length, m, p: p ? p.i : null, st: this.S.stage, rd: this.S.round }, n ? { n: 1 } : {})); if (this.io && this.io.log) this.io.log(m); }
-    note(m, p) { this.log(m, p, true); } // строка журнала + всплывающее уведомление у всех
+    log(m, p, n) { this.S.log.push(Object.assign({ t: this.S.log.length, m, p: p ? p.i : null, st: this.S.stage, rd: this.S.round }, n ? { n } : {})); if (this.io && this.io.log) this.io.log(m); }
+    note(m, p, big) { this.log(m, p, big ? 2 : 1); } // строка журнала + всплывающее уведомление у всех (big — по центру экрана)
     announce(spec) { if (this.io && this.io.announce) this.io.announce(spec); } // карточка для всех, без ожидания
     async rollFor(p, d, what) { // бросок, который игрок делает сам и видят все
       await this.io.wait?.({ player: p.i, kind: 'roll', title: what + ': бросить d' + d });
@@ -73,7 +73,7 @@
     die(p) { let d = this.S.cfg.die; if (p && this.fx('В') === 'E-В6' && regionOf(p.pos) === 'В') d = Math.max(4, d - 2); return d; }
     cellName(id) { // для игроков: тип клетки и регион, без кодового номера
       if (!id || id === 'S' || !this.S.cells[id]) return 'Start';
-      const r = NP.REGIONS[regionOf(id)]; return this.S.cells[id].type + (r ? ' · ' + r.name : '');
+      const r = NP.REGIONS[regionOf(id)], t = this.S.cells[id].type; return ((NP.TYPE_LABEL || {})[t] || t) + (r ? ' · ' + r.name : '');
     }
     cellOpts(ids) { const seen = {}; return ids.map(x => { const n = this.cellName(x); seen[n] = (seen[n] || 0) + 1; return { label: n + (seen[n] > 1 ? ' (' + seen[n] + ')' : ''), value: x }; }); }
     isAnom(id) { const c = this.S.cells[id]; return !!(c && (c.anom || this.gActive('G-02') || (this.fx('Р') === 'E-Р3' && regionOf(id) === 'Р'))); }
@@ -303,6 +303,7 @@
     }
     async forceMove(p, n) { this.log(p.name + ' сдвигается вперёд на ' + n + ' кл.', p); await this.move(p, n, false); await this.land(p, false); }
     async teleportTo(p, id) { p.prev = null; p.trail = []; p.pos = id; this.enter(p, id); if (this.S.cur === p.i) this.bombPass(p); this.log(p.name + ' перемещается на ' + this.cellName(id) + '.', p); this.upd(); }
+    prevRegion(reg) { const o = ['Ш', 'Б', 'В', 'Р'], i = o.indexOf(reg); return i < 0 ? '' : o[(i + 3) % 4]; }
     tpRange(roll) { return Math.max(1, Math.floor(roll * 1.5)); } // радиус телепорта: 1,5× броска (было 2×, −25%)
     rangeCells(from, r) {
       // телепорт не может ни встать на Start, ни пройти через него
@@ -313,6 +314,7 @@
     // ---------- клетки ----------
     async land(p, own) {
       const S = this.S, id = p.pos; if (id === 'S') return;
+      if (S.stagePending !== null) { this.log('Этап завершён: клетки старого этапа больше не срабатывают.', p); return; }
       const c = S.cells[id], t = c.type, a = this.isAnom(id), m = a ? 2 : 1, reg = regionOf(id);
       // ловушка, шторм, Жнец — пассивные
       if (c.trap !== null && c.trap !== p.i) {
@@ -357,9 +359,9 @@
           if (reg === 'Ш' && this.fx('Ш') === 'E-Ш3') { this.log('Репетиция Астры Яо: бой не запускается.'); break; }
           if (this.gActive('G-05')) { this.log('Концерт Астры Яо: бой не запускается.'); break; }
           S.queue.push({ k: 'fight', p: p.i, mods: m + (reg === 'В' && this.fx('В') === 'E-В3' ? 1 : 0) });
-          this.log(p.name + ' запускает общий бой' + (S.cfg.cellFights === 'now' ? '.' : ' (в конце раунда).'), p);
+          this.log(p.name + ' запускает общий бой (все игроки)' + (S.cfg.cellFights === 'now' ? '.' : ' (в конце раунда).'), p);
           if (S.cfg.cellFights === 'now') await this.resolveQueue(); break;
-        case 'Дуэль': S.queue.push({ k: 'duelcell', p: p.i, anom: a, v4: reg === 'В' && this.fx('В') === 'E-В4' }); this.log(p.name + ' запускает дуэли' + (S.cfg.cellFights === 'now' ? '.' : ' (в конце раунда).'), p);
+        case 'Дуэль': S.queue.push({ k: 'duelcell', p: p.i, anom: a, v4: reg === 'В' && this.fx('В') === 'E-В4' }); this.log(p.name + ' запускает перестрелку 1 на 1' + (S.cfg.cellFights === 'now' ? '.' : ' (в конце раунда).'), p);
           if (S.cfg.cellFights === 'now') await this.resolveQueue(); break;
         case 'Охота': await this.hunt(p, a); break;
         case 'Казино': await this.casino(p, a, reg); break;
@@ -381,7 +383,8 @@
       const cand = this.rangeCells(p.pos, R).filter(x => S.cells[x].type !== 'Телепорт'); // без цепочек телепортов
       if (!cand.length) return;
       let to;
-      if (a) to = this.r() < 0.17 ? this.pick(IDS.filter(x => S.cells[x].type === 'Телепорт' && x !== p.pos)) : this.pick(cand);
+      const prevReg = this.prevRegion(regionOf(p.pos));
+      if (a) { const tps = IDS.filter(x => S.cells[x].type === 'Телепорт' && x !== p.pos && regionOf(x) !== prevReg), near = cand.filter(x => regionOf(x) !== prevReg); to = this.r() < 0.17 && tps.length ? this.pick(tps) : this.pick(near.length ? near : cand); } // аномальный — не в прошлый регион
       else if (!own) to = this.pick(cand); // не своим ходом — случайный перенос (пассивная клетка)
       else to = await this.choose(p, 'Телепорт: выбери клетку (до ' + R + ' кл. по связям в любую сторону)', this.cellOpts(cand), { kind: 'cell', cells: cand, always: true });
       this.note('⇄ ' + p.name + ': телепорт ' + (a ? '(аномальный) ' : !own ? '(случайно) ' : '') + '→ ' + this.cellName(to) + '.', p);
@@ -453,7 +456,7 @@
         const id = await this.choose(p, p.name + ' первым в регионе ' + NP.REGIONS[reg].name + ': выбор эффекта до конца этапа', pool.map(e => ({ label: e.name, value: e.id, hint: e.text })), { always: true, kind: 'region', public: true });
         S.regionFx[reg] = id; S.regionBy[reg] = p.i;
         const fx = NP.REGION_FX.find(e => e.id === id);
-        this.note('◆ ' + p.name + ' активирует ' + NP.REGIONS[reg].name + ': «' + this.fxName(id) + '».', p);
+        this.note('◆ ' + p.name + ' активирует ' + NP.REGIONS[reg].name + ': «' + this.fxName(id) + '».', p, true);
         this.announce({ player: p.i, title: 'Регион активирован · ' + NP.REGIONS[reg].name + ' · ' + p.name, name: this.fxName(id), text: (fx ? fx.text : '') + ' Действует до конца этапа.', icon: '◆' });
       }
     }
@@ -470,15 +473,17 @@
     async tickBomb(p) {
       if (!p.st.bomb) return;
       if (--p.st.bomb.turns > 0) { this.note('💣 У ' + p.name + ' бомба: до взрыва ' + p.st.bomb.turns + ' ход(а).', p); return; }
-      p.st.bomb = null; this.note('💥 БУМ! Бомба взрывается у ' + p.name + ': −3 очка и 3 клетки назад.', p);
+      p.st.bomb = null; this.note('💥 БУМ! Бомба взрывается у ' + p.name + ': −3 очка и 3 клетки назад.', p, true);
       await this.hit(p, null, async q => { this.add(q, -3); await this.moveBack(q, 3); }, 'Горячая картошка');
     }
 
     // ---------- предметы ----------
     async preItem(p) {
-      const usable = p.items.map((it, i) => ({ it, i })).filter(x => NP.ITEMS[x.it.key].when === 'pre' && this.canUse(p, x.it));
-      if (!usable.length) return null;
-      const v = await this.choose(p, 'Использовать предмет до броска?', [{ label: 'Бросить без предмета', value: -1 }, ...usable.map(x => ({ label: (x.it.anom ? '✦ ' : '') + NP.ITEMS[x.it.key].name, value: x.i, hint: x.it.anom ? 'Аномалия: ' + NP.ITEMS[x.it.key].anom : NP.ITEMS[x.it.key].text }))], { always: true, kind: 'item' });
+      const all = p.items.map((it, i) => ({ it, i })), ok = x => NP.ITEMS[x.it.key].when === 'pre' && this.canUse(p, x.it);
+      if (!all.some(ok)) return null;
+      const why = x => NP.ITEMS[x.it.key].when === 'post' ? ' (после броска)' : NP.ITEMS[x.it.key].when === 'passive' ? ' (действует сам)' : ' (сейчас нельзя)';
+      // показываем весь инвентарь: неподходящие сейчас предметы видны, но недоступны
+      const v = await this.choose(p, 'Использовать предмет до броска?', [{ label: 'Бросить без предмета', value: -1 }, ...all.map(x => ({ label: (x.it.anom ? '✦ ' : '') + NP.ITEMS[x.it.key].name + (ok(x) ? '' : why(x)), value: x.i, item: x.it.key, anom: x.it.anom, disabled: !ok(x), hint: x.it.anom ? 'Аномалия: ' + NP.ITEMS[x.it.key].anom : NP.ITEMS[x.it.key].text }))], { always: true, kind: 'item', showDisabled: true });
       if (v === -1) return null;
       const it = this.takeItem(p, v);
       await this.useItem(p, it);
@@ -563,7 +568,7 @@
         }
         case 'item_pocket_rift': {
           let cand;
-          if (anom) { const reg = regionOf(p.pos) || 'Ш', order = ['Ш', 'Б', 'В', 'Р'], i = order.indexOf(reg); const regs = [reg, order[(i + 1) % 4], order[(i + 3) % 4]]; cand = IDS.filter(x => regs.includes(regionOf(x)) && x !== p.pos); }
+          if (anom) { const reg = regionOf(p.pos) || 'Ш', order = ['Ш', 'Б', 'В', 'Р'], i = order.indexOf(reg); const regs = [reg, order[(i + 1) % 4]]; /* без прошлого региона */ cand = IDS.filter(x => regs.includes(regionOf(x)) && x !== p.pos); }
           else { const r = await this.rollFor(p, this.die(p), 'Карманный разлом'); this.log('Разлом: радиус ' + this.tpRange(r) + '.', p); cand = this.rangeCells(p.pos, this.tpRange(r)); }
           const to = await this.choose(p, 'Куда переместиться?', this.cellOpts(cand), { kind: 'cell', cells: cand, always: true });
           await this.teleportTo(p, to); await this.land(p, false); break;
@@ -610,7 +615,7 @@
         }
         case 'item_hot_potato': {
           const near = [p.pos, ...ADJ[p.pos]]; const t = await this.pickTarget(p, 'Кому подложить бомбу?', opp.filter(q => anom || near.includes(q.pos)));
-          if (t) await this.hit(t, p, q => { q.st.bomb = { turns: 2 }; this.note('💣 Бомба у ' + q.name + '! Взорвётся в конце его 2-го хода, если не передать.', q); }, 'Горячая картошка'); break;
+          if (t) await this.hit(t, p, q => { q.st.bomb = { turns: 2 }; this.note('💣 Бомба у ' + q.name + '! Взорвётся в конце его 2-го хода, если не передать.', q, true); }, 'Горячая картошка'); break;
         }
         case 'item_doppelganger': { const last = S.lastItem; if (last) await this.useItem(p, { key: last, anom: true }, true); break; }
       }
@@ -618,25 +623,30 @@
     }
 
     // ---------- бои ----------
-    rollMods(n) {
-      const out = [];
-      for (let k = 0; k < n; k++) { const rar = this.wpick(Object.entries(NP.MOD_RARITY_W))[0]; const list = NP.MODIFIERS.filter(m => m[1] === rar && !out.includes(m)); out.push(this.pick(list)); }
+    rollMods(n, mode) { // пул модификаторов зависит от режима (у Симулякров свой)
+      const out = [], pool = NP.modsForMode ? NP.modsForMode(mode) : NP.MODIFIERS;
+      for (let k = 0; k < n; k++) { const rar = this.wpick(Object.entries(NP.MOD_RARITY_W))[0]; let list = pool.filter(m => m[1] === rar && !out.includes(m)); if (!list.length) list = pool.filter(m => !out.includes(m)); if (list.length) out.push(this.pick(list)); }
       return out.map(m => ({ name: m[0], rarity: m[1], cond: m[2], pts: m[3] }));
     }
+    subRoll(mode) { // что выпало внутри режима: этаж шиюй, комната, босс штурма
+      const r = NP.MODE_ROLL && NP.MODE_ROLL[String(mode || '').replace(/ ×\d+$/, '')]; if (!r) return '';
+      return r.what + ' ' + this.wpick(r.w)[0];
+    }
+    modeText(mode, sub) { return NP.modeName(mode) + (sub ? ', ' + sub : ''); }
     scale(n) { const top = Math.min(n, 6); return Array.from({ length: n }, (_, k) => Math.max(top - k, 0)); }
     async fight(title, nmods, opts) {
       opts = opts || {};
-      const mode = opts.mode || this.wpick(NP.FIGHT_MODES)[0];
-      const mods = this.rollMods(nmods + (this.gActive('G-23') ? 1 : 0));
-      const extra = {}; for (const p of this.P) if (p.st.extraMod) { extra[p.i] = this.rollMods(p.st.extraMod); p.st.extraMod = 0; }
-      const bans = {}; for (const p of this.P) if (p.st.ban) { bans[p.i] = p.st.ban; p.st.ban = 0; }
-      const res = await this.ioFight({ kind: 'fight', title, mode, metric: this.metric(mode), mods, extra, bans, players: this.P.map(p => p.i), mult: opts.mult || 1 });
+      const mode = opts.mode || this.wpick(NP.FIGHT_MODES)[0], sub = this.subRoll(mode), base = mode.replace(/ ×\d+$/, '');
+      const mods = this.rollMods(nmods + (this.gActive('G-23') ? 1 : 0), mode);
+      const extra = {}; for (const p of this.P) if (p.st.extraMod) { extra[p.i] = this.rollMods(p.st.extraMod, mode); p.st.extraMod = 0; }
+      const bans = {}; if (base !== 'Annihilation') for (const p of this.P) if (p.st.ban) { bans[p.i] = p.st.ban; p.st.ban = 0; } // в Симулякрах запрет агентов ждёт следующего боя
+      const res = await this.ioFight({ kind: 'fight', title, mode, sub, note: (NP.MODE_NOTE || {})[base] || '', metric: this.metric(mode), mods, extra, bans, players: this.P.map(p => p.i), mult: opts.mult || 1 });
       if (!res.order) res.order = this.rankBy(mode, res.results || {}, this.P.map(p => p.i));
       const sc = this.scale(res.order.length);
       res.order.forEach((i, k) => this.add(this.P[i], sc[k] * (opts.mult || 1), 'zzz'));
       for (const i in res.bonus || {}) if (+res.bonus[i]) { this.add(this.P[i], +res.bonus[i], 'mod'); this.note('✓ ' + this.P[i].name + ': модификаторы +' + res.bonus[i] + '.', this.P[i]); }
       if (this.S.nfOwner !== undefined) { this.log('Колесо Нотфлайта: ' + this.P[this.S.nfOwner].name + ' +1 за каждого выполнившего доп. модификатор (внести в бонусах/через ведущего).'); delete this.S.nfOwner; }
-      this.note('⚔ ' + title + ' (' + NP.modeName(mode) + '): ' + res.order.map((i, k) => this.P[i].name + ' +' + sc[k] * (opts.mult || 1)).join(', ') + '.');
+      this.note('⚔ ' + title + ' (' + this.modeText(mode, sub) + '): ' + res.order.map((i, k) => this.P[i].name + ' +' + sc[k] * (opts.mult || 1)).join(', ') + '.');
       if (!opts.noBets && this.S.bets.length) {
         for (const [a, b] of this.S.bets) { const ia = res.order.indexOf(a), ib = res.order.indexOf(b); const w = ia < ib ? a : b, l = w === a ? b : a; const v = this.steal(this.P[l], this.P[w], 3); this.log('Пари: ' + this.P[w].name + ' забирает ' + v + ' у ' + this.P[l].name + '.'); }
         this.S.bets = [];
@@ -648,31 +658,32 @@
       base = base || [2, 1]; // очки за место в паре 1×1
       if (!modes) { const m = this.wpick(NP.FIGHT_MODES)[0]; modes = pairs.map(() => m); }
       modes = modes.map(m => m || this.wpick(NP.FIGHT_MODES)[0]);
-      const res = await this.ioFight({ kind: 'duels', title, pairs, mult, modes, metrics: modes.map(m => this.metric(m)) });
+      const subs = modes.map(m => this.subRoll(m));
+      const res = await this.ioFight({ kind: 'duels', title, pairs, mult, modes, subs, notes: modes.map(m => (NP.MODE_NOTE || {})[m] || ''), metrics: modes.map(m => this.metric(m)) });
       if (!res.winners) res.winners = pairs.map(([a, b], k) => { const r = (res.results || [])[k] || {}; return this.better(modes[k], r[b], r[a]) ? b : this.better(modes[k], r[a], r[b]) ? a : this.pick([a, b]); });
       pairs.forEach(([a, b], k) => {
         const w = res.winners[k], l = w === a ? b : a, [bw, bl] = bonusOf(a, b);
         this.add(this.P[w], (base[0] + bw + (v4 ? 1 : 0)) * mult, 'zzz'); this.add(this.P[l], (base[1] - bl) * mult, 'zzz');
-        this.note('⚔ Дуэль: ' + this.P[w].name + ' побеждает ' + this.P[l].name + '.', this.P[w]);
+        this.note('⚔ 1 на 1: ' + this.P[w].name + ' побеждает ' + this.P[l].name + ' (' + this.modeText(modes[k], subs[k]) + ').', this.P[w]);
       });
       if (oddBonus !== undefined) { this.add(this.P[oddBonus], 1); this.log(this.P[oddBonus].name + ' без пары: +1.'); }
       this.upd();
     }
     async duelCell(q) {
-      const p = this.P[q.p], opp = await this.pickTarget(p, 'Дуэль: выбери соперника', this.others(p));
+      const p = this.P[q.p], opp = await this.pickTarget(p, 'Перестрелка 1 на 1: выбери себе соперника (остальные — пары случайно)', this.others(p));
       const rest = this.shuffle(this.P.filter(x => x !== p && x !== opp).map(x => x.i));
       let odd;
       if (rest.length % 2) { const lo = rest.reduce((a, b) => this.P[b].pts < this.P[a].pts ? b : a); odd = lo; rest.splice(rest.indexOf(lo), 1); }
       const pairs = [[p.i, opp.i]]; for (let k = 0; k < rest.length; k += 2) pairs.push([rest[k], rest[k + 1]]);
       const b = this.S.cfg.duelBonus;
-      await this.duels('Дуэли с клетки ' + p.name + (q.anom ? ' (аномалия ×2)' : ''), pairs, q.anom ? 2 : 1, () => [b, b], q.v4, odd);
+      await this.duels('Перестрелка: пары 1 на 1 (клетка ' + p.name + ')' + (q.anom ? ' — аномалия, очки ×2' : ''), pairs, q.anom ? 2 : 1, () => [b, b], q.v4, odd);
     }
     async hunt(p, a) {
       const L = this.leader();
       if (L === p || L.pts === 0) { this.log('Охоту запустил сам лидер — играется общий бой.', p); await this.fight('Общий бой (Охота лидера)', a ? 2 : 1); return; }
-      const mods = this.rollMods(a ? 2 : 1);
       const mode = await this.choose(L, 'Охота на тебя: выбери режим боя', NP.FIGHT_MODES.map(m => ({ label: NP.modeName(m[0]), value: m[0] })), { always: true });
-      const res = await this.ioFight({ kind: 'hunt', title: 'Охота на ' + L.name, mode, metric: this.metric(mode), mods, leader: L.i, stepper: p.i, players: this.P.map(x => x.i) });
+      const mods = this.rollMods(a ? 2 : 1, mode), sub = this.subRoll(mode);
+      const res = await this.ioFight({ kind: 'hunt', title: 'Охота: все против лидера ' + L.name, mode, sub, note: (NP.MODE_NOTE || {})[mode] || '', metric: this.metric(mode), mods, leader: L.i, stepper: p.i, players: this.P.map(x => x.i) });
       if (!res.beat) { const r = res.results || {}; res.beat = this.P.filter(q => q !== L && this.better(mode, r[q.i], r[L.i])).map(q => q.i); }
       let beaten = 0;
       for (const q of this.others(L)) {
@@ -697,7 +708,7 @@
       if (fights.length) await this.fight('Общий бой раунда (' + fights.map(x => this.P[x.p].name).join(', ') + ')', fights.reduce((s, x) => s + x.mods, 0));
       for (const d of q.filter(x => x.k === 'duelcell')) await this.duelCell(d);
       const gl = q.filter(x => x.k === 'glove');
-      if (gl.length) await this.duels('Дуэли по вызову Перчатки', gl.map(x => [x.p, x.t]), 1, (a, b) => { const g = gl.find(x => x.p === a && x.t === b); return g.lead ? [3, 2] : [2, 1]; }, false, undefined, [0, 0], gl.map(x => x.mode));
+      if (gl.length) await this.duels('Дуэль 1 на 1 по вызову Перчатки', gl.map(x => [x.p, x.t]), 1, (a, b) => { const g = gl.find(x => x.p === a && x.t === b); return g.lead ? [3, 2] : [2, 1]; }, false, undefined, [0, 0], gl.map(x => x.mode));
     }
     async roundTail() {
       const S = this.S;
@@ -723,8 +734,10 @@
     // ---------- конец этапа ----------
     async stageEnd() {
       const S = this.S, c = S.cfg, fin = this.P[S.stagePending];
+      // карта старого этапа сразу «засыпает»: Жнец, эффекты регионов, шторм, заведение, мины (ловушки остаются)
+      S.reaperZone = {}; S.regionFx = {}; S.regionBy = {}; S.storm = []; S.shop = null; S.mines = [];
       if (S.queue.length) { this.log('Бои из очереди играются до конца этапа.'); await this.resolveQueue(); }
-      this.add(fin, c.speedBonus); this.note('🏁 ' + fin.name + ' завершает этап: бонус за скорость +' + c.speedBonus + '.', fin);
+      this.add(fin, c.speedBonus); this.note('🏁 ' + fin.name + ' завершает этап ' + S.stage + ': бонус за скорость +' + c.speedBonus + '.', fin, true);
       const last = this.P.reduce((a, b) => (b.pts < a.pts ? b : a)); this.add(last, c.speedLast); this.log(last.name + ' (последнее место): +' + c.speedLast + '.', last);
       if (S.stage >= c.stages || c.gcEveryStage) await this.grandChallenge();
       if (S.stage >= c.stages) { this.finish('gc'); throw new GameOver(); }
@@ -732,6 +745,7 @@
       for (const p of this.P) { p.st.rollex = 0; p.st.badDay = false; } S.gfx = null; // эффекты «до конца этапа»
       S.stage++;
       for (const p of this.P) {
+        if (c.stageTeleport === false) { if (p.pos === 'S' && p.lap < S.stage) { p.lap = S.stage; p.marks = []; } continue; } // настройка: телепорта на Start нет, все остаются
         if (p === fin || p.pos === 'S' || p.lap >= S.stage) { if (p.lap < S.stage) { p.lap = S.stage; p.marks = []; } continue; } // уже прошёл Start — новый круг начат, телепорт не нужен
         const v = await this.choose(p, 'Этап ' + S.stage + ': вернуться на Start (+1 очко и предмет, новый круг) или остаться?', [{ label: 'На Start (+1 очко и предмет)', value: 'tp' }, { label: 'Остаться: ' + this.cellName(p.pos), value: 'stay' }], { always: true, secret: true });
         if (v === 'tp') { p.pos = 'S'; p.prev = null; p.trail = []; p.lap = S.stage; p.marks = []; this.add(p, 1); this.giveRandom(p); }
@@ -742,8 +756,8 @@
       this.upd();
     }
     async grandChallenge() {
-      const mode = this.wpick(NP.GC_MODES)[0];
-      for (let k = 1; k <= 3; k++) await this.fight('Grand Challenge, бой ' + k + '/3', 0, { mode, noBets: true });
+      const mode = this.wpick(NP.GC_MODES)[0], joker = ['Shiyu 5', 'Deadly Assault', 'Annihilation']; // Джокер — по бою из каждого режима
+      for (let k = 1; k <= 3; k++) await this.fight('Grand Challenge' + (mode === 'Joker' ? ' (Джокер)' : '') + ', бой ' + k + '/3', 0, { mode: mode === 'Joker' ? joker[k - 1] : mode, noBets: true });
     }
     finish(reason, p) {
       const S = this.S; if (S.over) return;

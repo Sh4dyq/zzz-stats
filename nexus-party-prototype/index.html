@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Nexus Party — прототип</title>
-  <link rel="stylesheet" href="css/style.css?v=5">
+  <link rel="stylesheet" href="css/style.css?v=7">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Saira+Condensed:wght@600;700;800;900&display=swap">
@@ -44,6 +44,7 @@
       </div>
       <div class="checks">
         <label class="check"><input type="checkbox" id="cfgGlobal" checked> Глобальные события</label>
+        <label class="check" title="На новом этапе каждый втёмную выбирает: телепорт на Start (+1 очко и предмет) или остаться"><input type="checkbox" id="cfgStageTp" checked> Телепорт на Start в начале этапа</label>
         <label class="check"><input type="checkbox" id="cfgDeck"> События без повторов (колода)</label>
       </div>
       <h3 class="sec-h">Игроки</h3>
@@ -65,13 +66,13 @@
 
   <div id="modal" class="modal hidden"><div class="modal-box card" id="modalBox" role="dialog" aria-modal="true"></div></div>
 
-  <script src="js/data/map.js?v=5"></script>
-  <script src="js/data/rules.js?v=5"></script>
-  <script src="js/data/events.js?v=5"></script>
-  <script src="js/engine/game.js?v=5"></script>
-  <script src="js/engine/events.js?v=5"></script>
-  <script src="js/engine/globals.js?v=5"></script>
-  <script src="js/ui/board.js?v=5"></script>
-  <script src="js/ui/app.js?v=5"></script>
+  <script src="js/data/map.js?v=7"></script>
+  <script src="js/data/rules.js?v=7"></script>
+  <script src="js/data/events.js?v=7"></script>
+  <script src="js/engine/game.js?v=7"></script>
+  <script src="js/engine/events.js?v=7"></script>
+  <script src="js/engine/globals.js?v=7"></script>
+  <script src="js/ui/board.js?v=7"></script>
+  <script src="js/ui/app.js?v=7"></script>
 </body>
 </html>

@@ -136,10 +136,13 @@
       const id = g.dataset.id, st = S.cells[id], c = NP.GRAPH.CELL[id], type = st ? st.type : (c.type || 'Start');
       const reg = NP.REGIONS[c.region], fx = reg && NP.REGION_FX && NP.REGION_FX.find(x => x.id === S.regionFx[c.region]);
       const here = S.players.filter(p => p.pos === id).map(p => `<b style="color:${p.color}">${esc(p.name)}</b>`).join(', ');
-      tip.innerHTML = `<div class="ct-h"><b>${esc(typeLabel(type))}</b>${st && st.hybrid ? ' ◐ гибрид' : ''}${(st && st.anom) ? ' <span class="ct-anom">✦ аномальная</span>' : ''}${reg ? ` <span class="ct-reg" style="color:${reg.color}">· ${esc(reg.name)}</span>` : ''}</div>` +
-        `<div class="ct-d">${esc(NP.cellDesc ? NP.cellDesc(type, S.cfg) : '')}</div>` +
-        ((NP.PASSIVE || []).includes(type) ? '<div class="ct-m">● срабатывает и не своим ходом</div>' : '<div class="ct-m">○ только своим ходом (кубиком)</div>') +
+      const anom = (st && st.anom) || globalAnom(S) || (S.regionFx['Р'] === 'E-Р3' && c.region === 'Р');
+      tip.innerHTML = `<div class="ct-h"><b>${esc(typeLabel(type))}</b>${st && st.hybrid ? ' ◐ гибрид' : ''}${anom ? ' <span class="ct-anom">✦ аномальная</span>' : ''}${reg ? ` <span class="ct-reg" style="color:${reg.color}">· ${esc(reg.name)}</span>` : ''}</div>` +
+        `<div class="ct-d">${esc(e.altKey && NP.cellDesc ? NP.cellDesc(type, S.cfg) : NP.cellShort ? NP.cellShort(type, S.cfg) : '')}</div>` +
+        (anom && NP.cellAnom && NP.cellAnom(type) && NP.cellAnom(type) !== '—' ? `<div class="ct-m ct-anom">✦ Аномалия: ${esc(NP.cellAnom(type))}</div>` : '') +
+        (e.altKey ? ((NP.PASSIVE || []).includes(type) ? '<div class="ct-m">● срабатывает и не своим ходом</div>' : '<div class="ct-m">○ только своим ходом (кубиком)</div>') : '') +
         (fx ? `<div class="ct-m">Регион: «${esc(fx.name)}»</div>` : '') + (here ? `<div class="ct-m">Здесь: ${here}</div>` : '') +
+        (e.altKey ? '' : '<div class="ct-alt">Alt — подробнее</div>') +
         (g.dataset.badges ? '<div class="ct-m">' + esc(g.dataset.badges) + '</div>' : '');
       const r = wrap.getBoundingClientRect();
       let x = e.clientX - r.left + 14, y = e.clientY - r.top + 14;
@@ -149,6 +152,7 @@
       tip.style.left = Math.max(4, x) + 'px'; tip.style.top = Math.max(4, y) + 'px';
     });
     svg.addEventListener('mouseleave', () => tip.classList.add('hidden'));
+    document.addEventListener('keyup', e => { if (e.key === 'Alt') e.preventDefault(); }); // Alt — подробности, без меню браузера
   }
 
   // Показать клетку (фишку игрока): приблизить поле к ней и мигнуть кольцом.
